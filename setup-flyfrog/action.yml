@@ -1,0 +1,21 @@
+name: 'Setup FlyFrog Registry'
+description: 'Configures package managers to use FlyFrog as a registry for dependencies'
+author: 'Your Name'
+
+inputs:
+  url:
+    description: 'FlyFrog URL'
+    required: true
+  ignore:
+    description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'
+    required: false
+
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
+  permissions:
+    id-token: write # Required for OIDC authentication
+
+branding:
+  icon: 'package'
+  color: 'blue'
