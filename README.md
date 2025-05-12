@@ -83,24 +83,24 @@ The action supports all package managers that the FlyFrog CLI supports:
 - **gradle** – Gradle build tool
 - **maven** – Maven build tool
 
-## How It Works
+## Build Process
 
-This action:
-1. Uses the bundled FlyFrog CLI binary
-2. Authenticates with your FlyFrog registry using OIDC
-3. Runs the `flyfrog setup` command
-4. Configures all package managers (or ignores specified ones)
+- npm install → formats code via postinstall hook
+- npm run build → formats, compiles (tsc), bundles (ncc) to lib/index.js
+- Husky pre-commit hook runs build on each commit
 
 ## Building and Publishing
 
 ### Development Setup
 
-To work on this action locally, follow these steps:
+To develop and test locally:
 
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Build the action: `npm run build` 
-4. Test: `npm test`
+1. Clone the repository.
+2. Install dependencies: `npm install` (this automatically runs Prettier via the `postinstall` hook).
+3. Build: `npm run build` (this runs `format`, compiles TypeScript via `tsc`, then bundles the dist file with `ncc`).
+4. Run tests: `npm test`.
+
+> A Husky pre-commit hook is configured—any `git commit` will trigger `npm run build` to ensure your code is formatted, compiled, and bundled before committing.
 
 ### Publishing
 

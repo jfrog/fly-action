@@ -35,12 +35,11 @@ export async function exchangeTokenForFlyFrogToken(
   if (!credentials.url) throw new Error("FlyFrog URL is required");
   const client = new http.HttpClient("setup-flyfrog-action");
 
-  // The FlyFrog token exchange endpoint
   const tokenExchangeUrl = `${credentials.url}/api/v1/oidc/token`;
 
+  // Debug the token exchange URL
   core.debug(`Exchanging OIDC token at ${tokenExchangeUrl}`);
 
-  // Prepare the token exchange request payload
   const data = JSON.stringify({
     grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
     subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
@@ -54,7 +53,6 @@ export async function exchangeTokenForFlyFrogToken(
   };
 
   try {
-    // Make the token exchange request
     const response = await client.post(tokenExchangeUrl, data, headers);
     const responseBody = await response.readBody();
 
