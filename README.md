@@ -106,23 +106,27 @@ To develop and test locally:
 
 ### Publishing a new version
 
-1. Ensure all tests pass and build is up to date:
-   ```bash
-   npm test
-   npm run build
-   ```
-2. Bump the version in `package.json` following [semver](https://semver.org/) (e.g., `npm version patch`).
-3. Commit the version bump and pushed bundle:
-   ```bash
-   git add package.json lib/index.js
-   git commit -m "chore: release vX.Y.Z"
-   ```
-4. Create and push a git tag:
-   ```bash
-   git tag -a vX.Y.Z -m "Release vX.Y.Z"
-   git push origin vX.Y.Z
-   ```
-5. Draft a GitHub release linked to the new tag and publish it. This will make the version available on the GitHub Marketplace.
+- Ensure tests pass and build is up to date:
+  ```bash
+  npm test && npm run build
+  ```
+- Push changes to the default branch (e.g., `main`):
+  ```bash
+  git push origin main
+  ```
+- Draft a release in the GitHub UI:
+  1. Go to the “Releases” page of your repository.
+  2. Click **Draft a new release**.
+  3. Set the tag name to `vX.Y.Z` (e.g., `v1.2.3`).
+  4. Publish the release.
+
+Once the release is published, the GitHub Actions workflow will:
+
+1. Extract the version from the tag (`vX.Y.Z`).
+2. Bump `package.json` and `package-lock.json` to `X.Y.Z`.
+3. Commit and push the updated lockfile.
+4. Update and force-push the `vX.Y` and `vX` tags.
+5. Push all changes back to the repository.
 
 ## License
 
