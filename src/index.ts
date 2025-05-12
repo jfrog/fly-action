@@ -18,35 +18,37 @@ export function resolveFlyFrogCLIBinaryPath(): string {
 }
 
 export async function run(): Promise<void> {
-  const url = core.getInput("url", { required: true });
-  const ignorePackageManagers = core.getInput("ignore");
+  try {
+    const url = core.getInput("url", { required: true });
+    const ignorePackageManagers = core.getInput("ignore");
 
-  const { user, accessToken } = await authenticateOidc(url);
-  core.info("Successfully authenticated with OIDC");
-  core.setSecret(accessToken);
+    const { user, accessToken } = await authenticateOidc(url);
+    core.info("Successfully authenticated with OIDC");
+    core.setSecret(accessToken);
 
-  const flyFrogCLIBinPath = resolveFlyFrogCLIBinaryPath();
+    const binPath = resolveFlyFrogCLIBinaryPath();
+    const envVars: Record<string, string> = {
+      FLYFROG_URL: url,
+      FLYFROG_USER: user,
+      FLYFROG_ACCESS_TOKEN: accessToken,
+      FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
+    };
 
-  const envVars: Record<string, string> = {
-    FLYFROG_URL: url,
-    FLYFROG_USER: user,
-    FLYFROG_ACCESS_TOKEN: accessToken,
-    FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
-  };
-
-  core.info("Running FlyFrog setup command with environment variables");
-  const options = {
-    env: { ...process.env, ...envVars } as Record<string, string>,
-    listeners: {
-      stdout: (data: Buffer) => core.info(data.toString()),
-      stderr: (data: Buffer) => core.error(data.toString()),
-    },
-  };
-  const exitCode = await exec.exec(flyFrogCLIBinPath, ["setup"], options);
-  if (exitCode !== 0) {
-    throw new Error("FlyFrog setup command failed");
+    core.info("Running FlyFrog setup command with environment variables");
+    const options = {
+      env: { ...process.env, ...envVars } as Record<string, string>,
+      listeners: {
+        stdout: (data: Buffer) => core.info(data.toString()),
+        stderr: (data: Buffer) => core.error(data.toString()),
+      },
+    };
+    const exitCode = await exec.exec(binPath, ["setup"], options);
+    if (exitCode !== 0) throw new Error("FlyFrog setup command failed");
+    core.info("FlyFrog registry configuration completed successfully");
+  } catch (error) {
+    if (error instanceof Error) core.setFailed(error.message);
+    else core.setFailed("An unknown error occurred");
   }
-  core.info("FlyFrog registry configuration completed successfully");
 }
 
 if (require.main === module) {

@@ -87,6 +87,8 @@ The action supports all package managers that the FlyFrog CLI supports:
 
 - npm install → formats code via postinstall hook
 - npm run build → formats, compiles (tsc), bundles (ncc) to lib/index.js
+
+- Note: `dist/` is the raw JS output from TS compilation; `lib/` is the final single-file bundle used by the action
 - Husky pre-commit hook runs build on each commit
 
 ## Building and Publishing
@@ -102,15 +104,25 @@ To develop and test locally:
 
 > A Husky pre-commit hook is configured—any `git commit` will trigger `npm run build` to ensure your code is formatted, compiled, and bundled before committing.
 
-### Publishing
+### Publishing a new version
 
-1. Update version in package.json
-2. Create a new release tag following semantic versioning
+1. Ensure all tests pass and build is up to date:
    ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
+   npm test
+   npm run build
    ```
-3. Create a new GitHub release with the same tag
+2. Bump the version in `package.json` following [semver](https://semver.org/) (e.g., `npm version patch`).
+3. Commit the version bump and pushed bundle:
+   ```bash
+   git add package.json lib/index.js
+   git commit -m "chore: release vX.Y.Z"
+   ```
+4. Create and push a git tag:
+   ```bash
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+5. Draft a GitHub release linked to the new tag and publish it. This will make the version available on the GitHub Marketplace.
 
 ## License
 

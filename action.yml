@@ -12,7 +12,7 @@ inputs:
 
 runs:
   using: 'node16'
-  main: 'dist/index.js'
+  main: 'lib/index.js'
   permissions:
     id-token: write # Required for OIDC authentication
 

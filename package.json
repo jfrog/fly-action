@@ -2,7 +2,7 @@
   "name": "flyfrog-action",
   "version": "1.0.0",
   "description": "GitHub Action to setup FlyFrog CLI",
-  "main": "dist/index.js",
+  "main": "lib/index.js",
   "scripts": {
     "build": "npm run format && tsc && ncc build dist/index.js -o lib",
     "test": "jest",
