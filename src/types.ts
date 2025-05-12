@@ -1,4 +1,4 @@
 export interface FlyFrogCredentials {
-    url: string;
-    accessToken?: string;
+  url: string;
+  accessToken?: string;
 }
