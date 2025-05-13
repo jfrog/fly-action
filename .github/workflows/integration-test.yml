@@ -4,10 +4,11 @@ on:
     branches: [ main ]
 
 permissions:
-  id-token: write  # Allow OIDC token retrieval
+  contents: read
+  id-token: write
 
 jobs:
-  integration:
+  integration-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
