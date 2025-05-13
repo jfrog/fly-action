@@ -13,8 +13,6 @@ inputs:
 runs:
   using: 'node16'
   main: 'lib/index.js'
-  permissions:
-    id-token: write # Required for OIDC authentication
 
 branding:
   icon: 'package'
