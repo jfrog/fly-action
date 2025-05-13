@@ -76,8 +76,9 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   };
 
   // Log token exchange details (always visible)
+  const maskedPayload = { ...payload, subject_token: "***" };
   core.info(`Token exchange URL: ${tokenExchangeUrl}`);
-  core.info(`Token exchange payload: ${JSON.stringify(payload)}`);
+  core.info(`Token exchange payload: ${JSON.stringify(maskedPayload)}`);
 
   const rawResponse = await client.post(
     tokenExchangeUrl,
@@ -85,19 +86,36 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     headers,
   );
   const body = await rawResponse.readBody();
+  // Parse JSON to mask access_token and register secret
+  let parsedJson: any;
+  try {
+    parsedJson = JSON.parse(body);
+    if (parsedJson.access_token) {
+      core.setSecret(parsedJson.access_token);
+    }
+  } catch {
+    parsedJson = {};
+  }
+  const maskedResponse = parsedJson.access_token
+    ? { ...parsedJson, access_token: "***" }
+    : parsedJson;
   // Log response details
   core.info(
-    `Token exchange response headers: ${JSON.stringify(rawResponse.message.headers)}`,
+    `Token exchange response headers: ${JSON.stringify(
+      rawResponse.message.headers,
+    )}`,
   );
   core.error(
-    `Token exchange response status: ${rawResponse.message.statusCode}, body: ${body}`,
+    `Token exchange response status: ${rawResponse.message.statusCode}, body: ${JSON.stringify(
+      maskedResponse,
+    )}`,
   );
   if (rawResponse.message.statusCode !== http.HttpCodes.OK) {
     throw new Error(
       `Token exchange failed ${rawResponse.message.statusCode}: ${body}`,
     );
   }
-  const parsed = JSON.parse(body) as TokenExchangeResponse;
+  const parsed = parsedJson as TokenExchangeResponse;
   if (!parsed || !parsed.access_token) {
     throw new Error(
       `Token response did not contain an access token, body: ${body}`,
