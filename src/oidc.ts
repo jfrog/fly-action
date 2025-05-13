@@ -78,15 +78,25 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   // Log token exchange details
   core.debug(`Token exchange URL: ${tokenExchangeUrl}`);
   core.debug(`Token exchange payload: ${JSON.stringify(payload)}`);
-  const rawResponse = await client.post(tokenExchangeUrl, JSON.stringify(payload), headers);
+  const rawResponse = await client.post(
+    tokenExchangeUrl,
+    JSON.stringify(payload),
+    headers,
+  );
   const body = await rawResponse.readBody();
-  core.debug(`Token exchange response status: ${rawResponse.message.statusCode}, body: ${body}`);
+  core.debug(
+    `Token exchange response status: ${rawResponse.message.statusCode}, body: ${body}`,
+  );
   if (rawResponse.message.statusCode !== http.HttpCodes.OK) {
-    throw new Error(`Token exchange failed ${rawResponse.message.statusCode}: ${body}`);
+    throw new Error(
+      `Token exchange failed ${rawResponse.message.statusCode}: ${body}`,
+    );
   }
   const parsed = JSON.parse(body) as TokenExchangeResponse;
   if (!parsed || !parsed.access_token) {
-    throw new Error(`Token response did not contain an access token, body: ${body}`);
+    throw new Error(
+      `Token response did not contain an access token, body: ${body}`,
+    );
   }
   const accessToken = parsed.access_token;
   return { user, accessToken };
