@@ -59,7 +59,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   if (!user) throw new Error("Failed to extract user from OIDC token");
 
   const client = new http.HttpClient("flyfrog-action");
-  const tokenExchangeUrl = `${url}/api/v1/oidc/token`;
+  const tokenExchangeUrl = `${url}/access/api/v1/oidc/token`;
   core.debug(`Exchanging OIDC token at ${tokenExchangeUrl}`);
 
   // Build the token exchange request payload
