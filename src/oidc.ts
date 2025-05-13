@@ -75,16 +75,21 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  // Log token exchange details
-  core.debug(`Token exchange URL: ${tokenExchangeUrl}`);
-  core.debug(`Token exchange payload: ${JSON.stringify(payload)}`);
+  // Log token exchange details (always visible)
+  core.info(`Token exchange URL: ${tokenExchangeUrl}`);
+  core.info(`Token exchange payload: ${JSON.stringify(payload)}`);
+
   const rawResponse = await client.post(
     tokenExchangeUrl,
     JSON.stringify(payload),
     headers,
   );
   const body = await rawResponse.readBody();
-  core.debug(
+  // Log response details
+  core.info(
+    `Token exchange response headers: ${JSON.stringify(rawResponse.message.headers)}`,
+  );
+  core.error(
     `Token exchange response status: ${rawResponse.message.statusCode}, body: ${body}`,
   );
   if (rawResponse.message.statusCode !== http.HttpCodes.OK) {
