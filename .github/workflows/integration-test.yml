@@ -1,0 +1,26 @@
+name: Integration Test
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write  # Allow OIDC token retrieval
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run FlyFrog action
+        id: run-action
+        uses: ./
+        with:
+          url: https://ecosysjfrog.jfrog.io
+          ignore: docker
+
+      - name: Assert action completed successfully
+        run: |
+          echo "✅ FlyFrog action completed without errors"
