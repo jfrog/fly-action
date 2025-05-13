@@ -1,8 +1,4 @@
-import {
-  extractUserFromToken,
-  exchangeTokenForFlyFrogToken,
-  authenticateOidc,
-} from "./oidc";
+import { extractUserFromToken, authenticateOidc } from "./oidc";
 import * as core from "@actions/core";
 import { HttpClient } from "@actions/http-client";
 import { FlyFrogCredentials } from "./types";
@@ -11,13 +7,6 @@ jest.mock("@actions/core", () => ({
   debug: jest.fn(),
   warning: jest.fn(),
   getIDToken: jest.fn(),
-}));
-
-// Mock HttpClient
-jest.mock("@actions/http-client", () => ({
-  HttpClient: jest.fn().mockImplementation(() => ({
-    post: jest.fn(),
-  })),
 }));
 
 describe("extractUserFromToken", () => {
@@ -40,48 +29,17 @@ describe("extractUserFromToken", () => {
   });
 });
 
-describe("exchangeTokenForFlyFrogToken", () => {
-  const mockPost = jest.fn();
-  beforeEach(() => {
-    (HttpClient as jest.Mock).mockImplementation(() => ({ post: mockPost }));
-  });
-
-  it("should exchange token and return credentials with accessToken", async () => {
-    const credentials: FlyFrogCredentials = { url: "https://example.com" };
-    const fakeResponse = {
-      message: { statusCode: 200 },
-      readBody: jest.fn().mockResolvedValue('{"access_token":"abc123"}'),
-    };
-    mockPost.mockResolvedValue(fakeResponse);
-
-    const result = await exchangeTokenForFlyFrogToken(
-      credentials,
-      "idtoken",
-      "provider",
-    );
-    expect(result.accessToken).toBe("abc123");
-    expect(mockPost).toHaveBeenCalledWith(
-      "https://example.com/api/v1/oidc/token",
-      expect.any(String),
-      expect.objectContaining({ "Content-Type": "application/json" }),
-    );
-  });
-
-  it("should throw error on non-200 status", async () => {
-    const credentials: FlyFrogCredentials = { url: "https://example.org" };
-    const fakeResponse = {
-      message: { statusCode: 500 },
-      readBody: jest.fn().mockResolvedValue("error"),
-    };
-    mockPost.mockResolvedValue(fakeResponse);
-
-    await expect(
-      exchangeTokenForFlyFrogToken(credentials, "tok", "prov"),
-    ).rejects.toThrow(/Token exchange failed with status 500/);
-  });
-});
-
 describe("authenticateOidc", () => {
+  let mockPostJson: jest.Mock;
+  beforeEach(() => {
+    mockPostJson = jest.fn();
+    jest
+      .spyOn(HttpClient.prototype, "postJson")
+      .mockImplementation(mockPostJson);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
   it("should authenticate and return user and accessToken", async () => {
     // Mock getIDToken
     (core.getIDToken as jest.Mock).mockResolvedValue(
@@ -89,12 +47,12 @@ describe("authenticateOidc", () => {
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
     );
-    // Mock HttpClient.post
-    const mockPost = jest.fn().mockResolvedValue({
-      message: { statusCode: 200 },
-      readBody: jest.fn().mockResolvedValue('{"access_token":"tokval"}'),
-    });
-    (HttpClient as jest.Mock).mockImplementation(() => ({ post: mockPost }));
+    // Mock HttpClient.postJson
+    const fakeResponse = {
+      statusCode: 200,
+      result: { access_token: "tokval" },
+    };
+    mockPostJson.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://flyfrog");
     expect(result).toEqual({ user: "name", accessToken: "tokval" });
@@ -104,6 +62,40 @@ describe("authenticateOidc", () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(undefined);
     await expect(authenticateOidc("url")).rejects.toThrow(
       "Failed to obtain OIDC token",
+    );
+  });
+
+  it("should throw if token exchange returns non-200 status", async () => {
+    (core.getIDToken as jest.Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+    const fakeResponse = {
+      statusCode: 500,
+      result: "error body",
+    };
+    mockPostJson.mockResolvedValue(fakeResponse);
+
+    await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
+      /Token exchange failed 500: error body/,
+    );
+  });
+
+  it("should throw if access_token is missing in response", async () => {
+    (core.getIDToken as jest.Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+    const fakeResponse = {
+      statusCode: 200,
+      result: {},
+    };
+    mockPostJson.mockResolvedValue(fakeResponse);
+
+    await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
+      "Token response did not contain an access token",
     );
   });
 });

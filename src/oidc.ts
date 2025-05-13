@@ -1,8 +1,14 @@
 import * as core from "@actions/core";
 import * as http from "@actions/http-client";
-import { FlyFrogCredentials } from "./types";
-
-const DEFAULT_OIDC_PROVIDER_NAME = "flyfrog-action";
+import {
+  OidcAuthResult,
+  TokenExchangeRequest,
+  TokenExchangeResponse,
+  OIDC_GRANT_TYPE,
+  OIDC_ID_TOKEN_TYPE,
+  OIDC_PROVIDER_NAME,
+} from "./types";
+import { OutgoingHttpHeaders } from "http";
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
@@ -17,71 +23,6 @@ export async function getIDToken(): Promise<string | undefined> {
       `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
     );
     return undefined;
-  }
-}
-
-/**
- * Exchanges a GitHub OIDC token for a FlyFrog access token
- * @param credentials The current FlyFrog credentials
- * @param idToken The OIDC token from GitHub
- * @param providerName The OIDC provider name configured in FlyFrog
- * @returns Updated credentials with access token
- */
-export async function exchangeTokenForFlyFrogToken(
-  credentials: FlyFrogCredentials,
-  idToken: string,
-  providerName: string,
-): Promise<FlyFrogCredentials> {
-  if (!credentials.url) throw new Error("FlyFrog URL is required");
-  const client = new http.HttpClient("setup-flyfrog-action");
-
-  const tokenExchangeUrl = `${credentials.url}/api/v1/oidc/token`;
-
-  // Debug the token exchange URL
-  core.debug(`Exchanging OIDC token at ${tokenExchangeUrl}`);
-
-  const data = JSON.stringify({
-    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-    subject_token_type: "urn:ietf:params:oauth:token-type:id_token",
-    subject_token: idToken,
-    provider_name: providerName,
-  });
-
-  const headers = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-
-  try {
-    const response = await client.post(tokenExchangeUrl, data, headers);
-    const responseBody = await response.readBody();
-
-    if (response.message.statusCode !== 200) {
-      throw new Error(
-        `Token exchange failed with status ${response.message.statusCode}: ${responseBody}`,
-      );
-    }
-
-    try {
-      const tokenResponse = JSON.parse(responseBody);
-      if (tokenResponse.access_token) {
-        // Return updated credentials with the exchanged access token
-        return {
-          ...credentials,
-          accessToken: tokenResponse.access_token,
-        };
-      } else {
-        throw new Error("Token response did not contain an access token");
-      }
-    } catch (error) {
-      throw new Error(
-        `Failed to parse token response: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } catch (error) {
-    throw new Error(
-      `Token exchange request failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
   }
 }
 
@@ -110,23 +51,52 @@ export function extractUserFromToken(token: string): string | undefined {
  * Performs full OIDC authentication and token exchange, returning the CLI user and access token
  * @param url The FlyFrog server URL
  */
-export async function authenticateOidc(
-  url: string,
-): Promise<{ user: string; accessToken: string }> {
+export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   const idToken = await getIDToken();
   if (!idToken) throw new Error("Failed to obtain OIDC token");
 
   const user = extractUserFromToken(idToken);
   if (!user) throw new Error("Failed to extract user from OIDC token");
 
-  let credentials: FlyFrogCredentials = { url };
-  credentials = await exchangeTokenForFlyFrogToken(
-    credentials,
-    idToken,
-    DEFAULT_OIDC_PROVIDER_NAME,
-  );
-  if (!credentials.accessToken)
-    throw new Error("Token exchange did not return an access token");
+  const client = new http.HttpClient("flyfrog-action");
+  const tokenExchangeUrl = `${url}/api/v1/oidc/token`;
+  core.debug(`Exchanging OIDC token at ${tokenExchangeUrl}`);
 
-  return { user, accessToken: credentials.accessToken };
+  // Build the token exchange request payload
+  const payload: TokenExchangeRequest = {
+    grant_type: OIDC_GRANT_TYPE,
+    subject_token_type: OIDC_ID_TOKEN_TYPE,
+    subject_token: idToken,
+    provider_name: OIDC_PROVIDER_NAME,
+  };
+
+  const headers: OutgoingHttpHeaders = {
+    [http.Headers.ContentType]: http.MediaTypes.ApplicationJson,
+    [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
+  };
+
+  // Exchange ID token for FlyFrog access token in one step
+  const response = await client.postJson<TokenExchangeResponse>(
+    tokenExchangeUrl,
+    payload,
+    headers,
+  );
+  if (response.statusCode !== http.HttpCodes.OK) {
+    // Use direct result to avoid JSON.stringify adding extra quotes
+    throw new Error(
+      `Token exchange failed ${response.statusCode}: ${String(response.result)}`,
+    );
+  }
+
+  // Ensure result is not null before accessing the access_token field
+  const result = response.result;
+  if (!result) {
+    throw new Error("Token exchange returned empty response body");
+  }
+  const accessToken = result.access_token;
+  if (!accessToken) {
+    throw new Error("Token response did not contain an access token");
+  }
+
+  return { user, accessToken };
 }
