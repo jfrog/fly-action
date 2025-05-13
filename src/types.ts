@@ -1,8 +1,3 @@
-export interface FlyFrogCredentials {
-  url: string;
-  accessToken?: string;
-}
-
 export interface OidcAuthResult {
   /** GitHub Actions user extracted from the OIDC token */
   user: string;

@@ -2,7 +2,6 @@ name: Integration Test
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
 
 permissions:
   id-token: write  # Allow OIDC token retrieval
