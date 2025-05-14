@@ -1,6 +1,7 @@
 import { extractUserFromToken, authenticateOidc } from "./oidc";
 import * as core from "@actions/core";
-import { HttpClient } from "@actions/http-client";
+import { HttpClient, HttpClientResponse } from "@actions/http-client";
+import { IncomingHttpHeaders } from "http";
 
 jest.mock("@actions/core", () => ({
   debug: jest.fn(),
@@ -48,10 +49,10 @@ describe("authenticateOidc", () => {
         ".sig",
     );
     // Mock HttpClient.post
-    const fakeResponse = {
-      message: { statusCode: 200 },
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () => JSON.stringify({ access_token: "tokval" }),
-    } as any;
+    } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://flyfrog");
@@ -71,10 +72,10 @@ describe("authenticateOidc", () => {
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
     );
-    const fakeResponse = {
-      message: { statusCode: 500 },
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
       readBody: async () => "error body",
-    } as any;
+    } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
@@ -88,10 +89,10 @@ describe("authenticateOidc", () => {
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
     );
-    const fakeResponse = {
-      message: { statusCode: 200 },
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () => JSON.stringify({}),
-    } as any;
+    } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(

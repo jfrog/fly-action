@@ -10,6 +10,9 @@ import {
 } from "./types";
 import { OutgoingHttpHeaders } from "http";
 
+// Represents the JSON body of the token exchange response
+type TokenJson = { access_token?: string; [key: string]: unknown };
+
 /**
  * Gets an OIDC token from the GitHub Actions runtime
  * @returns The OIDC token or undefined if the request failed
@@ -89,7 +92,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   );
   const body = await rawResponse.readBody();
   // Parse JSON to mask access_token and register secret
-  let parsedJson: any;
+  let parsedJson: TokenJson;
   try {
     parsedJson = JSON.parse(body);
     if (parsedJson.access_token) {
