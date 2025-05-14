@@ -19,7 +19,7 @@ jobs:
         uses: ./
         with:
           url: https://ecosysjfrog.jfrog.io
-          ignore: docker
+          ignore: docker, podman
 
       - name: Assert action completed successfully
         run: |
