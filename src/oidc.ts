@@ -105,21 +105,21 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   core.info(
     `Token exchange response headers: ${JSON.stringify(
       rawResponse.message.headers,
-    )}`
+    )}`,
   );
   // Log success or error and throw on non-200
   if (rawResponse.message.statusCode === http.HttpCodes.OK) {
     core.info(
-      `Token exchange succeeded, body: ${JSON.stringify(maskedResponse)}`
+      `Token exchange succeeded, body: ${JSON.stringify(maskedResponse)}`,
     );
   } else {
     core.error(
       `Token exchange failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
-        maskedResponse
-      )}`
+        maskedResponse,
+      )}`,
     );
     throw new Error(
-      `Token exchange failed ${rawResponse.message.statusCode}: ${body}`
+      `Token exchange failed ${rawResponse.message.statusCode}: ${body}`,
     );
   }
   const parsed = parsedJson as TokenExchangeResponse;
