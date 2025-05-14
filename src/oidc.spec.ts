@@ -6,6 +6,9 @@ jest.mock("@actions/core", () => ({
   debug: jest.fn(),
   warning: jest.fn(),
   getIDToken: jest.fn(),
+  setSecret: jest.fn(),
+  info: jest.fn(),
+  error: jest.fn(),
 }));
 
 describe("extractUserFromToken", () => {

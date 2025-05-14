@@ -34,7 +34,6 @@ export async function run(): Promise<void> {
       FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
 
-    core.info("Running FlyFrog setup command with environment variables");
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
       listeners: {
