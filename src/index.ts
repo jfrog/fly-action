@@ -26,6 +26,10 @@ export async function run(): Promise<void> {
     core.info("Successfully authenticated with OIDC");
     core.setSecret(accessToken);
 
+    // Save URL and access token to state for post-job CI end notification
+    core.saveState("flyfrog-url", url);
+    core.saveState("flyfrog-access-token", accessToken);
+
     const binPath = resolveFlyFrogCLIBinaryPath();
     const envVars: Record<string, string> = {
       FLYFROG_URL: url,
@@ -33,9 +37,6 @@ export async function run(): Promise<void> {
       FLYFROG_ACCESS_TOKEN: accessToken,
       FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
-
-    // Notify that the setup command is about to run
-    core.info("Running FlyFrog setup command with environment variables");
 
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,

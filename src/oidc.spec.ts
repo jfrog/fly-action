@@ -1,4 +1,4 @@
-import { extractUserFromToken, authenticateOidc } from "./oidc";
+import { extractUserFromToken, authenticateOidc, notifyCiEnd } from "./oidc";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
@@ -66,7 +66,7 @@ describe("authenticateOidc", () => {
     );
   });
 
-  it("should throw if token exchange returns non-200 status", async () => {
+  it("should throw if FlyFrog OIDC returns non-200 status", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
@@ -79,7 +79,7 @@ describe("authenticateOidc", () => {
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
-      /Token exchange failed 500: error body/,
+      /FlyFrog OIDC failed 500: error body/,
     );
   });
 
@@ -96,7 +96,48 @@ describe("authenticateOidc", () => {
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
-      "Token response did not contain an access token",
+      "OIDC response did not contain an access token",
+    );
+  });
+});
+
+describe("notifyCiEnd", () => {
+  let mockPost: jest.Mock;
+  beforeEach(() => {
+    mockPost = jest.fn();
+    jest.spyOn(HttpClient.prototype, "post").mockImplementation(mockPost);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("should successfully notify CI end", async () => {
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Build Info published successfully",
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    await notifyCiEnd("https://flyfrog", "test-token");
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "https://flyfrog/flyfrog/api/v1/ci/end",
+      "",
+      expect.objectContaining({
+        Authorization: "Bearer test-token",
+      }),
+    );
+  });
+
+  it("should throw if CI end notification returns non-200 status", async () => {
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Internal server error",
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    await expect(notifyCiEnd("https://flyfrog", "test-token")).rejects.toThrow(
+      /FlyFrog CI end notification failed 500: Internal server error/,
     );
   });
 });

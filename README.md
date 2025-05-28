@@ -60,15 +60,18 @@ When using OIDC authentication:
 3. The provider name is fixed to `flyfrog-action`
 4. The action will:
    - Request an OIDC token from GitHub Actions
-   - Exchange it for a FlyFrog access token via the `/api/v1/oidc/token` endpoint
+   - Exchange it for a FlyFrog access token via the `/flyfrog/api/v1/ci/start-oidc` endpoint
    - Use the resulting token to authenticate with FlyFrog
+   - Notify CI session end via the `/flyfrog/api/v1/ci/end` endpoint on completion
 
 ### FlyFrog Server Configuration for OIDC
 
 To use OIDC authentication, your FlyFrog server must be configured with:
 
 1. An OIDC provider that accepts GitHub Actions tokens
-2. A token exchange endpoint at `/api/v1/oidc/token`
+2. Custom FlyFrog API endpoints:
+   - `/flyfrog/api/v1/ci/start-oidc` for token exchange and CI session initialization
+   - `/flyfrog/api/v1/ci/end` for CI session end notification
 3. Custom audience claim support (if using non-default audience)
 
 ## Supported Package Managers
@@ -82,6 +85,31 @@ The action supports all package managers that the FlyFrog CLI supports:
 - **go** – Go modules
 - **gradle** – Gradle build tool
 - **maven** – Maven build tool
+
+## Testing
+
+### Integration Tests
+
+Integration tests run automatically on pushes to the main branch, but require a valid FlyFrog test server to be configured. The integration test will only run if the `FLYFROG_TEST_URL` repository variable is set.
+
+To configure integration testing:
+
+1. Set up a FlyFrog server that supports the required API endpoints
+2. Set the `FLYFROG_TEST_URL` repository variable in your GitHub repository settings
+3. The integration test will automatically run on the next push
+
+### Testing FlyFrog Server Compatibility
+
+Use the provided test script to validate that a FlyFrog server supports the required API endpoints:
+
+```bash
+./scripts/test-server.sh https://your-flyfrog-server.com
+```
+
+This script will test:
+- Basic server connectivity
+- OIDC start endpoint (`/flyfrog/api/v1/ci/start-oidc`)
+- CI end notification endpoint (`/flyfrog/api/v1/ci/end`)
 
 ## Build Process
 

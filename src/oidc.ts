@@ -2,11 +2,8 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import {
   OidcAuthResult,
-  TokenExchangeRequest,
-  TokenExchangeResponse,
-  OIDC_GRANT_TYPE,
-  OIDC_ID_TOKEN_TYPE,
-  OIDC_PROVIDER_NAME,
+  FlyFrogOidcRequest,
+  FlyFrogOidcResponse,
 } from "./types";
 import { OutgoingHttpHeaders } from "http";
 
@@ -51,7 +48,7 @@ export function extractUserFromToken(token: string): string | undefined {
 }
 
 /**
- * Performs full OIDC authentication and token exchange, returning the CLI user and access token
+ * Performs full OIDC authentication with FlyFrog, returning the CLI user and access token
  * @param url The FlyFrog server URL
  */
 export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
@@ -64,15 +61,12 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   if (!user) throw new Error("Failed to extract user from OIDC token");
 
   const client = new http.HttpClient("flyfrog-action");
-  const tokenExchangeUrl = `${url}/access/api/v1/oidc/token`;
-  core.debug(`Exchanging OIDC token at ${tokenExchangeUrl}`);
+  const oidcUrl = `${url}/flyfrog/api/v1/ci/start-oidc`;
+  core.debug(`Authenticating with FlyFrog OIDC at ${oidcUrl}`);
 
-  // Build the token exchange request payload
-  const payload: TokenExchangeRequest = {
-    grant_type: OIDC_GRANT_TYPE,
-    subject_token_type: OIDC_ID_TOKEN_TYPE,
+  // Build the FlyFrog OIDC request payload
+  const payload: FlyFrogOidcRequest = {
     subject_token: idToken,
-    provider_name: OIDC_PROVIDER_NAME,
   };
 
   const headers: OutgoingHttpHeaders = {
@@ -80,13 +74,13 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  // Log token exchange details (always visible)
-  const maskedPayload = { ...payload, subject_token: "***" };
-  core.info(`Token exchange URL: ${tokenExchangeUrl}`);
-  core.info(`Token exchange payload: ${JSON.stringify(maskedPayload)}`);
+  // Log OIDC details (always visible)
+  const maskedPayload = { subject_token: "***" };
+  core.info(`FlyFrog OIDC URL: ${oidcUrl}`);
+  core.info(`FlyFrog OIDC payload: ${JSON.stringify(maskedPayload)}`);
 
   const rawResponse = await client.post(
-    tokenExchangeUrl,
+    oidcUrl,
     JSON.stringify(payload),
     headers,
   );
@@ -106,31 +100,74 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     : parsedJson;
   // Log response details
   core.info(
-    `Token exchange response headers: ${JSON.stringify(
+    `FlyFrog OIDC response headers: ${JSON.stringify(
       rawResponse.message.headers,
     )}`,
   );
   // Log success or error and throw on non-200
   if (rawResponse.message.statusCode === http.HttpCodes.OK) {
     core.info(
-      `Token exchange succeeded, body: ${JSON.stringify(maskedResponse)}`,
+      `FlyFrog OIDC succeeded, body: ${JSON.stringify(maskedResponse)}`,
     );
   } else {
     core.error(
-      `Token exchange failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
+      `FlyFrog OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
         maskedResponse,
       )}`,
     );
     throw new Error(
-      `Token exchange failed ${rawResponse.message.statusCode}: ${body}`,
+      `FlyFrog OIDC failed ${rawResponse.message.statusCode}: ${body}`,
     );
   }
-  const parsed = parsedJson as TokenExchangeResponse;
+  const parsed = parsedJson as FlyFrogOidcResponse;
   if (!parsed || !parsed.access_token) {
     throw new Error(
-      `Token response did not contain an access token, body: ${body}`,
+      `OIDC response did not contain an access token, body: ${body}`,
     );
   }
   const accessToken = parsed.access_token;
   return { user, accessToken };
+}
+
+/**
+ * Notifies the FlyFrog server that the CI run has ended
+ * @param url The FlyFrog server URL
+ * @param accessToken The access token for authentication
+ */
+export async function notifyCiEnd(
+  url: string,
+  accessToken: string,
+): Promise<void> {
+  const client = new http.HttpClient("flyfrog-action");
+  const endCiUrl = `${url}/flyfrog/api/v1/ci/end`;
+  core.debug(`Notifying CI end at ${endCiUrl}`);
+
+  const headers: OutgoingHttpHeaders = {
+    Authorization: `Bearer ${accessToken}`,
+    [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
+  };
+
+  core.info(`FlyFrog CI end notification URL: ${endCiUrl}`);
+
+  const rawResponse = await client.post(endCiUrl, "", headers);
+  const body = await rawResponse.readBody();
+
+  // Log response details
+  core.info(
+    `FlyFrog CI end notification response headers: ${JSON.stringify(
+      rawResponse.message.headers,
+    )}`,
+  );
+
+  // Log success or error and throw on non-200
+  if (rawResponse.message.statusCode === http.HttpCodes.OK) {
+    core.info(`FlyFrog CI end notification succeeded, body: ${body}`);
+  } else {
+    core.error(
+      `FlyFrog CI end notification failed ${rawResponse.message.statusCode}, body: ${body}`,
+    );
+    throw new Error(
+      `FlyFrog CI end notification failed ${rawResponse.message.statusCode}: ${body}`,
+    );
+  }
 }

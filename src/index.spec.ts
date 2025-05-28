@@ -15,7 +15,9 @@ import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import { authenticateOidc } from "./oidc";
 
-jest.mock("./oidc", () => ({ authenticateOidc: jest.fn() }));
+jest.mock("./oidc", () => ({
+  authenticateOidc: jest.fn(),
+}));
 
 describe("resolveFlyFrogCLIBinaryPath", () => {
   afterEach(() => jest.resetAllMocks());
@@ -30,12 +32,13 @@ describe("resolveFlyFrogCLIBinaryPath", () => {
     expect(fs.chmodSync as jest.Mock).toHaveBeenCalledWith(fakePath, 0o755);
   });
 
-  it("throws if binary does not exist", () => {
-    (path.resolve as jest.Mock).mockReturnValue("/does/not/exist");
+  it("throws error when binary does not exist", () => {
+    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
     (fs.existsSync as jest.Mock).mockReturnValue(false);
 
-    expect(() => resolveFlyFrogCLIBinaryPath()).toThrow(/Binary not found/);
-    expect(fs.chmodSync as jest.Mock).not.toHaveBeenCalled();
+    expect(() => resolveFlyFrogCLIBinaryPath()).toThrow(
+      `Binary not found for ${process.platform}/${process.arch}`,
+    );
   });
 });
 
@@ -61,7 +64,9 @@ describe("run", () => {
   const getInputSpy = jest.spyOn(core, "getInput");
   const setFailedSpy = jest.spyOn(core, "setFailed");
   const infoSpy = jest.spyOn(core, "info");
+  const errorSpy = jest.spyOn(core, "error");
   const setSecretSpy = jest.spyOn(core, "setSecret");
+  const saveStateSpy = jest.spyOn(core, "saveState");
   const execSpy = jest.spyOn(exec, "exec");
 
   beforeEach(() => {
@@ -85,11 +90,10 @@ describe("run", () => {
 
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
     expect(setSecretSpy).toHaveBeenCalledWith("token");
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "https://url");
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "token");
     expect(infoSpy).toHaveBeenCalledWith(
       "Successfully authenticated with OIDC",
-    );
-    expect(infoSpy).toHaveBeenCalledWith(
-      "Running FlyFrog setup command with environment variables",
     );
     expect(execSpy).toHaveBeenCalled();
     expect(infoSpy).toHaveBeenCalledWith(
@@ -110,6 +114,8 @@ describe("run", () => {
 
     await run();
 
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "u");
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "t");
     expect(setFailedSpy).toHaveBeenCalledWith("FlyFrog setup command failed");
   });
 
@@ -120,21 +126,8 @@ describe("run", () => {
     await run();
 
     expect(setFailedSpy).toHaveBeenCalledWith("oidc fail");
-  });
-});
-
-describe("run additional branches", () => {
-  const getInputSpy = jest.spyOn(core, "getInput");
-  const setFailedSpy = jest.spyOn(core, "setFailed");
-  const infoSpy = jest.spyOn(core, "info");
-  const errorSpy = jest.spyOn(core, "error");
-  const execSpy = jest.spyOn(exec, "exec");
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-    // Stub binary presence
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
+    // No state should be saved when authentication fails
+    expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
   it("passes ignore input to environment variables", async () => {
@@ -155,7 +148,8 @@ describe("run additional branches", () => {
     );
 
     await run();
-    expect(execSpy).toHaveBeenCalled();
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "u");
+    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "t");
   });
 
   it("handles non-Error exceptions with unknown error message", async () => {

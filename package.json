@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "GitHub Action to setup FlyFrog CLI",
   "main": "lib/index.js",
+  "post": "lib/post.js",
   "scripts": {
     "build": "npm run format && tsc && ncc build dist/index.js -o lib",
     "test": "jest",
