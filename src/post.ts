@@ -18,10 +18,11 @@ async function runPost(): Promise<void> {
   if (!accessToken) {
     core.debug("No access token found in state, skipping CI end notification");
     return;
-  }  core.info("🏁 Notifying FlyFrog that CI job has ended...");
+  }
+  core.info("🏁 Notifying FlyFrog that CI job has ended...");
   core.debug(`Using URL: ${url}`);
   core.debug(`Access token length: ${accessToken.length}`);
-  
+
   // This will throw an error if notification fails, causing the post-job to fail
   await notifyCiEnd(url, accessToken);
   core.info("✅ CI end notification completed successfully");
