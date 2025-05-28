@@ -40,11 +40,6 @@ export async function run(): Promise<void> {
 
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
-      silent: true, // suppress default exec output to avoid duplicates
-      listeners: {
-        stdout: (data: Buffer) => core.notice(data.toString()),
-        stderr: (data: Buffer) => core.error(data.toString()),
-      },
     };
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) throw new Error("FlyFrog setup command failed");

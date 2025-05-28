@@ -161,31 +161,6 @@ describe("run", () => {
     await run();
     expect(setFailedSpy).toHaveBeenCalledWith("An unknown error occurred");
   });
-
-  it("logs stdout and stderr from listeners", async () => {
-    getInputSpy.mockImplementation((name: string) =>
-      name === "url" ? "u" : "",
-    );
-    (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "u",
-      accessToken: "t",
-    });
-    execSpy.mockImplementation(
-      async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
-        if (options?.listeners?.stdout) {
-          options.listeners.stdout(Buffer.from("hello"));
-        }
-        if (options?.listeners?.stderr) {
-          options.listeners.stderr(Buffer.from("world"));
-        }
-        return 0;
-      },
-    );
-
-    await run();
-    expect(noticeSpy).toHaveBeenCalledWith("hello");
-    expect(errorSpy).toHaveBeenCalledWith("world");
-  });
 });
 
 describe("run exec and binary error branches", () => {
