@@ -62,7 +62,9 @@ When using OIDC authentication:
    - Request an OIDC token from GitHub Actions
    - Exchange it for a FlyFrog access token via the `/flyfrog/api/v1/ci/start-oidc` endpoint
    - Use the resulting token to authenticate with FlyFrog
-   - Notify CI session end via the `/flyfrog/api/v1/ci/end` endpoint on completion
+   - Automatically notify CI session end via the `/flyfrog/api/v1/ci/end` endpoint when the job completes (using GitHub Actions post-job mechanism)
+
+> **Note**: The CI end notification runs automatically after the main action completes, regardless of whether the main action succeeds or fails. This ensures proper cleanup and session management on the FlyFrog server.
 
 ### FlyFrog Server Configuration for OIDC
 
