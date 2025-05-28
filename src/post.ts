@@ -3,34 +3,30 @@ import { notifyCiEnd } from "./oidc";
 
 /**
  * Post-job notification that runs after the main action to notify FlyFrog service
+ * Will fail the workflow if the CI end notification fails
  */
 async function runPost(): Promise<void> {
-  try {
-    // Get the URL and access token from the main action's state
-    const url = core.getState("flyfrog-url");
-    const accessToken = core.getState("flyfrog-access-token");
+  // Get the URL and access token from the main action's state
+  const url = core.getState("flyfrog-url");
+  const accessToken = core.getState("flyfrog-access-token");
 
-    if (!url) {
-      core.debug("No FlyFrog URL found in state, skipping CI end notification");
-      return;
-    }
-
-    if (!accessToken) {
-      core.debug(
-        "No access token found in state, skipping CI end notification",
-      );
-      return;
-    }
-
-    core.info("🏁 Notifying FlyFrog that CI job has ended...");
-    await notifyCiEnd(url, accessToken);
-    core.info("✅ CI end notification completed successfully");
-  } catch (error) {
-    // Don't fail the workflow if notification fails, just log a warning
-    core.warning(
-      `CI end notification failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  if (!url) {
+    core.debug("No FlyFrog URL found in state, skipping CI end notification");
+    return;
   }
+
+  if (!accessToken) {
+    core.debug("No access token found in state, skipping CI end notification");
+    return;
+  }
+
+  core.notice("🏁 Notifying FlyFrog that CI job has ended...");
+  core.debug(`Using URL: ${url}`);
+  core.debug(`Access token length: ${accessToken.length}`);
+
+  // This will throw an error if notification fails, causing the post-job to fail
+  await notifyCiEnd(url, accessToken);
+  core.notice("✅ CI end notification completed successfully");
 }
 
 // Run notification if this is being executed directly

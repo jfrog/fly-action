@@ -9,6 +9,7 @@ jest.mock("@actions/core", () => ({
   getIDToken: jest.fn(),
   setSecret: jest.fn(),
   info: jest.fn(),
+  notice: jest.fn(),
   error: jest.fn(),
 }));
 

@@ -76,8 +76,8 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
 
   // Log OIDC details (always visible)
   const maskedPayload = { subject_token: "***" };
-  core.info(`FlyFrog OIDC URL: ${oidcUrl}`);
-  core.info(`FlyFrog OIDC payload: ${JSON.stringify(maskedPayload)}`);
+  core.notice(`🔐 Authenticating with FlyFrog OIDC at ${oidcUrl}`);
+  core.debug(`FlyFrog OIDC payload: ${JSON.stringify(maskedPayload)}`);
 
   const rawResponse = await client.post(
     oidcUrl,
@@ -99,7 +99,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     ? { ...parsedJson, access_token: "***" }
     : parsedJson;
   // Log response details
-  core.info(
+  core.debug(
     `FlyFrog OIDC response headers: ${JSON.stringify(
       rawResponse.message.headers,
     )}`,
@@ -109,9 +109,8 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     rawResponse.message.statusCode === http.HttpCodes.OK ||
     rawResponse.message.statusCode === 202
   ) {
-    core.info(
-      `FlyFrog OIDC succeeded, body: ${JSON.stringify(maskedResponse)}`,
-    );
+    core.notice(`✅ FlyFrog OIDC authentication successful`);
+    core.debug(`FlyFrog OIDC response body: ${JSON.stringify(maskedResponse)}`);
   } else {
     core.error(
       `FlyFrog OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
@@ -150,13 +149,13 @@ export async function notifyCiEnd(
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  core.info(`FlyFrog CI end notification URL: ${endCiUrl}`);
+  core.debug(`FlyFrog CI end notification URL: ${endCiUrl}`);
 
   const rawResponse = await client.post(endCiUrl, "", headers);
   const body = await rawResponse.readBody();
 
   // Log response details
-  core.info(
+  core.debug(
     `FlyFrog CI end notification response headers: ${JSON.stringify(
       rawResponse.message.headers,
     )}`,
@@ -164,7 +163,7 @@ export async function notifyCiEnd(
 
   // Log success or error and throw on non-200
   if (rawResponse.message.statusCode === http.HttpCodes.OK) {
-    core.info(`FlyFrog CI end notification succeeded, body: ${body}`);
+    core.debug(`FlyFrog CI end notification succeeded, body: ${body}`);
   } else {
     core.error(
       `FlyFrog CI end notification failed ${rawResponse.message.statusCode}, body: ${body}`,

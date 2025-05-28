@@ -64,6 +64,7 @@ describe("run", () => {
   const getInputSpy = jest.spyOn(core, "getInput");
   const setFailedSpy = jest.spyOn(core, "setFailed");
   const infoSpy = jest.spyOn(core, "info");
+  const noticeSpy = jest.spyOn(core, "notice");
   const errorSpy = jest.spyOn(core, "error");
   const setSecretSpy = jest.spyOn(core, "setSecret");
   const saveStateSpy = jest.spyOn(core, "saveState");
@@ -92,12 +93,12 @@ describe("run", () => {
     expect(setSecretSpy).toHaveBeenCalledWith("token");
     expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "https://url");
     expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "token");
-    expect(infoSpy).toHaveBeenCalledWith(
-      "Successfully authenticated with OIDC",
+    expect(noticeSpy).toHaveBeenCalledWith(
+      "✅ Successfully authenticated with OIDC",
     );
     expect(execSpy).toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledWith(
-      "FlyFrog registry configuration completed successfully",
+    expect(noticeSpy).toHaveBeenCalledWith(
+      "🎉 FlyFrog registry configuration completed successfully",
     );
     expect(setFailedSpy).not.toHaveBeenCalled();
   });

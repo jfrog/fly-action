@@ -33,10 +33,10 @@ describe("runPost", () => {
       "https://flyfrog.example.com",
       "test-access-token",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
+    expect(mockCore.notice).toHaveBeenCalledWith(
       "🏁 Notifying FlyFrog that CI job has ended...",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
+    expect(mockCore.notice).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
   });
@@ -80,7 +80,7 @@ describe("runPost", () => {
     expect(mockNotifyCiEnd).not.toHaveBeenCalled();
   });
 
-  it("should log warning when CI end notification fails", async () => {
+  it("should throw error when CI end notification fails", async () => {
     // Arrange
     mockCore.getState.mockImplementation((name: string) => {
       if (name === "flyfrog-url") return "https://flyfrog.example.com";
@@ -90,20 +90,15 @@ describe("runPost", () => {
     const notificationError = new Error("Notification failed");
     mockNotifyCiEnd.mockRejectedValue(notificationError);
 
-    // Act
-    await runPost();
-
-    // Assert
+    // Act & Assert
+    await expect(runPost()).rejects.toThrow("Notification failed");
     expect(mockNotifyCiEnd).toHaveBeenCalledWith(
       "https://flyfrog.example.com",
       "test-access-token",
     );
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      "CI end notification failed: Notification failed",
-    );
   });
 
-  it("should handle non-Error notification failures", async () => {
+  it("should throw error for non-Error notification failures", async () => {
     // Arrange
     mockCore.getState.mockImplementation((name: string) => {
       if (name === "flyfrog-url") return "https://flyfrog.example.com";
@@ -112,12 +107,7 @@ describe("runPost", () => {
     });
     mockNotifyCiEnd.mockRejectedValue("string error");
 
-    // Act
-    await runPost();
-
-    // Assert
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      "CI end notification failed: string error",
-    );
+    // Act & Assert
+    await expect(runPost()).rejects.toBe("string error");
   });
 });
