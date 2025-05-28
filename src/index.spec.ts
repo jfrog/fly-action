@@ -183,7 +183,7 @@ describe("run", () => {
     );
 
     await run();
-    expect(infoSpy).toHaveBeenCalledWith("hello");
+    expect(noticeSpy).toHaveBeenCalledWith("hello");
     expect(errorSpy).toHaveBeenCalledWith("world");
   });
 });

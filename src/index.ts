@@ -42,7 +42,7 @@ export async function run(): Promise<void> {
       env: { ...process.env, ...envVars } as Record<string, string>,
       silent: true, // suppress default exec output to avoid duplicates
       listeners: {
-        stdout: (data: Buffer) => core.info(data.toString()),
+        stdout: (data: Buffer) => core.notice(data.toString()),
         stderr: (data: Buffer) => core.error(data.toString()),
       },
     };
