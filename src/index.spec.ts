@@ -93,11 +93,11 @@ describe("run", () => {
     expect(setSecretSpy).toHaveBeenCalledWith("token");
     expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "https://url");
     expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "token");
-    expect(noticeSpy).toHaveBeenCalledWith(
+    expect(infoSpy).toHaveBeenCalledWith(
       "✅ Successfully authenticated with OIDC",
     );
     expect(execSpy).toHaveBeenCalled();
-    expect(noticeSpy).toHaveBeenCalledWith(
+    expect(infoSpy).toHaveBeenCalledWith(
       "🎉 FlyFrog registry configuration completed successfully",
     );
     expect(setFailedSpy).not.toHaveBeenCalled();

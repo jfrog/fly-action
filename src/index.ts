@@ -23,7 +23,7 @@ export async function run(): Promise<void> {
     const ignorePackageManagers = core.getInput("ignore");
 
     const { user, accessToken } = await authenticateOidc(url);
-    core.notice("✅ Successfully authenticated with OIDC");
+    core.info("✅ Successfully authenticated with OIDC");
     core.setSecret(accessToken);
 
     // Save URL and access token to state for post-job CI end notification
@@ -43,7 +43,7 @@ export async function run(): Promise<void> {
     };
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) throw new Error("FlyFrog setup command failed");
-    core.notice("🎉 FlyFrog registry configuration completed successfully");
+    core.info("🎉 FlyFrog registry configuration completed successfully");
   } catch (error) {
     if (error instanceof Error) core.setFailed(error.message);
     else core.setFailed("An unknown error occurred");

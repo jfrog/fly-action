@@ -74,9 +74,9 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  // Log OIDC details (always visible)
+  // Log OIDC details for debugging
   const maskedPayload = { subject_token: "***" };
-  core.notice(`🔐 Authenticating with FlyFrog OIDC at ${oidcUrl}`);
+  core.debug(`Authenticating with FlyFrog OIDC at ${oidcUrl}`);
   core.debug(`FlyFrog OIDC payload: ${JSON.stringify(maskedPayload)}`);
 
   const rawResponse = await client.post(
@@ -109,7 +109,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     rawResponse.message.statusCode === http.HttpCodes.OK ||
     rawResponse.message.statusCode === 202
   ) {
-    core.notice(`✅ FlyFrog OIDC authentication successful`);
+    core.debug(`FlyFrog OIDC authentication successful`);
     core.debug(`FlyFrog OIDC response body: ${JSON.stringify(maskedResponse)}`);
   } else {
     core.error(
