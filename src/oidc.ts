@@ -8,7 +8,7 @@ import {
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response
-type TokenJson = { access_token?: string; [key: string]: unknown };
+type TokenJson = { access_token?: string;[key: string]: unknown };
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
