@@ -59,6 +59,24 @@ describe("authenticateOidc", () => {
     expect(result).toEqual({ user: "name", accessToken: "tokval" });
   });
 
+  it("should succeed with 202 Accepted status", async () => {
+    (core.getIDToken as jest.Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 202, headers: {} as IncomingHttpHeaders },
+      readBody: async () =>
+        JSON.stringify({ access_token: "fake-token", username: "user" }),
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    const result = await authenticateOidc("https://flyfrog");
+    expect(result.user).toBe("name");
+    expect(result.accessToken).toBe("fake-token");
+  });
+
   it("should throw if getIDToken fails", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(undefined);
     await expect(authenticateOidc("url")).rejects.toThrow(
