@@ -3,6 +3,12 @@ import * as exec from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
 import { authenticateOidc } from "./oidc";
+import {
+  INPUT_URL,
+  INPUT_IGNORE_PACKAGE_MANAGERS,
+  STATE_FLYFROG_URL,
+  STATE_FLYFROG_ACCESS_TOKEN,
+} from "./constants";
 
 /**
  * Resolves the platform-specific FlyFrog binary path and ensures it is executable
@@ -11,7 +17,9 @@ export function resolveFlyFrogCLIBinaryPath(): string {
   const binName = `flyfrog-${process.platform}-${process.arch}`;
   const binPath = path.resolve(__dirname, "..", "bin", binName);
   if (!fs.existsSync(binPath)) {
-    throw new Error(`Binary not found for ${process.platform}/${process.arch}`);
+    throw new Error(
+      `FlyFrog CLI binary not found at ${binPath} for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
+    );
   }
   if (process.platform !== "win32") fs.chmodSync(binPath, 0o755);
   return binPath;
@@ -19,16 +27,15 @@ export function resolveFlyFrogCLIBinaryPath(): string {
 
 export async function run(): Promise<void> {
   try {
-    const url = core.getInput("url", { required: true });
-    const ignorePackageManagers = core.getInput("ignore");
+    const url = core.getInput(INPUT_URL, { required: true });
+    const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
 
     const { user, accessToken } = await authenticateOidc(url);
-    core.info("✅ Successfully authenticated with OIDC");
     core.setSecret(accessToken);
 
     // Save URL and access token to state for post-job CI end notification
-    core.saveState("flyfrog-url", url);
-    core.saveState("flyfrog-access-token", accessToken);
+    core.saveState(STATE_FLYFROG_URL, url);
+    core.saveState(STATE_FLYFROG_ACCESS_TOKEN, accessToken);
 
     const binPath = resolveFlyFrogCLIBinaryPath();
     const envVars: Record<string, string> = {
@@ -43,7 +50,6 @@ export async function run(): Promise<void> {
     };
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) throw new Error("FlyFrog setup command failed");
-    core.info("🎉 FlyFrog registry configuration completed successfully");
   } catch (error) {
     if (error instanceof Error) core.setFailed(error.message);
     else core.setFailed("An unknown error occurred");

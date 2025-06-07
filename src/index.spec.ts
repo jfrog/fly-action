@@ -8,12 +8,13 @@ jest.mock("path", () => {
   return { ...actual, resolve: jest.fn() };
 });
 
-import { resolveFlyFrogCLIBinaryPath, run } from "./index";
-import * as fs from "fs";
-import * as path from "path";
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
+import * as fs from "fs";
+import * as path from "path";
+import { resolveFlyFrogCLIBinaryPath, run } from "./index";
 import { authenticateOidc } from "./oidc";
+import { STATE_FLYFROG_URL, STATE_FLYFROG_ACCESS_TOKEN } from "./constants";
 
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
@@ -37,7 +38,7 @@ describe("resolveFlyFrogCLIBinaryPath", () => {
     (fs.existsSync as jest.Mock).mockReturnValue(false);
 
     expect(() => resolveFlyFrogCLIBinaryPath()).toThrow(
-      `Binary not found for ${process.platform}/${process.arch}`,
+      `FlyFrog CLI binary not found at /fake/bin for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
     );
   });
 });
@@ -64,6 +65,8 @@ describe("run", () => {
   const getInputSpy = jest.spyOn(core, "getInput");
   const setFailedSpy = jest.spyOn(core, "setFailed");
   const infoSpy = jest.spyOn(core, "info");
+  const noticeSpy = jest.spyOn(core, "notice");
+  const errorSpy = jest.spyOn(core, "error");
   const setSecretSpy = jest.spyOn(core, "setSecret");
   const saveStateSpy = jest.spyOn(core, "saveState");
   const execSpy = jest.spyOn(exec, "exec");
@@ -89,15 +92,12 @@ describe("run", () => {
 
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
     expect(setSecretSpy).toHaveBeenCalledWith("token");
-    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-url", "https://url");
-    expect(saveStateSpy).toHaveBeenCalledWith("flyfrog-access-token", "token");
-    expect(infoSpy).toHaveBeenCalledWith(
-      "✅ Successfully authenticated with OIDC",
+    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLYFROG_URL, "https://url");
+    expect(saveStateSpy).toHaveBeenCalledWith(
+      STATE_FLYFROG_ACCESS_TOKEN,
+      "token",
     );
     expect(execSpy).toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledWith(
-      "🎉 FlyFrog registry configuration completed successfully",
-    );
     expect(setFailedSpy).not.toHaveBeenCalled();
   });
 
@@ -191,11 +191,14 @@ describe("run exec and binary error branches", () => {
   it("calls setFailed when binary is missing", async () => {
     // stub no binary
     (fs.existsSync as jest.Mock).mockReturnValue(false);
+    (path.resolve as jest.Mock).mockReturnValue(
+      "/test/path/flyfrog-darwin-arm64",
+    ); // Mock path.resolve to provide a concrete path for the error message
     getInputSpy.mockImplementation(() => "");
 
     await run();
     expect(setFailedSpy).toHaveBeenCalledWith(
-      expect.stringContaining("Binary not found"),
+      `FlyFrog CLI binary not found at /test/path/flyfrog-darwin-arm64 for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
     );
   });
 });

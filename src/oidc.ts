@@ -34,15 +34,25 @@ export async function getIDToken(): Promise<string | undefined> {
 export function extractUserFromToken(token: string): string | undefined {
   try {
     const parts = token.split(".");
-    if (parts.length !== 3)
-      throw new Error("Unable to extract user from OIDC token");
+    if (parts.length !== 3) {
+      core.debug("Invalid JWT structure: not three parts");
+      throw new Error(
+        "Unable to extract user from OIDC token: Invalid JWT structure",
+      );
+    }
     const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
     if (payload.sub) {
       const sub: string = payload.sub;
       return sub.includes("/") ? sub.substring(sub.lastIndexOf("/") + 1) : sub;
+    } else {
+      core.debug("JWT payload missing 'sub' claim");
+      throw new Error(
+        "Unable to extract user from OIDC token: Missing 'sub' claim",
+      );
     }
-  } catch {
-    core.warning("Failed to parse user from OIDC token");
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    core.warning(`Failed to parse user from OIDC token: ${errorMessage}`);
     return undefined;
   }
 }

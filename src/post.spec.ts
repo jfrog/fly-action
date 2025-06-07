@@ -33,10 +33,10 @@ describe("runPost", () => {
       "https://flyfrog.example.com",
       "test-access-token",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
+    expect(mockCore.notice).toHaveBeenCalledWith(
       "🏁 Notifying FlyFrog that CI job has ended...",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
+    expect(mockCore.notice).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
   });

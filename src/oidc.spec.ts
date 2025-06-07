@@ -26,9 +26,21 @@ describe("extractUserFromToken", () => {
     expect(extractUserFromToken(token)).toBe("username");
   });
 
-  it("should warn and return undefined on invalid token", () => {
+  it("should warn with 'Invalid JWT structure' and return undefined for malformed token", () => {
     const result = extractUserFromToken("invalid.token");
-    expect(core.warning).toHaveBeenCalled();
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid JWT structure"),
+    );
+    expect(result).toBeUndefined();
+  });
+
+  it("should warn with 'Missing sub claim' and return undefined if sub claim is absent", () => {
+    const payload = { not_sub: "username" }; // No 'sub' claim
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    const result = extractUserFromToken(token);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Missing 'sub' claim"),
+    );
     expect(result).toBeUndefined();
   });
 });
