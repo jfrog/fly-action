@@ -107,7 +107,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   // Log success or error and throw on non-success status
   if (
     rawResponse.message.statusCode === http.HttpCodes.OK ||
-    rawResponse.message.statusCode === 202
+    rawResponse.message.statusCode === 201
   ) {
     core.debug(`FlyFrog OIDC authentication successful`);
     core.debug(`FlyFrog OIDC response body: ${JSON.stringify(maskedResponse)}`);

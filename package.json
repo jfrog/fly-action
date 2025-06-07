@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "post": "lib/post.js",
   "scripts": {
-    "build": "npm run format && tsc && ncc build dist/index.js -o lib && ncc build dist/post.js -o lib/post",
+    "build": "npm run format && tsc && ncc build dist/index.js -o lib && ncc build dist/post.js -o lib/temp && mv lib/temp/index.js lib/post.js && rm -rf lib/temp",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
     "prepare": "npm run build",
