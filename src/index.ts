@@ -31,11 +31,15 @@ export async function run(): Promise<void> {
     const url = core.getInput(INPUT_URL, { required: true });
     core.notice(`FlyFrog Action: URL: ${url}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
-    core.notice(`FlyFrog Action: Ignore Package Managers: ${ignorePackageManagers || 'none'}`);
+    core.notice(
+      `FlyFrog Action: Ignore Package Managers: ${ignorePackageManagers || "none"}`,
+    );
 
     core.notice("FlyFrog Action: Attempting OIDC authentication...");
     const { user, accessToken } = await authenticateOidc(url);
-    core.notice(`FlyFrog Action: OIDC authentication successful. User: ${user}`);
+    core.notice(
+      `FlyFrog Action: OIDC authentication successful. User: ${user}`,
+    );
     core.setSecret(accessToken);
 
     // Save URL and access token to state for post-job CI end notification
@@ -58,10 +62,14 @@ export async function run(): Promise<void> {
     core.notice("FlyFrog Action: Executing FlyFrog CLI setup command...");
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) {
-      core.error("FlyFrog Action: FlyFrog setup command failed with non-zero exit code.");
+      core.error(
+        "FlyFrog Action: FlyFrog setup command failed with non-zero exit code.",
+      );
       throw new Error("FlyFrog setup command failed");
     }
-    core.notice("FlyFrog Action: FlyFrog CLI setup command completed successfully.");
+    core.notice(
+      "FlyFrog Action: FlyFrog CLI setup command completed successfully.",
+    );
   } catch (error) {
     core.error("FlyFrog Action: Error occurred during execution.");
     if (error instanceof Error) core.setFailed(error.message);
