@@ -20,3 +20,21 @@ jobs:
         with:
           url: ${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}
           ignore: docker, podman
+
+      - name: Verify pip configuration
+        shell: bash
+        run: |
+          set -e # Exit on error
+          echo "Verifying pip global.index-url configuration..."
+          configured_url=$(pip config get global.index-url)
+          expected_url_base="${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}"
+          
+          echo "Expected pip index URL base: $expected_url_base"
+          echo "Configured pip index URL: $configured_url"
+          
+          if [[ "$configured_url" == "$expected_url_base"* ]]; then
+            echo "Pip index-url starts with the expected base URL. Verification successful."
+          else
+            echo "Error: Pip index-url ($configured_url) does not start with the expected base URL ($expected_url_base)."
+            exit 1
+          fi
