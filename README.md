@@ -8,6 +8,7 @@ This GitHub Action downloads the FlyFrog CLI and configures package managers to 
 - ✅ Configures all detected package managers with a single command
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
+- ✅ Automatic CI session end notification to the FlyFrog server
 
 ## Usage
 
@@ -64,7 +65,7 @@ When using OIDC authentication:
    - Use the resulting token to authenticate with FlyFrog
    - Automatically notify CI session end via the `/flyfrog/api/v1/ci/end` endpoint when the job completes (using GitHub Actions post-job mechanism)
 
-> **Note**: The CI end notification runs automatically after the main action completes, regardless of whether the main action succeeds or fails. This ensures proper cleanup and session management on the FlyFrog server.
+> **Note**: The CI end notification runs automatically as a post-job step. This ensures it executes even if the main action fails, for proper session management on the FlyFrog server. If the CI end notification step itself encounters an error, it will cause the overall workflow to be marked as failed.
 
 ### FlyFrog Server Configuration for OIDC
 
@@ -100,26 +101,11 @@ To configure integration testing:
 2. Set the `FLYFROG_TEST_URL` repository variable in your GitHub repository settings
 3. The integration test will automatically run on the next push
 
-### Testing FlyFrog Server Compatibility
-
-Use the provided test script to validate that a FlyFrog server supports the required API endpoints:
-
-```bash
-./scripts/test-server.sh https://your-flyfrog-server.com
-```
-
-This script will test:
-- Basic server connectivity
-- OIDC start endpoint (`/flyfrog/api/v1/ci/start-oidc`)
-- CI end notification endpoint (`/flyfrog/api/v1/ci/end`)
-
 ## Build Process
 
-- npm install → formats code via postinstall hook
-- npm run build → formats, compiles (tsc), bundles (ncc) to lib/index.js
+The action is built using `npm run build`. This command formats the code with Prettier, performs type checking using TypeScript (`tsc`), and then compiles and bundles `src/index.ts` and `src/post.ts` into single executable JavaScript files: `lib/index.js` and `lib/post.js`. These `lib/` files are what the GitHub Action executes.
 
-- Note: `dist/` is the raw JS output from TS compilation; `lib/` is the final single-file bundle used by the action
-- Husky pre-commit hook runs build on each commit
+A Husky pre-commit hook is configured to run `npm run build` automatically on each commit, ensuring that code is formatted, type-checked, and bundled before being committed.
 
 ## Building and Publishing
 
@@ -128,8 +114,8 @@ This script will test:
 To develop and test locally:
 
 1. Clone the repository.
-2. Install dependencies: `npm install` (this automatically runs Prettier via the `postinstall` hook).
-3. Build: `npm run build` (this runs `format`, compiles TypeScript via `tsc`, then bundles the dist file with `ncc`).
+2. Install dependencies: `npm install` (this also runs Prettier via the `postinstall` hook).
+3. Build: `npm run build` (this formats, type-checks TypeScript with `tsc`, and bundles the TypeScript source files into JavaScript for the action using `ncc`).
 4. Run tests: `npm test`.
 
 > A Husky pre-commit hook is configured—any `git commit` will trigger `npm run build` to ensure your code is formatted, compiled, and bundled before committing.
