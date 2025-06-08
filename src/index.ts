@@ -51,7 +51,7 @@ export async function run(): Promise<void> {
     core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
       FLYFROG_URL: url,
-      FLYFROG_USER: user,
+     // FLYFROG_USER: user,
       FLYFROG_ACCESS_TOKEN: accessToken,
       FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
