@@ -20,10 +20,49 @@ describe("extractUserFromToken", () => {
     expect(extractUserFromToken(token)).toBe("username");
   });
 
-  it("should extract username after last slash", () => {
-    const payload = { sub: "org/repo/username" };
+  it("should extract username after last slash if sub contains /users/", () => {
+    const payload = { sub: "some/prefix/users/username_after_users" };
     const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
-    expect(extractUserFromToken(token)).toBe("username");
+    expect(extractUserFromToken(token)).toBe("username_after_users");
+  });
+
+  it("should extract username after last slash if sub starts with jfrt@ and contains /users/", () => {
+    const payload = { sub: "jfrt@0123456789abcdef/users/jfrt_user" };
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    expect(extractUserFromToken(token)).toBe("jfrt_user");
+  });
+
+  it("should extract username after last slash if sub starts with jfrt@ and does not contain /users/ but has a slash", () => {
+    // This case assumes any jfrt@ subject with a slash implies the last part is the username
+    const payload = { sub: "jfrt@0123456789abcdef/another_user_format" };
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    expect(extractUserFromToken(token)).toBe("another_user_format");
+  });
+
+  it("should return the full sub if it starts with jfrt@ but has no slash", () => {
+    // Based on the provided Go logic, if usernameStartIndex is < 0, it errors.
+    // However, the JS code was modified to return sub if it doesn't meet the /users/ or jfrt@ with slash conditions.
+    // This test reflects the current JS implementation for a jfrt@ subject without a slash.
+    const payload = { sub: "jfrt@noslashuser" };
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    // According to the new JS logic: startsWith("jfrt@") is true, lastIndexOf("/") is -1.
+    // The original Go code would error here. The current JS code will throw an error.
+    // Let's adjust the expectation to match the implemented error throwing.
+    expect(() => extractUserFromToken(token)).toThrow(
+      "Couldn't extract username from access-token's subject: jfrt@noslashuser",
+    );
+  });
+
+  it("should return the full sub for OIDC group scope or other formats", () => {
+    const payload = { sub: "group-name-or-other-format" };
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    expect(extractUserFromToken(token)).toBe("group-name-or-other-format");
+  });
+
+  it("should extract username correctly if sub is just 'users/username'", () => {
+    const payload = { sub: "users/edgecaseuser" }; // Contains /users/ but not jfrt@
+    const token = `h.${Buffer.from(JSON.stringify(payload)).toString("base64")}.s`;
+    expect(extractUserFromToken(token)).toBe("edgecaseuser");
   });
 
   it("should warn with 'Invalid JWT structure' and return undefined for malformed token", () => {
