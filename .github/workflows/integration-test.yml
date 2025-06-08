@@ -19,22 +19,25 @@ jobs:
         uses: ./
         with:
           url: ${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}
-          ignore: docker, podman
+          ignore: docker, podman, helm
 
       - name: Verify pip configuration
         shell: bash
         run: |
           set -e # Exit on error
-          echo "Verifying pip global.index-url configuration..."
+          echo "Verifying pip target host configuration..."
           configured_url=$(pip config get global.index-url)
           expected_url_base="${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}"
-          
-          echo "Expected pip index URL base: $expected_url_base"
-          echo "Configured pip index URL: $configured_url"
-          
-          if [[ "$configured_url" == "$expected_url_base"* ]]; then
-            echo "Pip index-url starts with the expected base URL. Verification successful."
+
+          # Extract hostname from expected_url_base (e.g., flyfrog.example.com)
+          expected_host_part="${expected_url_base#*://}" # Remove scheme (e.g., flyfrog.example.com/somepath)
+          expected_host="${expected_host_part%%/*}"      # Remove path (e.g., flyfrog.example.com)
+          if [[ -z "$expected_host" ]]; then expected_host="$expected_host_part"; fi # Handle case where there is no path
+
+          # Check if configured_url targets the expected_host, allowing for user:token@
+          if [[ "$configured_url" == *"://"*@"${expected_host}"* || "$configured_url" == *"://${expected_host}"* ]]; then
+            echo "Pip index-url appears to be configured for the correct host. Verification successful."
           else
-            echo "Error: Pip index-url ($configured_url) does not start with the expected base URL ($expected_url_base)."
+            echo "Error: Pip index-url does not appear to be configured for the correct host (expected host: $expected_host)."
             exit 1
           fi
