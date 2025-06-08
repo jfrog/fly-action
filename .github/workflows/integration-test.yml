@@ -27,21 +27,6 @@ jobs:
           echo "Displaying pip configuration..."
           pip config list -v
 
-      - name: Test Artifactory OIDC access with curl
-        shell: bash
-        run: |
-          echo "Attempting to curl Artifactory setuptools endpoint with OIDC credentials..."
-          TARGET_URL="https://ffjob1682705.jfrogdev.org/artifactory/api/pypi/pip/simple/setuptools/"
-          OIDC_TOKEN="${{ steps.run-action.outputs.oidcToken }}"
-
-          echo "Target URL: $TARGET_URL"
-          if [ -n "$OIDC_TOKEN" ]; then
-            echo "OIDC Token (first 5 chars): ${OIDC_TOKEN:0:5}..."
-          else
-            echo "OIDC Token is empty."
-          fi
-          
-          curl -v -f -u "${{ steps.run-action.outputs.oidcUser }}:${{ steps.run-action.outputs.oidcToken }}" "$TARGET_URL"
 
       - name: Verify pip configuration
         shell: bash
