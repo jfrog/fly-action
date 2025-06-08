@@ -26,18 +26,18 @@ export function resolveFlyFrogCLIBinaryPath(): string {
 }
 
 export async function run(): Promise<void> {
-  core.notice("FlyFrog Action: Main run() function started.");
+  core.info("FlyFrog Action: Main run() function started.");
   try {
     const url = core.getInput(INPUT_URL, { required: true });
-    core.notice(`FlyFrog Action: URL: ${url}`);
+    core.info(`FlyFrog Action: URL: ${url}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
-    core.notice(
+    core.info(
       `FlyFrog Action: Ignore Package Managers: ${ignorePackageManagers || "none"}`,
     );
 
-    core.notice("FlyFrog Action: Attempting OIDC authentication...");
+    core.info("FlyFrog Action: Attempting OIDC authentication...");
     const { user, accessToken } = await authenticateOidc(url);
-    core.notice(
+    core.info(
       `FlyFrog Action: OIDC authentication successful. User: ${user}`,
     );
     core.setSecret(accessToken);
@@ -47,10 +47,10 @@ export async function run(): Promise<void> {
     // Save URL and access token to state for post-job CI end notification
     core.saveState(STATE_FLYFROG_URL, url);
     core.saveState(STATE_FLYFROG_ACCESS_TOKEN, accessToken);
-    core.notice("FlyFrog Action: State saved for post-job notification.");
+    core.info("FlyFrog Action: State saved for post-job notification.");
 
     const binPath = resolveFlyFrogCLIBinaryPath();
-    core.notice(`FlyFrog Action: CLI binary path: ${binPath}`);
+    core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
       FLYFROG_URL: url,
       FLYFROG_USER: user,
@@ -61,7 +61,7 @@ export async function run(): Promise<void> {
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
-    core.notice("FlyFrog Action: Executing FlyFrog CLI setup command...");
+    core.info("FlyFrog Action: Executing FlyFrog CLI setup command...");
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) {
       core.error(
@@ -69,7 +69,7 @@ export async function run(): Promise<void> {
       );
       throw new Error("FlyFrog setup command failed");
     }
-    core.notice(
+    core.info(
       "FlyFrog Action: FlyFrog CLI setup command completed successfully.",
     );
   } catch (error) {

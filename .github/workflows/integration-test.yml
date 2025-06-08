@@ -21,6 +21,12 @@ jobs:
           url: 'https://ffjob1682705.jfrogdev.org'
           ignore: docker, podman, helm
 
+      - name: Show pip config
+        shell: bash
+        run: |
+          echo "Displaying pip configuration..."
+          pip config list -v
+
       - name: Test Artifactory OIDC access with curl
         shell: bash
         run: |
