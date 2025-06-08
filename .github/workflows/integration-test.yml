@@ -44,4 +44,6 @@ jobs:
 
       - name: Print package managers info
         run: |
+          pip cache purge
+          pip uninstall -y setuptools
           pip install setuptools --no-cache-dir
