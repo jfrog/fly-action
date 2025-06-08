@@ -25,8 +25,17 @@ jobs:
         shell: bash
         run: |
           echo "Attempting to curl Artifactory setuptools endpoint with OIDC credentials..."
-          curl -I -H "Authorization: Bearer ${{ steps.run-action.outputs.oidcToken }}" \\
-          "https://ffjob1682705.jfrogdev.org/artifactory/api/pypi/pip/simple/setuptools/"
+          TARGET_URL="https://ffjob1682705.jfrogdev.org/artifactory/api/pypi/pip/simple/setuptools/"
+          OIDC_TOKEN="${{ steps.run-action.outputs.oidcToken }}"
+
+          echo "Target URL: $TARGET_URL"
+          if [ -n "$OIDC_TOKEN" ]; then
+            echo "OIDC Token (first 5 chars): ${OIDC_TOKEN:0:5}..."
+          else
+            echo "OIDC Token is empty."
+          fi
+          
+          curl -I -f -H "Authorization: Bearer $OIDC_TOKEN" "$TARGET_URL"
 
       - name: Verify pip configuration
         shell: bash
