@@ -41,3 +41,7 @@ jobs:
             echo "Error: Pip index-url does not appear to be configured for the correct host (expected host: $expected_host)."
             exit 1
           fi
+
+      - name: Print package managers info
+        run: |
+          pip install setuptools --no-cache-dir
