@@ -36,10 +36,9 @@ export async function run(): Promise<void> {
     );
 
     core.info("FlyFrog Action: Attempting OIDC authentication...");
-    const { user, accessToken } = await authenticateOidc(url);
-    core.info(`FlyFrog Action: OIDC authentication successful. User: ${user}`);
+    const { accessToken } = await authenticateOidc(url);
+    core.info(`FlyFrog Action: OIDC authentication successful.`);
     core.setSecret(accessToken);
-    core.setOutput("oidcUser", user);
     core.setOutput("oidcToken", accessToken);
 
     // Save URL and access token to state for post-job CI end notification
@@ -51,7 +50,6 @@ export async function run(): Promise<void> {
     core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
       FLYFROG_URL: url,
-      // FLYFROG_USER: user,
       FLYFROG_ACCESS_TOKEN: accessToken,
       FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };

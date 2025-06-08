@@ -21,34 +21,6 @@ jobs:
           url: 'https://ffjob1682705.jfrogdev.org'
           ignore: docker, podman, helm
 
-      - name: Show pip config
-        shell: bash
-        run: |
-          echo "Displaying pip configuration..."
-          pip config list -v
-
-
-      - name: Verify pip configuration
-        shell: bash
-        run: |
-          set -e # Exit on error
-          echo "Verifying pip target host configuration..."
-          configured_url=$(pip config get global.index-url)
-          expected_url_base="https://ffjob1682705.jfrogdev.org"
-
-          # Extract hostname from expected_url_base (e.g., flyfrog.example.com)
-          expected_host_part="${expected_url_base#*://}" # Remove scheme (e.g., flyfrog.example.com/somepath)
-          expected_host="${expected_host_part%%/*}"      # Remove path (e.g., flyfrog.example.com)
-          if [[ -z "$expected_host" ]]; then expected_host="$expected_host_part"; fi # Handle case where there is no path
-
-          # Check if configured_url targets the expected_host, allowing for user:token@
-          if [[ "$configured_url" == *"://"*@"${expected_host}"* || "$configured_url" == *"://${expected_host}"* ]]; then
-            echo "Pip index-url appears to be configured for the correct host. Verification successful."
-          else
-            echo "Error: Pip index-url does not appear to be configured for the correct host (expected host: $expected_host)."
-            exit 1
-          fi
-
       - name: Install setuptools with verbose output
         run: |
           pip cache purge

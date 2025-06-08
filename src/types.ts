@@ -1,6 +1,4 @@
 export interface OidcAuthResult {
-  /** GitHub Actions user extracted from the OIDC token */
-  user: string;
   /** Access token returned from FlyFrog token exchange */
   accessToken: string;
 }

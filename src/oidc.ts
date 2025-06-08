@@ -8,7 +8,7 @@ import {
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response
-type TokenJson = { access_token?: string; [key: string]: unknown };
+type TokenJson = { access_token?: string;[key: string]: unknown };
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
@@ -27,50 +27,7 @@ export async function getIDToken(): Promise<string | undefined> {
 }
 
 /**
- * Extracts the username from a JWT token's sub claim
- * @param token The JWT token string
- * @returns The extracted username or undefined if parsing fails
- */
-export function extractUserFromToken(token: string): string | undefined {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      core.debug("Invalid JWT structure: not three parts");
-      throw new Error(
-        "Unable to extract user from OIDC token: Invalid JWT structure",
-      );
-    }
-    const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
-    if (payload.sub) {
-      const sub: string = payload.sub;
-      // Updated logic based on user feedback
-      if (sub.startsWith("jfrt@") || sub.includes("/users/")) {
-        const usernameStartIndex = sub.lastIndexOf("/");
-        if (usernameStartIndex < 0) {
-          throw new Error(
-            `Couldn't extract username from access-token's subject: ${sub}`,
-          );
-        }
-        return sub.substring(usernameStartIndex + 1);
-      } else {
-        // OIDC token for groups scope or other formats
-        return sub;
-      }
-    } else {
-      core.debug("JWT payload missing 'sub' claim");
-      throw new Error(
-        "Unable to extract user from OIDC token: Missing 'sub' claim",
-      );
-    }
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    core.warning(`Failed to parse user from OIDC token: ${errorMessage}`);
-    return undefined;
-  }
-}
-
-/**
- * Performs full OIDC authentication with FlyFrog, returning the CLI user and access token
+ * Performs full OIDC authentication with FlyFrog, returning the access token
  * @param url The FlyFrog server URL
  */
 export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
@@ -78,10 +35,6 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   if (!idToken) throw new Error("Failed to obtain OIDC token");
   // Mask the raw ID token in logs
   core.setSecret(idToken);
-
-  const user = extractUserFromToken(idToken);
-  if (!user) throw new Error("Failed to extract user from OIDC token");
-  core.info(`Parsed OIDC token user: ${user}`); // Changed to core.info
 
   const client = new http.HttpClient("flyfrog-action");
   const oidcUrl = `${url}/flyfrog/api/v1/ci/start-oidc`;
@@ -151,7 +104,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     );
   }
   const accessToken = parsed.access_token;
-  return { user, accessToken };
+  return { accessToken };
 }
 
 /**
