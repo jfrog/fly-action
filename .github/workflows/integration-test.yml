@@ -64,7 +64,8 @@ jobs:
             exit 1
           fi
 
-      - name: Print package managers info
+      - name: Install setuptools with verbose output
         run: |
           pip cache purge
-          pip install --force-reinstall setuptools --no-cache-dir
+          echo "Attempting to install setuptools with verbose logging..."
+          pip install --force-reinstall setuptools --no-cache-dir -vvv
