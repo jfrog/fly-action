@@ -18,8 +18,15 @@ jobs:
         id: run-action
         uses: ./
         with:
-          url: ${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}
+          url: 'https://ffjob1682705.jfrogdev.org'
           ignore: docker, podman, helm
+
+      - name: Test Artifactory OIDC access with curl
+        shell: bash
+        run: |
+          echo "Attempting to curl Artifactory setuptools endpoint with OIDC credentials..."
+          curl -I -u "${{ steps.run-action.outputs.oidcUser }}:${{ steps.run-action.outputs.oidcToken }}" \
+          "https://ffjob1682705.jfrogdev.org/artifactory/api/pypi/pip/simple/setuptools/"
 
       - name: Verify pip configuration
         shell: bash
@@ -27,7 +34,7 @@ jobs:
           set -e # Exit on error
           echo "Verifying pip target host configuration..."
           configured_url=$(pip config get global.index-url)
-          expected_url_base="${{ vars.FLYFROG_TEST_URL || 'https://ffjob1682705.jfrogdev.org' }}"
+          expected_url_base="https://ffjob1682705.jfrogdev.org"
 
           # Extract hostname from expected_url_base (e.g., flyfrog.example.com)
           expected_host_part="${expected_url_base#*://}" # Remove scheme (e.g., flyfrog.example.com/somepath)
