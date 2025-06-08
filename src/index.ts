@@ -49,7 +49,7 @@ export async function run(): Promise<void> {
     const binPath = resolveFlyFrogCLIBinaryPath();
     core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
-      FLYFROG_URL: url,
+      FLYFROG_URL: url + "/flyfrog",
       FLYFROG_ACCESS_TOKEN: accessToken,
       FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
