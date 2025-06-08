@@ -37,7 +37,9 @@ export async function run(): Promise<void> {
 
     core.notice("FlyFrog Action: Attempting OIDC authentication...");
     const { user, accessToken } = await authenticateOidc(url);
-    core.notice(`FlyFrog Action: OIDC authentication successful. User: ${user}`);
+    core.notice(
+      `FlyFrog Action: OIDC authentication successful. User: ${user}`,
+    );
     core.setSecret(accessToken);
     core.setOutput("oidcUser", user);
     core.setOutput("oidcToken", accessToken);
