@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           echo "Attempting to curl Artifactory setuptools endpoint with OIDC credentials..."
-          curl -I -u "${{ steps.run-action.outputs.oidcUser }}:${{ steps.run-action.outputs.oidcToken }}" \
+          curl -I -H "Authorization: Bearer ${{ steps.run-action.outputs.oidcToken }}" \\
           "https://ffjob1682705.jfrogdev.org/artifactory/api/pypi/pip/simple/setuptools/"
 
       - name: Verify pip configuration
