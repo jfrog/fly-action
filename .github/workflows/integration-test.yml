@@ -41,7 +41,7 @@ jobs:
             echo "OIDC Token is empty."
           fi
           
-          curl -f -u "${{ steps.run-action.outputs.oidcUser }}:${{ steps.run-action.outputs.oidcToken }}" "$TARGET_URL"
+          curl -v -f -u "${{ steps.run-action.outputs.oidcUser }}:${{ steps.run-action.outputs.oidcToken }}" "$TARGET_URL"
 
       - name: Verify pip configuration
         shell: bash

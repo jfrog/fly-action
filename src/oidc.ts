@@ -43,7 +43,19 @@ export function extractUserFromToken(token: string): string | undefined {
     const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
     if (payload.sub) {
       const sub: string = payload.sub;
-      return sub.includes("/") ? sub.substring(sub.lastIndexOf("/") + 1) : sub;
+      // Updated logic based on user feedback
+      if (sub.startsWith("jfrt@") || sub.includes("/users/")) {
+        const usernameStartIndex = sub.lastIndexOf("/");
+        if (usernameStartIndex < 0) {
+          throw new Error(
+            `Couldn't extract username from access-token's subject: ${sub}`,
+          );
+        }
+        return sub.substring(usernameStartIndex + 1);
+      } else {
+        // OIDC token for groups scope or other formats
+        return sub;
+      }
     } else {
       core.debug("JWT payload missing 'sub' claim");
       throw new Error(
