@@ -40,14 +40,14 @@ describe("authenticateOidc", () => {
     expect(result).toEqual({ accessToken: "tokval" }); // Updated expectation
   });
 
-  it("should succeed with 202 Created status and return accessToken", async () => {
+  it("should succeed with 201 Created status and return accessToken", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
     );
     const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 202, headers: {} as IncomingHttpHeaders },
+      message: { statusCode: 201, headers: {} as IncomingHttpHeaders },
       readBody: async () => JSON.stringify({ access_token: "fake-token" }), // Removed username from mock response
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
