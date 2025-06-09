@@ -50,9 +50,6 @@ export async function runPost(): Promise<void> {
 
   const httpClient = new HttpClient("flyfrog-action");
   try {
-    core.info(
-      `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
-    );
     const response = await httpClient.post(
       `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
       JSON.stringify(payload),
@@ -62,9 +59,6 @@ export async function runPost(): Promise<void> {
       },
     );
 
-    core.info(
-      `[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`,
-    );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
     } else {
@@ -83,7 +77,6 @@ export async function runPost(): Promise<void> {
     throw error;
   } finally {
     httpClient.dispose();
-    core.info(`[${new Date().toISOString()}] HTTP client disposed.`);
   }
 }
 
@@ -99,18 +92,19 @@ export async function runPostScriptLogic(): Promise<void> {
 
 // Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
-  core.info(`[${new Date().toISOString()}] post.ts script entry point.`);
   runPostScriptLogic()
     .then(() => {
-      core.info(`[${new Date().toISOString()}] post.ts script finished.`);
+      // Removed: core.info(`post.ts script finished.`);
+      // Removed: // process.exit(0); // Removed forced exit
     })
     .catch((error) => {
       // Even if runPostScriptLogic handles setFailed, we log that the script block itself caught an error
       const message = error instanceof Error ? error.message : String(error);
-      core.error(
-        `[${new Date().toISOString()}] post.ts script failed: ${message}`,
+      core.error( // Kept this error log as it's general error handling
+        `post.ts script failed: ${message}`, 
       );
       // Ensure the action still fails if an unhandled promise rejection occurs here
       core.setFailed(`Unhandled error in post.ts script execution: ${message}`);
+      // Removed: // process.exit(1); // Removed forced exit
     });
 }
