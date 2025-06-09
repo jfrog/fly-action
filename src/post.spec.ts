@@ -66,7 +66,7 @@ describe("runPost", () => {
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
-    expect(core.debug).toHaveBeenCalledWith("Job status: success");
+    expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
   });
 
   it("should call notifyCiEnd with status 'success' and no package managers if not available", async () => {
@@ -93,7 +93,7 @@ describe("runPost", () => {
         "content-type": "application/json",
       }),
     );
-    expect(core.debug).toHaveBeenCalledWith("Job status: success");
+    expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
   });
 
   it("should skip notification if URL is not available", async () => {
@@ -106,7 +106,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).not.toHaveBeenCalled();
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(mockCore.info).toHaveBeenCalledWith(
       "No FlyFrog URL found in state, skipping CI end notification",
     );
   });
@@ -121,7 +121,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).not.toHaveBeenCalled();
-    expect(core.debug).toHaveBeenCalledWith(
+    expect(mockCore.info).toHaveBeenCalledWith(
       "No access token found in state, skipping CI end notification",
     );
   });

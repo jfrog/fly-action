@@ -49,10 +49,10 @@ export async function runPost(): Promise<void> {
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
   const httpClient = new HttpClient("flyfrog-action");
-  core.info(
-    `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
-  );
   try {
+    core.info(
+      `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
+    );
     const response = await httpClient.post(
       `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
       JSON.stringify(payload),
@@ -81,6 +81,9 @@ export async function runPost(): Promise<void> {
     core.error(`Error during CI end notification: ${message}`); // Use core.error for better visibility
     // Re-throw the error to be caught by the mainRunner or the test
     throw error;
+  } finally {
+    httpClient.dispose();
+    core.info(`[${new Date().toISOString()}] HTTP client disposed.`);
   }
 }
 
@@ -96,5 +99,16 @@ export async function runPostScriptLogic(): Promise<void> {
 
 // Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
-  runPostScriptLogic();
+  core.info(`[${new Date().toISOString()}] post.ts script entry point.`);
+  runPostScriptLogic()
+    .then(() => {
+      core.info(`[${new Date().toISOString()}] post.ts script finished.`);
+    })
+    .catch((error) => {
+      // Even if runPostScriptLogic handles setFailed, we log that the script block itself caught an error
+      const message = error instanceof Error ? error.message : String(error);
+      core.error(`[${new Date().toISOString()}] post.ts script failed: ${message}`);
+      // Ensure the action still fails if an unhandled promise rejection occurs here
+      core.setFailed(`Unhandled error in post.ts script execution: ${message}`);
+    });
 }
