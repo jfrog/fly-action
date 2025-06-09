@@ -107,7 +107,9 @@ if (require.main === module) {
     .catch((error) => {
       // Even if runPostScriptLogic handles setFailed, we log that the script block itself caught an error
       const message = error instanceof Error ? error.message : String(error);
-      core.error(`[${new Date().toISOString()}] post.ts script failed: ${message}`);
+      core.error(
+        `[${new Date().toISOString()}] post.ts script failed: ${message}`,
+      );
       // Ensure the action still fails if an unhandled promise rejection occurs here
       core.setFailed(`Unhandled error in post.ts script execution: ${message}`);
     });
