@@ -49,6 +49,7 @@ export async function runPost(): Promise<void> {
   core.debug(`Request payload: ${JSON.stringify(payload)}`);
 
   const httpClient = new HttpClient("flyfrog-action");
+  core.info("Attempting to send CI end notification to FlyFrog...");
   try {
     const response = await httpClient.post(
       `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
@@ -59,17 +60,23 @@ export async function runPost(): Promise<void> {
       },
     );
 
+    core.info(
+      `Received response with status code: ${response.message.statusCode}`,
+    );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
     } else {
       const body = await response.readBody();
+      core.error(
+        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
+      );
       throw new Error(
         `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
       );
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    core.debug(`Error during CI end notification: ${message}`);
+    core.error(`Error during CI end notification: ${message}`); // Use core.error for better visibility
     // Re-throw the error to be caught by the mainRunner or the test
     throw error;
   }
