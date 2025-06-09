@@ -28,24 +28,24 @@ export function resolveFlyFrogCLIBinaryPath(): string {
 }
 
 export async function run(): Promise<void> {
-  core.info("FlyFrog Action: Main run() function started.");
+  core.info("Main run() function started.");
   try {
     const url = core.getInput(INPUT_URL, { required: true });
-    core.info(`FlyFrog Action: URL: ${url}`);
+    core.info(`URL: ${url}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
     core.info(
-      `FlyFrog Action: Ignore Package Managers: ${ignorePackageManagers || "none"}`,
+      `Ignore Package Managers: ${ignorePackageManagers || "none"}`,
     );
 
-    core.info("FlyFrog Action: Attempting OIDC authentication...");
+    core.info("Attempting OIDC authentication...");
     const { accessToken } = await authenticateOidc(url);
-    core.info(`FlyFrog Action: OIDC authentication successful.`);
+    core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
     // Save URL and access token to state for post-job CI end notification
     core.saveState(STATE_FLYFROG_URL, url);
     core.saveState(STATE_FLYFROG_ACCESS_TOKEN, accessToken);
-    core.info("FlyFrog Action: State saved for post-job notification.");
+    core.info("State saved for post-job notification.");
 
     // Detect and save package managers
     const workspacePath = process.env.GITHUB_WORKSPACE || "";
@@ -55,11 +55,11 @@ export async function run(): Promise<void> {
       JSON.stringify(detectedPackageManagers),
     );
     core.info(
-      `FlyFrog Action: Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`,
+      `Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`,
     );
 
     const binPath = resolveFlyFrogCLIBinaryPath();
-    core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
+    core.info(`CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
       FLYFROG_URL: url,
       FLYFROG_ACCESS_TOKEN: accessToken,
@@ -69,19 +69,19 @@ export async function run(): Promise<void> {
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
-    core.info("FlyFrog Action: Executing FlyFrog CLI setup command...");
+    core.info("Executing FlyFrog CLI setup command...");
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) {
       core.error(
-        "FlyFrog Action: FlyFrog setup command failed with non-zero exit code.",
+        "FlyFrog setup command failed with non-zero exit code.",
       );
       throw new Error("FlyFrog setup command failed");
     }
     core.info(
-      "FlyFrog Action: FlyFrog CLI setup command completed successfully.",
+      "FlyFrog CLI setup command completed successfully.",
     );
   } catch (error) {
-    core.error("FlyFrog Action: Error occurred during execution.");
+    core.error("Error occurred during execution.");
     if (error instanceof Error) core.setFailed(error.message);
     else core.setFailed("An unknown error occurred");
   }

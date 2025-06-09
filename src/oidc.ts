@@ -8,7 +8,7 @@ import {
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response
-type TokenJson = { access_token?: string; [key: string]: unknown };
+type TokenJson = { access_token?: string;[key: string]: unknown };
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
@@ -50,11 +50,6 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  // Log OIDC details for debugging
-  const maskedPayload = { subject_token: "***" };
-  core.debug(`Authenticating with FlyFrog OIDC at ${oidcUrl}`);
-  core.debug(`FlyFrog OIDC payload: ${JSON.stringify(maskedPayload)}`);
-
   const rawResponse = await client.post(
     oidcUrl,
     JSON.stringify(payload),
@@ -76,7 +71,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     : parsedJson;
   // Log response details
   core.debug(
-    `FlyFrog OIDC response headers: ${JSON.stringify(
+    `OIDC response headers: ${JSON.stringify(
       rawResponse.message.headers,
     )}`,
   );
@@ -85,16 +80,16 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     rawResponse.message.statusCode === http.HttpCodes.OK ||
     rawResponse.message.statusCode === 201
   ) {
-    core.debug(`FlyFrog OIDC authentication successful`);
-    core.debug(`FlyFrog OIDC response body: ${JSON.stringify(maskedResponse)}`);
+    core.debug(`OIDC authentication successful`);
+    core.debug(`OIDC response body: ${JSON.stringify(maskedResponse)}`);
   } else {
     core.error(
-      `FlyFrog OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
+      `OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
         maskedResponse,
       )}`,
     );
     throw new Error(
-      `FlyFrog OIDC failed ${rawResponse.message.statusCode}: ${body}`,
+      `OIDC failed ${rawResponse.message.statusCode}: ${body}`,
     );
   }
   const parsed = parsedJson as FlyFrogOidcResponse;

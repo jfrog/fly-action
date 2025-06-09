@@ -1,199 +1,213 @@
 import * as core from "@actions/core";
-import { runPost } from "./post";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
-import { STATE_FLYFROG_JOB_STATUS } from "../src/constants"; // Import the constant
+import { STATE_FLYFROG_URL, STATE_FLYFROG_ACCESS_TOKEN, STATE_FLYFROG_PACKAGE_MANAGERS } from "./constants";
+import { runPost, runPostScriptLogic } from "./post"; // Import with new name
 
-// Mock the dependencies
+// Mock @actions/core
 jest.mock("@actions/core");
-jest.mock("@actions/http-client"); // Mock http-client to control post calls
+jest.mock("@actions/http-client");
 
 const mockCore = core as jest.Mocked<typeof core>;
-const mockPost = jest.fn();
+const mockHttpClientPost = jest.fn(); // Renamed for clarity
 
 describe("runPost", () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    // Setup mock for HttpClient constructor and post method
+    process.env = { ...originalEnv };
+
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {
-        post: mockPost,
+        post: mockHttpClientPost, // Use renamed mock
       };
+    });
+
+    // Mock core.getState
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return JSON.stringify(["npm", "maven"]);
+      return "";
     });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+    process.env = originalEnv;
   });
 
-  it("should call notifyCiEnd (via HttpClient.post) when URL and access token are available", async () => {
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "test-access-token";
-      if (name === "flyfrog-package-managers")
-        return JSON.stringify(["npm", "maven"]);
-      if (name === STATE_FLYFROG_JOB_STATUS) return "success"; // Use constant
-      return "";
-    });
+  it("should call notifyCiEnd with status 'success' and package managers if available", async () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Build Info published successfully",
+      readBody: async () => "Notification sent",
     } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse);
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
 
     await runPost();
 
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-url");
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-access-token");
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-package-managers");
-    expect(mockCore.getState).toHaveBeenCalledWith(STATE_FLYFROG_JOB_STATUS); // Use constant for assertion
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "🏁 Notifying FlyFrog that CI job has ended...",
-    );
-    expect(mockPost).toHaveBeenCalledWith(
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
       JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
-        "content-type": "application/json", // Expect lowercase content-type
+        "content-type": "application/json",
       }),
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "✅ CI end notification completed successfully",
-    );
+    expect(mockCore.info).toHaveBeenCalledWith("🏁 Notifying FlyFrog that CI job has ended...");
+    expect(mockCore.info).toHaveBeenCalledWith("✅ CI end notification completed successfully");
+    expect(core.debug).toHaveBeenCalledWith("Job status: success");
   });
 
-  it("should call notifyCiEnd with default status 'unknown' and no package_managers if not set", async () => {
+  it("should call notifyCiEnd with status 'success' and no package managers if not available", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "test-access-token";
-      // No package_managers or status in state (STATE_FLYFROG_JOB_STATUS will return "")
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return ""; // No package managers
       return "";
     });
+
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () => "Notification sent",
     } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse);
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
 
     await runPost();
 
-    expect(mockPost).toHaveBeenCalledWith(
-      "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
-      JSON.stringify({ status: "unknown" }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json", // Expect lowercase content-type
-      }),
-    );
-  });
-
-  it("should call notifyCiEnd with provided status and empty package_managers if parsing fails", async () => {
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "test-access-token";
-      if (name === "flyfrog-package-managers") return "not a json array";
-      if (name === STATE_FLYFROG_JOB_STATUS) return "failure"; // Use constant
-      return "";
-    });
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockPost).toHaveBeenCalledWith(
-      "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
-      JSON.stringify({ status: "failure" }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json", // Expect lowercase content-type
-      }),
-    );
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "Failed to parse package managers from state: not a json array",
-      ),
-    );
-  });
-
-  it("should skip notification when no URL is available", async () => {
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "";
-      if (name === "flyfrog-access-token") return "test-access-token";
-      return "";
-    });
-
-    await runPost();
-
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-url");
-    expect(mockCore.debug).toHaveBeenCalledWith(
-      "No FlyFrog URL found in state, skipping CI end notification",
-    );
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it("should skip notification when no access token is available", async () => {
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "";
-      return "";
-    });
-
-    await runPost();
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-url");
-    expect(mockCore.getState).toHaveBeenCalledWith("flyfrog-access-token");
-    expect(mockCore.debug).toHaveBeenCalledWith(
-      "No access token found in state, skipping CI end notification",
-    );
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it("should throw error when CI end notification (HttpClient.post) fails", async () => {
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "test-access-token";
-      if (name === STATE_FLYFROG_JOB_STATUS) return "success"; // Use constant
-      return "";
-    });
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Internal server error",
-    } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse); // Simulate HTTP error response
-
-    await expect(runPost()).rejects.toThrow(
-      "FlyFrog CI end notification failed 500: Internal server error",
-    );
-    expect(mockPost).toHaveBeenCalledWith(
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
       JSON.stringify({ status: "success" }),
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
-        "content-type": "application/json", // Expect lowercase content-type
+        "content-type": "application/json",
       }),
     );
-    expect(mockCore.error).toHaveBeenCalledWith(
-      expect.stringContaining("FlyFrog CI end notification failed 500"),
-    );
+    expect(core.debug).toHaveBeenCalledWith("Job status: success");
   });
 
-  it("should handle non-Error rejection from HttpClient.post", async () => {
+  it("should skip notification if URL is not available", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === "flyfrog-url") return "https://flyfrog.example.com";
-      if (name === "flyfrog-access-token") return "test-access-token";
+      if (name === STATE_FLYFROG_URL) return ""; // No URL
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
-    mockPost.mockRejectedValue("network error"); // Simulate non-Error rejection
 
-    // This test needs to be adjusted based on how runPost's catch block handles non-Error rejections.
-    // Assuming the main runPost().catch() in post.ts handles it and calls core.setFailed.
-    // For the unit test, we check if the promise from runPost() rejects with the expected value.
-    await expect(runPost()).rejects.toBe("network error");
+    await runPost();
+
+    expect(mockHttpClientPost).not.toHaveBeenCalled();
+    expect(core.debug).toHaveBeenCalledWith("No FlyFrog URL found in state, skipping CI end notification");
+  });
+
+  it("should skip notification if access token is not available", async () => {
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return ""; // No access token
+      return "";
+    });
+
+    await runPost();
+
+    expect(mockHttpClientPost).not.toHaveBeenCalled();
+    expect(core.debug).toHaveBeenCalledWith("No access token found in state, skipping CI end notification");
+  });
+
+  it("should re-throw errors during HTTP client post operation", async () => {
+    // Standard mock for getState, ensuring URL and token are present
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      return "";
+    });
+    mockHttpClientPost.mockRejectedValue(new Error("Network error"));
+
+    await expect(runPost()).rejects.toThrow("Network error");
+  });
+
+  it("should re-throw error if HTTP response is not 200", async () => {
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      return "";
+    });
+
+    const fakeErrorResponse: HttpClientResponse = {
+      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Server error",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeErrorResponse);
+
+    await expect(runPost()).rejects.toThrow("Failed to send CI end notification. Status: 500. Body: Server error");
+  });
+
+  it("should warn if package managers string is invalid JSON and send request without them", async () => {
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return "invalid-json";
+      return "";
+    });
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining("Failed to parse package managers from state: invalid-json. Error: Unexpected token 'i', \"invalid-json\" is not valid JSON"));
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      expect.any(String),
+      JSON.stringify({ status: "success" }), // Should send with status: "success" only
+      expect.any(Object),
+    );
   });
 });
 
-// Removed direct tests for notifyCiEnd as it's a local function.
-// Its functionality is tested via runPost's tests.
+// Test suite for the mainRunner (now runPostScriptLogic)
+describe("runPostScriptLogic", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Mock core.getState for mainRunner tests as well, if runPost is called internally
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
+      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      return "";
+    });
+    // Mock HttpClient for mainRunner tests
+    (HttpClient as jest.Mock).mockImplementation(() => {
+      return {
+        post: mockHttpClientPost,
+      };
+    });
+  });
+
+  it("should call runPost and not setFailed on success", async () => {
+    // runPost is mocked to resolve successfully by default in beforeEach
+    await runPostScriptLogic();
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it("should call runPost and setFailed on error", async () => {
+    const errorMessage = "Test error from runPost";
+    mockHttpClientPost.mockRejectedValueOnce(new Error(errorMessage));
+
+    await runPostScriptLogic();
+
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledWith(errorMessage);
+  });
+
+  it("should handle non-Error objects thrown by runPost", async () => {
+    const errorString = "Just a string error";
+    mockHttpClientPost.mockRejectedValueOnce(errorString);
+
+    await runPostScriptLogic();
+
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledWith(errorString);
+  });
+});
