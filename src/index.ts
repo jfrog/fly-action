@@ -39,7 +39,6 @@ export async function run(): Promise<void> {
     const { accessToken } = await authenticateOidc(url);
     core.info(`FlyFrog Action: OIDC authentication successful.`);
     core.setSecret(accessToken);
-    core.setOutput("oidcToken", accessToken); // Ensure the OIDC token is set as an output
 
     // Save URL and access token to state for post-job CI end notification
     core.saveState(STATE_FLYFROG_URL, url);
