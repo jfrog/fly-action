@@ -67,8 +67,9 @@ export async function runPost(): Promise<void> {
         `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
       );
     }
-  } catch (error: any) {
-    core.debug(`Error during CI end notification: ${error.message}`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    core.debug(`Error during CI end notification: ${message}`);
     // Re-throw the error to be caught by the mainRunner or the test
     throw error;
   }
@@ -78,7 +79,7 @@ export async function runPost(): Promise<void> {
 export async function runPostScriptLogic(): Promise<void> {
   try {
     await runPost();
-  } catch (error: any) {
+  } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     core.setFailed(message);
   }
