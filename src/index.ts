@@ -50,8 +50,13 @@ export async function run(): Promise<void> {
     // Detect and save package managers
     const workspacePath = process.env.GITHUB_WORKSPACE || "";
     const detectedPackageManagers = detectPackageManagers(workspacePath);
-    core.saveState(STATE_FLYFROG_PACKAGE_MANAGERS, JSON.stringify(detectedPackageManagers));
-    core.info(`FlyFrog Action: Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`);
+    core.saveState(
+      STATE_FLYFROG_PACKAGE_MANAGERS,
+      JSON.stringify(detectedPackageManagers),
+    );
+    core.info(
+      `FlyFrog Action: Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`,
+    );
 
     const binPath = resolveFlyFrogCLIBinaryPath();
     core.info(`FlyFrog Action: CLI binary path: ${binPath}`);

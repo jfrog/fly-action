@@ -42,7 +42,11 @@ async function notifyCiEnd(
   core.debug(`FlyFrog CI end notification URL: ${endCiUrl}`);
   core.debug(`FlyFrog CI end notification payload: ${JSON.stringify(payload)}`);
 
-  const rawResponse = await client.post(endCiUrl, JSON.stringify(payload), headers);
+  const rawResponse = await client.post(
+    endCiUrl,
+    JSON.stringify(payload),
+    headers,
+  );
   const body = await rawResponse.readBody();
 
   core.debug(
@@ -72,7 +76,10 @@ async function runPost(): Promise<void> {
   const accessToken = core.getState(STATE_FLYFROG_ACCESS_TOKEN);
   const packageManagersRaw = core.getState(STATE_FLYFROG_PACKAGE_MANAGERS);
   // Prefer state, then env var, then default
-  const status = core.getState(STATE_FLYFROG_JOB_STATUS) || process.env.JOB_STATUS || "unknown";
+  const status =
+    core.getState(STATE_FLYFROG_JOB_STATUS) ||
+    process.env.JOB_STATUS ||
+    "unknown";
 
   let packageManagers: string[] | undefined;
   if (packageManagersRaw) {

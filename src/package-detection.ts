@@ -178,7 +178,14 @@ export function detectPackageManagers(repoPath: string): string[] {
     return [];
   }
 
-  findFilesRecursive(repoPath, 0, MAX_DEPTH, EXCLUDED_DIRS, detected, PACKAGE_MANAGER_FILE_IDENTIFIERS);
+  findFilesRecursive(
+    repoPath,
+    0,
+    MAX_DEPTH,
+    EXCLUDED_DIRS,
+    detected,
+    PACKAGE_MANAGER_FILE_IDENTIFIERS,
+  );
 
   const result = Array.from(detected);
   if (result.length > 0) {

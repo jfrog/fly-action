@@ -9,10 +9,10 @@ jest.mock("fs", () => {
   const promisesMock = originalFs.promises ? { ...originalFs.promises } : {};
 
   // Override specific promise functions that @actions/core might use
-  promisesMock.access = jest.fn().mockResolvedValue(undefined); 
-  promisesMock.writeFile = jest.fn().mockResolvedValue(undefined); 
-  promisesMock.appendFile = jest.fn().mockResolvedValue(undefined); 
-  promisesMock.readFile = jest.fn().mockResolvedValue(''); 
+  promisesMock.access = jest.fn().mockResolvedValue(undefined);
+  promisesMock.writeFile = jest.fn().mockResolvedValue(undefined);
+  promisesMock.appendFile = jest.fn().mockResolvedValue(undefined);
+  promisesMock.readFile = jest.fn().mockResolvedValue("");
   // Add other fs.promises functions here if needed, or ensure they are covered by the spread
 
   return {
@@ -29,16 +29,17 @@ const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedCore = core as jest.Mocked<typeof core>;
 
 // Helper to create mock Dirent objects
-const createDirent = (name: string, isDirectory: boolean): fs.Dirent => ({
-  name,
-  isFile: () => !isDirectory,
-  isDirectory: () => isDirectory,
-  isBlockDevice: () => false,
-  isCharacterDevice: () => false,
-  isSymbolicLink: () => false,
-  isFIFO: () => false,
-  isSocket: () => false,
-} as fs.Dirent);
+const createDirent = (name: string, isDirectory: boolean): fs.Dirent =>
+  ({
+    name,
+    isFile: () => !isDirectory,
+    isDirectory: () => isDirectory,
+    isBlockDevice: () => false,
+    isCharacterDevice: () => false,
+    isSymbolicLink: () => false,
+    isFIFO: () => false,
+    isSocket: () => false,
+  }) as fs.Dirent;
 
 describe("detectPackageManagers", () => {
   const repoPath = "/test/repo";
@@ -86,14 +87,16 @@ describe("detectPackageManagers", () => {
     const result = detectPackageManagers(repoPath);
     expect(result).toEqual([]);
     expect(mockedCore.warning).toHaveBeenCalledWith(
-      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`
+      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`,
     );
   });
 
   test("should return an empty array if no package manager files are found", () => {
     const result = detectPackageManagers(repoPath);
     expect(result).toEqual([]);
-    expect(mockedCore.info).toHaveBeenCalledWith("Detected package managers: none");
+    expect(mockedCore.info).toHaveBeenCalledWith(
+      "Detected package managers: none",
+    );
   });
 
   test("should detect npm if package.json is present at root", () => {
@@ -123,7 +126,7 @@ describe("detectPackageManagers", () => {
     // So yarn.lock will add 'yarn', then package.json will add 'npm'.
     expect(result.sort()).toEqual(["npm", "yarn"].sort());
   });
-  
+
   test("should detect pnpm if pnpm-lock.yaml is present at root", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
@@ -165,10 +168,10 @@ describe("detectPackageManagers", () => {
       return [];
     });
     const result = detectPackageManagers(repoPath);
-     // pipfile adds 'pipenv', pyproject.toml adds 'pip'.
+    // pipfile adds 'pipenv', pyproject.toml adds 'pip'.
     expect(result.sort()).toEqual(["pip", "pipenv"].sort());
   });
-  
+
   test("should detect pip for requirements.txt", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
@@ -201,7 +204,7 @@ describe("detectPackageManagers", () => {
     const result = detectPackageManagers(repoPath);
     expect(result).toEqual(["gradle"]);
   });
-  
+
   test("should detect dotnet for .csproj file", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
@@ -223,11 +226,11 @@ describe("detectPackageManagers", () => {
     const result = detectPackageManagers(repoPath);
     expect(result).toEqual(["nuget"]);
   });
-  
+
   test("should detect docker for Dockerfile (case-insensitive)", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
-        return [createDirent("Dockerfile", false)]; 
+        return [createDirent("Dockerfile", false)];
       }
       return [];
     });
@@ -238,7 +241,7 @@ describe("detectPackageManagers", () => {
   test("should detect helm for Chart.yaml (case-insensitive)", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
-        return [createDirent("Chart.yaml", false)]; 
+        return [createDirent("Chart.yaml", false)];
       }
       return [];
     });
@@ -265,16 +268,16 @@ describe("detectPackageManagers", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       const p = dirPath.toString();
       if (p === repoPath) {
-        return [createDirent("subdir", true)]; 
+        return [createDirent("subdir", true)];
       }
       if (p === path.join(repoPath, "subdir")) {
         return [
           createDirent("package.json", false),
-          createDirent("subsubdir", true), 
+          createDirent("subsubdir", true),
         ];
       }
       if (p === path.join(repoPath, "subdir", "subsubdir")) {
-        return [createDirent("pom.xml", false)]; 
+        return [createDirent("pom.xml", false)];
       }
       return [];
     });
@@ -288,7 +291,8 @@ describe("detectPackageManagers", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       const p = dirPath.toString();
       if (p === repoPath) return [createDirent("level1dir", true)];
-      if (p === path.join(repoPath, "level1dir")) return [createDirent("level2dir", true)];
+      if (p === path.join(repoPath, "level1dir"))
+        return [createDirent("level2dir", true)];
       // Files in level2dir are at depth 2
       if (p === path.join(repoPath, "level1dir", "level2dir")) {
         return [
@@ -324,7 +328,7 @@ describe("detectPackageManagers", () => {
     const result = detectPackageManagers(repoPath);
     expect(result).toEqual(["npm"]); // Only npm from repo root
   });
-  
+
   test("should handle case insensitivity for found filenames", () => {
     mockedFs.readdirSync.mockImplementation((dirPath) => {
       if (dirPath === repoPath) {
@@ -344,7 +348,7 @@ describe("detectPackageManagers", () => {
       if (dirPath === repoPath) {
         return [
           createDirent("requirements.txt", false),
-          createDirent("setup.py", false), 
+          createDirent("setup.py", false),
           createDirent("pyproject.toml", false),
         ];
       }
@@ -365,26 +369,33 @@ describe("detectPackageManagers", () => {
           createDirent("clientdir", true),
         ];
       }
-      if (dirPathStr === path.join(repoPath, "srcdir")) { // depth 1
+      if (dirPathStr === path.join(repoPath, "srcdir")) {
+        // depth 1
         return [
           createDirent("pom.xml", false), // maven (depth 1)
           createDirent("node_modules", true), // excluded
         ];
       }
-      if (dirPathStr === path.join(repoPath, "srcdir", "node_modules")) { // depth 2, but excluded path
-        return [createDirent("yarn.lock", false)]; 
+      if (dirPathStr === path.join(repoPath, "srcdir", "node_modules")) {
+        // depth 2, but excluded path
+        return [createDirent("yarn.lock", false)];
       }
-      if (dirPathStr === path.join(repoPath, "clientdir")) { // depth 1
+      if (dirPathStr === path.join(repoPath, "clientdir")) {
+        // depth 1
         return [createDirent("level2dir", true)];
       }
-      if (dirPathStr === path.join(repoPath, "clientdir", "level2dir")) { // depth 2
+      if (dirPathStr === path.join(repoPath, "clientdir", "level2dir")) {
+        // depth 2
         return [
           createDirent("requirements.txt", false), // pip (depth 2)
           createDirent("deepdir", true),
         ];
       }
-      if (dirPathStr === path.join(repoPath, "clientdir", "level2dir", "deepdir")) { // depth 3 (too deep if MAX_DEPTH = 2)
-        return [createDirent("go.mod", false)]; 
+      if (
+        dirPathStr === path.join(repoPath, "clientdir", "level2dir", "deepdir")
+      ) {
+        // depth 3 (too deep if MAX_DEPTH = 2)
+        return [createDirent("go.mod", false)];
       }
       return [];
     });
@@ -400,5 +411,4 @@ describe("detectPackageManagers", () => {
     // - go.mod at depth 3 (in clientdir/level2dir/deepdir) is too deep.
     expect(result.sort()).toEqual(["maven", "npm", "pip"].sort());
   });
-
 });

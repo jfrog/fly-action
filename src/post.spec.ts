@@ -30,7 +30,8 @@ describe("runPost", () => {
     mockCore.getState.mockImplementation((name: string) => {
       if (name === "flyfrog-url") return "https://flyfrog.example.com";
       if (name === "flyfrog-access-token") return "test-access-token";
-      if (name === "flyfrog-package-managers") return JSON.stringify(["npm", "maven"]);
+      if (name === "flyfrog-package-managers")
+        return JSON.stringify(["npm", "maven"]);
       if (name === STATE_FLYFROG_JOB_STATUS) return "success"; // Use constant
       return "";
     });
@@ -111,7 +112,11 @@ describe("runPost", () => {
         "content-type": "application/json", // Expect lowercase content-type
       }),
     );
-    expect(mockCore.warning).toHaveBeenCalledWith(expect.stringContaining("Failed to parse package managers from state: not a json array"));
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Failed to parse package managers from state: not a json array",
+      ),
+    );
   });
 
   it("should skip notification when no URL is available", async () => {
@@ -170,7 +175,9 @@ describe("runPost", () => {
         "content-type": "application/json", // Expect lowercase content-type
       }),
     );
-    expect(mockCore.error).toHaveBeenCalledWith(expect.stringContaining("FlyFrog CI end notification failed 500"));
+    expect(mockCore.error).toHaveBeenCalledWith(
+      expect.stringContaining("FlyFrog CI end notification failed 500"),
+    );
   });
 
   it("should handle non-Error rejection from HttpClient.post", async () => {
