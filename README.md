@@ -85,6 +85,7 @@ The action supports all package managers that the FlyFrog CLI supports:
 - **pip, pipenv, poetry, twine** – Python package managers (PyPI repository)
 - **nuget, dotnet** – .NET package managers (NuGet)
 - **docker, podman** – Container registries (Docker)
+- **helm** – Kubernetes package manager
 - **go** – Go modules
 - **gradle** – Gradle build tool
 - **maven** – Maven build tool
