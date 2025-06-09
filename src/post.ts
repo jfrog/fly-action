@@ -14,11 +14,11 @@ export async function runPost(): Promise<void> {
   const accessToken = core.getState(STATE_FLYFROG_ACCESS_TOKEN); // Corrected constant
 
   if (!flyfrogUrl) {
-    core.debug("No FlyFrog URL found in state, skipping CI end notification");
+    core.info("No FlyFrog URL found in state, skipping CI end notification"); // Changed from debug to info
     return;
   }
   if (!accessToken) {
-    core.debug("No access token found in state, skipping CI end notification");
+    core.info("No access token found in state, skipping CI end notification"); // Changed from debug to info
     return;
   }
 
@@ -36,7 +36,7 @@ export async function runPost(): Promise<void> {
 
   // Hardcoded status
   const determinedStatus = "success";
-  core.debug(`Job status: ${determinedStatus}`);
+  core.info(`Job status: ${determinedStatus}`); // Changed from debug to info
 
   const payload: EndCiRequest = {
     status: determinedStatus,
@@ -45,11 +45,13 @@ export async function runPost(): Promise<void> {
     payload.package_managers = packageManagers;
   }
 
-  core.debug(`FlyFrog API URL: ${flyfrogUrl}/flyfrog/api/v1/ci/end`);
-  core.debug(`Request payload: ${JSON.stringify(payload)}`);
+  core.info(`FlyFrog API URL: ${flyfrogUrl}/flyfrog/api/v1/ci/end`); // Changed from debug to info
+  core.info(`Request payload: ${JSON.stringify(payload)}`);
 
   const httpClient = new HttpClient("flyfrog-action");
-  core.info("Attempting to send CI end notification to FlyFrog...");
+  core.info(
+    `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
+  );
   try {
     const response = await httpClient.post(
       `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
@@ -61,7 +63,7 @@ export async function runPost(): Promise<void> {
     );
 
     core.info(
-      `Received response with status code: ${response.message.statusCode}`,
+      `[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`,
     );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
