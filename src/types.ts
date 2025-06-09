@@ -12,3 +12,9 @@ export interface FlyFrogOidcRequest {
 export interface FlyFrogOidcResponse {
   access_token: string;
 }
+
+/** Payload for the CI End notification */
+export interface EndCiRequest {
+  package_managers?: string[];
+  status: string;
+}

@@ -1,4 +1,4 @@
-import { authenticateOidc, notifyCiEnd } from "./oidc";
+import { authenticateOidc } from "./oidc";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
@@ -26,8 +26,8 @@ describe("authenticateOidc", () => {
     // Mock getIDToken
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-        ".sig",
+      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+      ".sig",
     );
     // Mock HttpClient.post
     const fakeResponse: HttpClientResponse = {
@@ -43,8 +43,8 @@ describe("authenticateOidc", () => {
   it("should succeed with 202 Created status and return accessToken", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-        ".sig",
+      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+      ".sig",
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 202, headers: {} as IncomingHttpHeaders },
@@ -66,8 +66,8 @@ describe("authenticateOidc", () => {
   it("should throw if FlyFrog OIDC returns non-200 status", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-        ".sig", // Still need a valid-looking token for mocks even if not parsing user
+      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+      ".sig", // Still need a valid-looking token for mocks even if not parsing user
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
@@ -83,8 +83,8 @@ describe("authenticateOidc", () => {
   it("should throw if access_token is missing in response", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-        ".sig", // Still need a valid-looking token for mocks
+      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+      ".sig", // Still need a valid-looking token for mocks
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -94,47 +94,6 @@ describe("authenticateOidc", () => {
 
     await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
       "OIDC response did not contain an access token",
-    );
-  });
-});
-
-describe("notifyCiEnd", () => {
-  let mockPost: jest.Mock;
-  beforeEach(() => {
-    mockPost = jest.fn();
-    jest.spyOn(HttpClient.prototype, "post").mockImplementation(mockPost);
-  });
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it("should successfully notify CI end", async () => {
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Build Info published successfully",
-    } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse);
-
-    await notifyCiEnd("https://flyfrog", "test-token");
-
-    expect(mockPost).toHaveBeenCalledWith(
-      "https://flyfrog/flyfrog/api/v1/ci/end",
-      "",
-      expect.objectContaining({
-        Authorization: "Bearer test-token",
-      }),
-    );
-  });
-
-  it("should throw if CI end notification returns non-200 status", async () => {
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Internal server error",
-    } as unknown as HttpClientResponse;
-    mockPost.mockResolvedValue(fakeResponse);
-
-    await expect(notifyCiEnd("https://flyfrog", "test-token")).rejects.toThrow(
-      /FlyFrog CI end notification failed 500: Internal server error/,
     );
   });
 });

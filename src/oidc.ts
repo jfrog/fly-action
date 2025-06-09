@@ -8,7 +8,7 @@ import {
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response
-type TokenJson = { access_token?: string; [key: string]: unknown };
+type TokenJson = { access_token?: string;[key: string]: unknown };
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
@@ -105,47 +105,4 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   }
   const accessToken = parsed.access_token;
   return { accessToken };
-}
-
-/**
- * Notifies the FlyFrog server that the CI run has ended
- * @param url The FlyFrog server URL
- * @param accessToken The access token for authentication
- */
-export async function notifyCiEnd(
-  url: string,
-  accessToken: string,
-): Promise<void> {
-  const client = new http.HttpClient("flyfrog-action");
-  const endCiUrl = `${url}/flyfrog/api/v1/ci/end`;
-  core.debug(`Notifying CI end at ${endCiUrl}`);
-
-  const headers: OutgoingHttpHeaders = {
-    Authorization: `Bearer ${accessToken}`,
-    [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
-  };
-
-  core.debug(`FlyFrog CI end notification URL: ${endCiUrl}`);
-
-  const rawResponse = await client.post(endCiUrl, "", headers);
-  const body = await rawResponse.readBody();
-
-  // Log response details
-  core.debug(
-    `FlyFrog CI end notification response headers: ${JSON.stringify(
-      rawResponse.message.headers,
-    )}`,
-  );
-
-  // Log success or error and throw on non-200
-  if (rawResponse.message.statusCode === http.HttpCodes.OK) {
-    core.debug(`FlyFrog CI end notification succeeded, body: ${body}`);
-  } else {
-    core.error(
-      `FlyFrog CI end notification failed ${rawResponse.message.statusCode}, body: ${body}`,
-    );
-    throw new Error(
-      `FlyFrog CI end notification failed ${rawResponse.message.statusCode}: ${body}`,
-    );
-  }
 }

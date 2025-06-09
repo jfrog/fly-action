@@ -18,7 +18,7 @@ jobs:
         id: run-action
         uses: ./
         with:
-          url: 'https://ffjob1682705.jfrogdev.org'
+          url: 'https://ffjobff1980806.jfrogdev.org'
           ignore: docker, podman, helm
 
       - name: Install setuptools with verbose output

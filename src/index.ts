@@ -3,11 +3,13 @@ import * as exec from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
 import { authenticateOidc } from "./oidc";
+import { detectPackageManagers } from "./package-detection"; // Import from new file
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
   STATE_FLYFROG_URL,
   STATE_FLYFROG_ACCESS_TOKEN,
+  STATE_FLYFROG_PACKAGE_MANAGERS,
 } from "./constants";
 
 /**
@@ -44,6 +46,12 @@ export async function run(): Promise<void> {
     core.saveState(STATE_FLYFROG_URL, url);
     core.saveState(STATE_FLYFROG_ACCESS_TOKEN, accessToken);
     core.info("FlyFrog Action: State saved for post-job notification.");
+
+    // Detect and save package managers
+    const workspacePath = process.env.GITHUB_WORKSPACE || "";
+    const detectedPackageManagers = detectPackageManagers(workspacePath);
+    core.saveState(STATE_FLYFROG_PACKAGE_MANAGERS, JSON.stringify(detectedPackageManagers));
+    core.info(`FlyFrog Action: Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`);
 
     const binPath = resolveFlyFrogCLIBinaryPath();
     core.info(`FlyFrog Action: CLI binary path: ${binPath}`);
