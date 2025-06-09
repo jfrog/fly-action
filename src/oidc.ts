@@ -8,7 +8,7 @@ import {
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response
-type TokenJson = { access_token?: string;[key: string]: unknown };
+type TokenJson = { access_token?: string; [key: string]: unknown };
 
 /**
  * Gets an OIDC token from the GitHub Actions runtime
@@ -71,9 +71,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     : parsedJson;
   // Log response details
   core.debug(
-    `OIDC response headers: ${JSON.stringify(
-      rawResponse.message.headers,
-    )}`,
+    `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
   );
   // Log success or error and throw on non-success status
   if (
@@ -88,9 +86,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
         maskedResponse,
       )}`,
     );
-    throw new Error(
-      `OIDC failed ${rawResponse.message.statusCode}: ${body}`,
-    );
+    throw new Error(`OIDC failed ${rawResponse.message.statusCode}: ${body}`);
   }
   const parsed = parsedJson as FlyFrogOidcResponse;
   if (!parsed || !parsed.access_token) {

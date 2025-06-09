@@ -26,8 +26,8 @@ describe("authenticateOidc", () => {
     // Mock getIDToken
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-      ".sig",
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
     );
     // Mock HttpClient.post
     const fakeResponse: HttpClientResponse = {
@@ -43,8 +43,8 @@ describe("authenticateOidc", () => {
   it("should succeed with 201 Created status and return accessToken", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-      ".sig",
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 201, headers: {} as IncomingHttpHeaders },
@@ -66,8 +66,8 @@ describe("authenticateOidc", () => {
   it("should throw if FlyFrog OIDC returns non-200 status", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-      ".sig", // Still need a valid-looking token for mocks even if not parsing user
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig", // Still need a valid-looking token for mocks even if not parsing user
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
@@ -83,8 +83,8 @@ describe("authenticateOidc", () => {
   it("should throw if OIDC response does not contain an access token", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
-      Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-      ".sig", // Still need a valid-looking token for mocks
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig", // Still need a valid-looking token for mocks
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },

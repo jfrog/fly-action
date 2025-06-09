@@ -33,9 +33,7 @@ export async function run(): Promise<void> {
     const url = core.getInput(INPUT_URL, { required: true });
     core.info(`URL: ${url}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
-    core.info(
-      `Ignore Package Managers: ${ignorePackageManagers || "none"}`,
-    );
+    core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
     core.info("Attempting OIDC authentication...");
     const { accessToken } = await authenticateOidc(url);
@@ -72,14 +70,10 @@ export async function run(): Promise<void> {
     core.info("Executing FlyFrog CLI setup command...");
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) {
-      core.error(
-        "FlyFrog setup command failed with non-zero exit code.",
-      );
+      core.error("FlyFrog setup command failed with non-zero exit code.");
       throw new Error("FlyFrog setup command failed");
     }
-    core.info(
-      "FlyFrog CLI setup command completed successfully.",
-    );
+    core.info("FlyFrog CLI setup command completed successfully.");
   } catch (error) {
     core.error("Error occurred during execution.");
     if (error instanceof Error) core.setFailed(error.message);

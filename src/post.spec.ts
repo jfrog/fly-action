@@ -1,7 +1,11 @@
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
-import { STATE_FLYFROG_URL, STATE_FLYFROG_ACCESS_TOKEN, STATE_FLYFROG_PACKAGE_MANAGERS } from "./constants";
+import {
+  STATE_FLYFROG_URL,
+  STATE_FLYFROG_ACCESS_TOKEN,
+  STATE_FLYFROG_PACKAGE_MANAGERS,
+} from "./constants";
 import { runPost, runPostScriptLogic } from "./post"; // Import with new name
 
 // Mock @actions/core
@@ -28,7 +32,8 @@ describe("runPost", () => {
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
       if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return JSON.stringify(["npm", "maven"]);
+      if (name === STATE_FLYFROG_PACKAGE_MANAGERS)
+        return JSON.stringify(["npm", "maven"]);
       return "";
     });
   });
@@ -55,8 +60,12 @@ describe("runPost", () => {
         "content-type": "application/json",
       }),
     );
-    expect(mockCore.info).toHaveBeenCalledWith("🏁 Notifying FlyFrog that CI job has ended...");
-    expect(mockCore.info).toHaveBeenCalledWith("✅ CI end notification completed successfully");
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "🏁 Notifying FlyFrog that CI job has ended...",
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "✅ CI end notification completed successfully",
+    );
     expect(core.debug).toHaveBeenCalledWith("Job status: success");
   });
 
@@ -97,7 +106,9 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).not.toHaveBeenCalled();
-    expect(core.debug).toHaveBeenCalledWith("No FlyFrog URL found in state, skipping CI end notification");
+    expect(core.debug).toHaveBeenCalledWith(
+      "No FlyFrog URL found in state, skipping CI end notification",
+    );
   });
 
   it("should skip notification if access token is not available", async () => {
@@ -110,7 +121,9 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).not.toHaveBeenCalled();
-    expect(core.debug).toHaveBeenCalledWith("No access token found in state, skipping CI end notification");
+    expect(core.debug).toHaveBeenCalledWith(
+      "No access token found in state, skipping CI end notification",
+    );
   });
 
   it("should re-throw errors during HTTP client post operation", async () => {
@@ -138,7 +151,9 @@ describe("runPost", () => {
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeErrorResponse);
 
-    await expect(runPost()).rejects.toThrow("Failed to send CI end notification. Status: 500. Body: Server error");
+    await expect(runPost()).rejects.toThrow(
+      "Failed to send CI end notification. Status: 500. Body: Server error",
+    );
   });
 
   it("should warn if package managers string is invalid JSON and send request without them", async () => {
@@ -157,7 +172,11 @@ describe("runPost", () => {
 
     await runPost();
 
-    expect(core.warning).toHaveBeenCalledWith(expect.stringContaining("Failed to parse package managers from state: invalid-json. Error: Unexpected token 'i', \"invalid-json\" is not valid JSON"));
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Failed to parse package managers from state: invalid-json. Error: Unexpected token 'i', \"invalid-json\" is not valid JSON",
+      ),
+    );
     expect(mockHttpClientPost).toHaveBeenCalledWith(
       expect.any(String),
       JSON.stringify({ status: "success" }), // Should send with status: "success" only
