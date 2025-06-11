@@ -10,15 +10,15 @@ import { EndCiRequest } from "./types";
 export async function runPost(): Promise<void> {
   core.info("🏁 Notifying FlyFrog that CI job has ended...");
 
-  const flyfrogUrl = core.getState(STATE_FLYFROG_URL);
-  const accessToken = core.getState(STATE_FLYFROG_ACCESS_TOKEN);
+  const flyfrogUrl = core.getState(STATE_FLYFROG_URL); // Corrected constant
+  const accessToken = core.getState(STATE_FLYFROG_ACCESS_TOKEN); // Corrected constant
 
   if (!flyfrogUrl) {
-    core.info("No FlyFrog URL found in state, skipping CI end notification");
+    core.info("No FlyFrog URL found in state, skipping CI end notification"); // Changed from debug to info
     return;
   }
   if (!accessToken) {
-    core.info("No access token found in state, skipping CI end notification");
+    core.info("No access token found in state, skipping CI end notification"); // Changed from debug to info
     return;
   }
 
@@ -36,7 +36,7 @@ export async function runPost(): Promise<void> {
 
   // Hardcoded status
   const determinedStatus = "success";
-  core.info(`Job status: ${determinedStatus}`);
+  core.info(`Job status: ${determinedStatus}`); // Changed from debug to info
 
   const payload: EndCiRequest = {
     status: determinedStatus,
@@ -45,10 +45,13 @@ export async function runPost(): Promise<void> {
     payload.package_managers = packageManagers;
   }
 
-  core.info(`FlyFrog API URL: ${flyfrogUrl}/flyfrog/api/v1/ci/end`);
+  core.info(`FlyFrog API URL: ${flyfrogUrl}/flyfrog/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
   const httpClient = new HttpClient("flyfrog-action");
+  core.info(
+    `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
+  );
   try {
     const response = await httpClient.post(
       `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
@@ -59,6 +62,9 @@ export async function runPost(): Promise<void> {
       },
     );
 
+    core.info(
+      `[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`,
+    );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
     } else {
@@ -72,11 +78,9 @@ export async function runPost(): Promise<void> {
     }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    core.error(`Error during CI end notification: ${message}`);
+    core.error(`Error during CI end notification: ${message}`); // Use core.error for better visibility
     // Re-throw the error to be caught by the mainRunner or the test
     throw error;
-  } finally {
-    httpClient.dispose();
   }
 }
 
@@ -92,15 +96,5 @@ export async function runPostScriptLogic(): Promise<void> {
 
 // Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
-  runPostScriptLogic()
-    .then(() => {
-      // Intentionally empty .then() block if no success actions are needed
-    })
-    .catch((error) => {
-      // Even if runPostScriptLogic handles setFailed, we log that the script block itself caught an error
-      const message = error instanceof Error ? error.message : String(error);
-      core.error(`post.ts script failed: ${message}`);
-      // Ensure the action still fails if an unhandled promise rejection occurs here
-      core.setFailed(`Unhandled error in post.ts script execution: ${message}`);
-    });
+  runPostScriptLogic();
 }

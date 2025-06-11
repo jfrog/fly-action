@@ -19,7 +19,7 @@ jobs:
         uses: ./
         with:
           url: 'https://ffjobff1980806.jfrogdev.org'
-          ignore: docker, podman, helm
+          ignore: helm
 
       - name: Install setuptools with verbose output
         run: |
