@@ -14,6 +14,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install twine
+        run: pip install twine
+
       - name: Run FlyFrog action
         id: run-action
         uses: ./
@@ -26,3 +29,12 @@ jobs:
           pip cache purge
           echo "Attempting to install setuptools with verbose logging..."
           pip install --force-reinstall setuptools --no-cache-dir -vvv
+
+      - name: Create and Upload Python Package with Twine
+        run: |
+          set -e
+          mkdir testpkg && cd testpkg
+          echo "from setuptools import setup; setup(name='testpkg', version='0.0.1', packages=[''])" > setup.py
+          touch __init__.py
+          python setup.py sdist bdist_wheel
+          twine upload dist/*
