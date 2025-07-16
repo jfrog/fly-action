@@ -2,9 +2,9 @@ import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
 import {
-  STATE_FLYFROG_URL,
-  STATE_FLYFROG_ACCESS_TOKEN,
-  STATE_FLYFROG_PACKAGE_MANAGERS,
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PACKAGE_MANAGERS,
 } from "./constants";
 import { runPost, runPostScriptLogic } from "./post"; // Import with new name
 
@@ -30,9 +30,9 @@ describe("runPost", () => {
 
     // Mock core.getState
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLYFROG_PACKAGE_MANAGERS)
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PACKAGE_MANAGERS)
         return JSON.stringify(["npm", "maven"]);
       return "";
     });
@@ -53,7 +53,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
+      "https://fly.example.com/fly/api/v1/ci/end",
       JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
@@ -61,7 +61,7 @@ describe("runPost", () => {
       }),
     );
     expect(mockCore.info).toHaveBeenCalledWith(
-      "🏁 Notifying FlyFrog that CI job has ended...",
+      "🏁 Notifying Fly that CI job has ended...",
     );
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
@@ -71,9 +71,9 @@ describe("runPost", () => {
 
   it("should call notifyCiEnd with status 'success' and no package managers if not available", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return ""; // No package managers
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PACKAGE_MANAGERS) return ""; // No package managers
       return "";
     });
 
@@ -86,7 +86,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://flyfrog.example.com/flyfrog/api/v1/ci/end",
+      "https://fly.example.com/fly/api/v1/ci/end",
       JSON.stringify({ status: "success" }),
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
@@ -98,8 +98,8 @@ describe("runPost", () => {
 
   it("should skip notification if URL is not available", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return ""; // No URL
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_URL) return ""; // No URL
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
 
@@ -107,14 +107,14 @@ describe("runPost", () => {
 
     expect(mockHttpClientPost).not.toHaveBeenCalled();
     expect(mockCore.info).toHaveBeenCalledWith(
-      "No FlyFrog URL found in state, skipping CI end notification",
+      "No Fly URL found in state, skipping CI end notification",
     );
   });
 
   it("should skip notification if access token is not available", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return ""; // No access token
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return ""; // No access token
       return "";
     });
 
@@ -129,8 +129,8 @@ describe("runPost", () => {
   it("should re-throw errors during HTTP client post operation", async () => {
     // Standard mock for getState, ensuring URL and token are present
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
     mockHttpClientPost.mockRejectedValue(new Error("Network error"));
@@ -140,8 +140,8 @@ describe("runPost", () => {
 
   it("should re-throw error if HTTP response is not 200", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
 
@@ -158,9 +158,9 @@ describe("runPost", () => {
 
   it("should warn if package managers string is invalid JSON and send request without them", async () => {
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLYFROG_PACKAGE_MANAGERS) return "invalid-json";
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PACKAGE_MANAGERS) return "invalid-json";
       return "";
     });
 
@@ -191,8 +191,8 @@ describe("runPostScriptLogic", () => {
     jest.clearAllMocks();
     // Mock core.getState for mainRunner tests as well, if runPost is called internally
     mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLYFROG_URL) return "https://flyfrog.example.com";
-      if (name === STATE_FLYFROG_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
     // Mock HttpClient for mainRunner tests

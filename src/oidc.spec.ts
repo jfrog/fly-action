@@ -36,7 +36,7 @@ describe("authenticateOidc", () => {
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
-    const result = await authenticateOidc("https://flyfrog");
+    const result = await authenticateOidc("https://fly");
     expect(result).toEqual({ accessToken: "tokval" }); // Updated expectation
   });
 
@@ -52,7 +52,7 @@ describe("authenticateOidc", () => {
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
-    const result = await authenticateOidc("https://flyfrog");
+    const result = await authenticateOidc("https://fly");
     expect(result.accessToken).toBe("fake-token"); // Updated expectation
   });
 
@@ -63,7 +63,7 @@ describe("authenticateOidc", () => {
     );
   });
 
-  it("should throw if FlyFrog OIDC returns non-200 status", async () => {
+  it("should throw if Fly OIDC returns non-200 status", async () => {
     (core.getIDToken as jest.Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
@@ -75,7 +75,7 @@ describe("authenticateOidc", () => {
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
-    await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
+    await expect(authenticateOidc("https://fly")).rejects.toThrow(
       /OIDC failed 500: error body/, // Updated error message
     );
   });
@@ -92,7 +92,7 @@ describe("authenticateOidc", () => {
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
-    await expect(authenticateOidc("https://flyfrog")).rejects.toThrow(
+    await expect(authenticateOidc("https://fly")).rejects.toThrow(
       "OIDC response did not contain an access token",
     );
   });

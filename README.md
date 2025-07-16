@@ -1,32 +1,32 @@
-# flyfrog-action
+# fly-action
 
-This GitHub Action downloads the FlyFrog CLI and configures package managers to use FlyFrog as a registry for dependencies.
+This GitHub Action downloads the Fly CLI and configures package managers to use Fly as a registry for dependencies.
 
 ## Features
 
-- ✅ Supports all package managers available in FlyFrog CLI (npm, pip, maven, dotnet, docker)
+- ✅ Supports all package managers available in Fly CLI (npm, pip, maven, dotnet, docker)
 - ✅ Configures all detected package managers with a single command
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
-- ✅ Automatic CI session end notification to the FlyFrog server
+- ✅ Automatic CI session end notification to the Fly server
 
 ## Usage
 
 ```yaml
-name: Build with FlyFrog Registry
+name: Build with Fly Registry
 on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
-      # Setup FlyFrog registry with OIDC
-      - name: Setup FlyFrog Registry
-        uses: jfrog/flyfrog-action@v1
+      # Setup Fly registry with OIDC
+      - name: Setup Fly Registry
+        uses: jfrog/fly-action@v1
         with:
-          url: https://flyfrog.example.com
+          url: https://fly.example.com
           # ignore: docker,pip (optional)
 ```
 
@@ -40,7 +40,7 @@ permissions:
 ```
 
 #### Required Inputs
-- `url`: FlyFrog URL
+- `url`: Fly URL
 
 #### Optional Inputs
 - `ignore`: Comma-separated list of package managers to ignore (e.g., docker,pip)
@@ -49,37 +49,37 @@ permissions:
 
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
-| `url` | FlyFrog URL | Yes | N/A |
+| `url` | Fly URL | Yes | N/A |
 | `ignore` | Comma-separated list of package managers to ignore | No | None |
 
 ## OIDC Authentication
 
 When using OIDC authentication:
 
-1. Your FlyFrog server must support the OpenID Connect protocol and have a provider configured
+1. Your Fly server must support the OpenID Connect protocol and have a provider configured
 2. You need to set `permissions: id-token: write` in your workflow file
-3. The provider name is fixed to `flyfrog-action`
+3. The provider name is fixed to `fly-action`
 4. The action will:
    - Request an OIDC token from GitHub Actions
-   - Exchange it for a FlyFrog access token via the `/flyfrog/api/v1/ci/start-oidc` endpoint
-   - Use the resulting token to authenticate with FlyFrog
-   - Automatically notify CI session end via the `/flyfrog/api/v1/ci/end` endpoint when the job completes (using GitHub Actions post-job mechanism)
+   - Exchange it for a Fly access token via the `/fly/api/v1/ci/start-oidc` endpoint
+   - Use the resulting token to authenticate with Fly
+   - Automatically notify CI session end via the `/fly/api/v1/ci/end` endpoint when the job completes (using GitHub Actions post-job mechanism)
 
-> **Note**: The CI end notification runs automatically as a post-job step. This ensures it executes even if the main action fails, for proper session management on the FlyFrog server. If the CI end notification step itself encounters an error, it will cause the overall workflow to be marked as failed.
+> **Note**: The CI end notification runs automatically as a post-job step. This ensures it executes even if the main action fails, for proper session management on the Fly server. If the CI end notification step itself encounters an error, it will cause the overall workflow to be marked as failed.
 
-### FlyFrog Server Configuration for OIDC
+### Fly Server Configuration for OIDC
 
-To use OIDC authentication, your FlyFrog server must be configured with:
+To use OIDC authentication, your Fly server must be configured with:
 
 1. An OIDC provider that accepts GitHub Actions tokens
-2. Custom FlyFrog API endpoints:
-   - `/flyfrog/api/v1/ci/start-oidc` for token exchange and CI session initialization
-   - `/flyfrog/api/v1/ci/end` for CI session end notification
+2. Custom Fly API endpoints:
+   - `/fly/api/v1/ci/start-oidc` for token exchange and CI session initialization
+   - `/fly/api/v1/ci/end` for CI session end notification
 3. Custom audience claim support (if using non-default audience)
 
 ## Supported Package Managers
 
-The action supports all package managers that the FlyFrog CLI supports:
+The action supports all package managers that the Fly CLI supports:
 
 - **npm, pnpm, yarn** – Node.js package managers (npm registry)
 - **pip, pipenv, poetry, twine** – Python package managers (PyPI repository)
@@ -94,12 +94,12 @@ The action supports all package managers that the FlyFrog CLI supports:
 
 ### Integration Tests
 
-Integration tests run automatically on pushes to the main branch, but require a valid FlyFrog test server to be configured. The integration test will only run if the `FLYFROG_TEST_URL` repository variable is set.
+Integration tests run automatically on pushes to the main branch, but require a valid Fly test server to be configured. The integration test will only run if the `FLY_TEST_URL` repository variable is set.
 
 To configure integration testing:
 
-1. Set up a FlyFrog server that supports the required API endpoints
-2. Set the `FLYFROG_TEST_URL` repository variable in your GitHub repository settings
+1. Set up a Fly server that supports the required API endpoints
+2. Set the `FLY_TEST_URL` repository variable in your GitHub repository settings
 3. The integration test will automatically run on the next push
 
 ## Build Process

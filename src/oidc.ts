@@ -2,8 +2,8 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import {
   OidcAuthResult,
-  FlyFrogOidcRequest,
-  FlyFrogOidcResponse,
+  FlyOidcRequest,
+  FlyOidcResponse,
 } from "./types";
 import { OutgoingHttpHeaders } from "http";
 
@@ -27,8 +27,8 @@ export async function getIDToken(): Promise<string | undefined> {
 }
 
 /**
- * Performs full OIDC authentication with FlyFrog, returning the access token
- * @param url The FlyFrog server URL
+ * Performs full OIDC authentication with Fly, returning the access token
+ * @param url The Fly server URL
  */
 export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   const idToken = await getIDToken();
@@ -36,12 +36,12 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   // Mask the raw ID token in logs
   core.setSecret(idToken);
 
-  const client = new http.HttpClient("flyfrog-action");
-  const oidcUrl = `${url}/flyfrog/api/v1/ci/start-oidc`;
-  core.debug(`Authenticating with FlyFrog OIDC at ${oidcUrl}`);
+  const client = new http.HttpClient("fly-action");
+  const oidcUrl = `${url}/fly/api/v1/ci/start-oidc`;
+  core.debug(`Authenticating with Fly OIDC at ${oidcUrl}`);
 
-  // Build the FlyFrog OIDC request payload
-  const payload: FlyFrogOidcRequest = {
+  // Build the Fly OIDC request payload
+  const payload: FlyOidcRequest = {
     subject_token: idToken,
   };
 
@@ -88,7 +88,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     );
     throw new Error(`OIDC failed ${rawResponse.message.statusCode}: ${body}`);
   }
-  const parsed = parsedJson as FlyFrogOidcResponse;
+  const parsed = parsedJson as FlyOidcResponse;
   if (!parsed || !parsed.access_token) {
     throw new Error(
       `OIDC response did not contain an access token, body: ${body}`,
