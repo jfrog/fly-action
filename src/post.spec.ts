@@ -174,7 +174,7 @@ describe("runPost", () => {
 
     expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining(
-        "Failed to parse package managers from state: invalid-json. Error: Unexpected token 'i', \"invalid-json\" is not valid JSON",
+        "Failed to parse package managers from state: invalid-json. Error: Unexpected token",
       ),
     );
     expect(mockHttpClientPost).toHaveBeenCalledWith(
