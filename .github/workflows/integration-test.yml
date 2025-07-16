@@ -17,7 +17,7 @@ jobs:
       - name: Install twine
         run: pip install twine
 
-      - name: Run FlyFrog action
+      - name: Run Fly action
         id: run-action
         uses: ./
         with:

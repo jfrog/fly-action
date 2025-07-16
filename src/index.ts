@@ -7,20 +7,20 @@ import { detectPackageManagers } from "./package-detection"; // Import from new 
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
-  STATE_FLYFROG_URL,
-  STATE_FLYFROG_ACCESS_TOKEN,
-  STATE_FLYFROG_PACKAGE_MANAGERS,
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PACKAGE_MANAGERS,
 } from "./constants";
 
 /**
- * Resolves the platform-specific FlyFrog binary path and ensures it is executable
+ * Resolves the platform-specific Fly binary path and ensures it is executable
  */
-export function resolveFlyFrogCLIBinaryPath(): string {
-  const binName = `flyfrog-${process.platform}-${process.arch}`;
+export function resolveFlyCLIBinaryPath(): string {
+  const binName = `fly-${process.platform}-${process.arch}`;
   const binPath = path.resolve(__dirname, "..", "bin", binName);
   if (!fs.existsSync(binPath)) {
     throw new Error(
-      `FlyFrog CLI binary not found at ${binPath} for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
+      `Fly CLI binary not found at ${binPath} for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
     );
   }
   if (process.platform !== "win32") fs.chmodSync(binPath, 0o755);
@@ -41,39 +41,39 @@ export async function run(): Promise<void> {
     core.setSecret(accessToken);
 
     // Save URL and access token to state for post-job CI end notification
-    core.saveState(STATE_FLYFROG_URL, url);
-    core.saveState(STATE_FLYFROG_ACCESS_TOKEN, accessToken);
+    core.saveState(STATE_FLY_URL, url);
+    core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
     // Detect and save package managers
     const workspacePath = process.env.GITHUB_WORKSPACE || "";
     const detectedPackageManagers = detectPackageManagers(workspacePath);
     core.saveState(
-      STATE_FLYFROG_PACKAGE_MANAGERS,
+      STATE_FLY_PACKAGE_MANAGERS,
       JSON.stringify(detectedPackageManagers),
     );
     core.info(
       `Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`,
     );
 
-    const binPath = resolveFlyFrogCLIBinaryPath();
+    const binPath = resolveFlyCLIBinaryPath();
     core.info(`CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
-      FLYFROG_URL: url,
-      FLYFROG_ACCESS_TOKEN: accessToken,
-      FLYFROG_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
+      FLY_URL: url,
+      FLY_ACCESS_TOKEN: accessToken,
+      FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
 
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
-    core.info("Executing FlyFrog CLI setup command...");
+    core.info("Executing Fly CLI setup command...");
     const exitCode = await exec.exec(binPath, ["setup"], options);
     if (exitCode !== 0) {
-      core.error("FlyFrog setup command failed with non-zero exit code.");
-      throw new Error("FlyFrog setup command failed");
+      core.error("Fly setup command failed with non-zero exit code.");
+      throw new Error("Fly setup command failed");
     }
-    core.info("FlyFrog CLI setup command completed successfully.");
+    core.info("Fly CLI setup command completed successfully.");
   } catch (error) {
     core.error("Error occurred during execution.");
     if (error instanceof Error) core.setFailed(error.message);

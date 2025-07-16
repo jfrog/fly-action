@@ -1,15 +1,15 @@
 export interface OidcAuthResult {
-  /** Access token returned from FlyFrog token exchange */
+  /** Access token returned from Fly token exchange */
   accessToken: string;
 }
 
-/** Payload for FlyFrog OIDC authentication request */
-export interface FlyFrogOidcRequest {
+/** Payload for Fly OIDC authentication request */
+export interface FlyOidcRequest {
   subject_token: string;
 }
 
-/** Response shape for FlyFrog OIDC authentication */
-export interface FlyFrogOidcResponse {
+/** Response shape for Fly OIDC authentication */
+export interface FlyOidcResponse {
   access_token: string;
 }
 

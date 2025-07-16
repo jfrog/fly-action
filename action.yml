@@ -1,10 +1,10 @@
-name: 'Setup FlyFrog Registry'
-description: 'Configures package managers to use FlyFrog as a registry for dependencies'
+name: 'Setup Fly Registry'
+description: 'Configures package managers to use Fly as a registry for dependencies'
 author: 'Your Name'
 
 inputs:
   url:
-    description: 'FlyFrog URL'
+    description: 'Fly URL'
     required: true
   ignore:
     description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'

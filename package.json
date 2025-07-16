@@ -1,7 +1,7 @@
 {
-  "name": "flyfrog-action",
+  "name": "fly-action",
   "version": "1.0.0",
-  "description": "GitHub Action to setup FlyFrog CLI",
+  "description": "GitHub Action to setup Fly CLI",
   "main": "lib/index.js",
   "post": "lib/post.js",
   "scripts": {
@@ -35,17 +35,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jfrog/flyfrog-action.git"
+    "url": "git+https://github.com/jfrog/fly-action.git"
   },
   "keywords": [
     "github",
     "action",
-    "flyfrog"
+    "fly"
   ],
   "author": "Your Name",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/jfrog/flyfrog-action/issues"
+    "url": "https://github.com/jfrog/fly-action/issues"
   },
-  "homepage": "https://github.com/jfrog/flyfrog-action#readme"
+  "homepage": "https://github.com/jfrog/fly-action#readme"
 }

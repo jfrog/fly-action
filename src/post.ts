@@ -1,20 +1,20 @@
 import * as core from "@actions/core";
 import {
-  STATE_FLYFROG_URL,
-  STATE_FLYFROG_ACCESS_TOKEN,
-  STATE_FLYFROG_PACKAGE_MANAGERS,
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PACKAGE_MANAGERS,
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 
 export async function runPost(): Promise<void> {
-  core.info("🏁 Notifying FlyFrog that CI job has ended...");
+  core.info("🏁 Notifying Fly that CI job has ended...");
 
-  const flyfrogUrl = core.getState(STATE_FLYFROG_URL); // Corrected constant
-  const accessToken = core.getState(STATE_FLYFROG_ACCESS_TOKEN); // Corrected constant
+  const flyUrl = core.getState(STATE_FLY_URL); // Corrected constant
+  const accessToken = core.getState(STATE_FLY_ACCESS_TOKEN); // Corrected constant
 
-  if (!flyfrogUrl) {
-    core.info("No FlyFrog URL found in state, skipping CI end notification"); // Changed from debug to info
+  if (!flyUrl) {
+    core.info("No Fly URL found in state, skipping CI end notification"); // Changed from debug to info
     return;
   }
   if (!accessToken) {
@@ -22,7 +22,7 @@ export async function runPost(): Promise<void> {
     return;
   }
 
-  const packageManagersState = core.getState(STATE_FLYFROG_PACKAGE_MANAGERS);
+  const packageManagersState = core.getState(STATE_FLY_PACKAGE_MANAGERS);
   let packageManagers: string[] | undefined;
   if (packageManagersState) {
     try {
@@ -45,16 +45,16 @@ export async function runPost(): Promise<void> {
     payload.package_managers = packageManagers;
   }
 
-  core.info(`FlyFrog API URL: ${flyfrogUrl}/flyfrog/api/v1/ci/end`); // Changed from debug to info
+  core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-  const httpClient = new HttpClient("flyfrog-action");
+  const httpClient = new HttpClient("fly-action");
   core.info(
-    `[${new Date().toISOString()}] Attempting to send CI end notification to FlyFrog...`,
+    `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
   try {
     const response = await httpClient.post(
-      `${flyfrogUrl}/flyfrog/api/v1/ci/end`,
+      `${flyUrl}/fly/api/v1/ci/end`,
       JSON.stringify(payload),
       {
         Authorization: `Bearer ${accessToken}`,
