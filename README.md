@@ -4,7 +4,7 @@ This GitHub Action downloads the Fly CLI and configures package managers to use 
 
 ## Features
 
-- ✅ Supports all package managers available in Fly CLI (npm, pip, maven, dotnet, docker)
+- ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
