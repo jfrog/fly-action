@@ -67,6 +67,29 @@ export async function runPost(): Promise<void> {
 		);
 		if (response.message.statusCode === 200) {
 			core.info("✅ CI end notification completed successfully");
+
+			// Add job summary for successful completion
+			try {
+				await core.summary
+					.addHeading("🏁 Fly CI Notification Complete!")
+					.addRaw(
+						"Hello World from the post-action! The CI end notification has been sent successfully.",
+						true
+					)
+					.addSeparator()
+					.addRaw(`**Fly URL:** ${flyUrl}`, true)
+					.addRaw(`**Status:** ${determinedStatus}`, true)
+					.addRaw(
+						`**Package Managers:** ${packageManagers?.join(", ") || "None"}`,
+						true
+					)
+					.write();
+			} catch (summaryError) {
+				// Gracefully handle summary errors (e.g., in test environments)
+				core.info(
+					"Job summary could not be written (this is normal in test environments)"
+				);
+			}
 		} else {
 			const body = await response.readBody();
 			core.error(
