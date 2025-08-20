@@ -1,122 +1,122 @@
 import * as core from "@actions/core";
 import {
-	STATE_FLY_URL,
-	STATE_FLY_ACCESS_TOKEN,
-	STATE_FLY_PACKAGE_MANAGERS,
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PACKAGE_MANAGERS,
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 
 export async function runPost(): Promise<void> {
-	core.info("🏁 Notifying Fly that CI job has ended...");
+  core.info("🏁 Notifying Fly that CI job has ended...");
 
-	const flyUrl = core.getState(STATE_FLY_URL); // Corrected constant
-	const accessToken = core.getState(STATE_FLY_ACCESS_TOKEN); // Corrected constant
+  const flyUrl = core.getState(STATE_FLY_URL); // Corrected constant
+  const accessToken = core.getState(STATE_FLY_ACCESS_TOKEN); // Corrected constant
 
-	if (!flyUrl) {
-		core.info("No Fly URL found in state, skipping CI end notification"); // Changed from debug to info
-		return;
-	}
-	if (!accessToken) {
-		core.info("No access token found in state, skipping CI end notification"); // Changed from debug to info
-		return;
-	}
+  if (!flyUrl) {
+    core.info("No Fly URL found in state, skipping CI end notification"); // Changed from debug to info
+    return;
+  }
+  if (!accessToken) {
+    core.info("No access token found in state, skipping CI end notification"); // Changed from debug to info
+    return;
+  }
 
-	const packageManagersState = core.getState(STATE_FLY_PACKAGE_MANAGERS);
-	let packageManagers: string[] | undefined;
-	if (packageManagersState) {
-		try {
-			packageManagers = JSON.parse(packageManagersState);
-		} catch (error) {
-			core.warning(
-				`Failed to parse package managers from state: ${packageManagersState}. Error: ${error instanceof Error ? error.message : String(error)}`
-			);
-		}
-	}
+  const packageManagersState = core.getState(STATE_FLY_PACKAGE_MANAGERS);
+  let packageManagers: string[] | undefined;
+  if (packageManagersState) {
+    try {
+      packageManagers = JSON.parse(packageManagersState);
+    } catch (error) {
+      core.warning(
+        `Failed to parse package managers from state: ${packageManagersState}. Error: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
-	// Hardcoded status
-	const determinedStatus = "success";
-	core.info(`Job status: ${determinedStatus}`);
+  // Hardcoded status
+  const determinedStatus = "success";
+  core.info(`Job status: ${determinedStatus}`);
 
-	const payload: EndCiRequest = {
-		status: determinedStatus,
-	};
-	if (packageManagers && packageManagers.length > 0) {
-		payload.package_managers = packageManagers;
-	}
+  const payload: EndCiRequest = {
+    status: determinedStatus,
+  };
+  if (packageManagers && packageManagers.length > 0) {
+    payload.package_managers = packageManagers;
+  }
 
-	core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`);
-	core.info(`Request payload: ${JSON.stringify(payload)}`);
+  core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`);
+  core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-	const httpClient = new HttpClient("fly-action");
-	core.info(
-		`[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`
-	);
-	try {
-		const response = await httpClient.post(
-			`${flyUrl}/fly/api/v1/ci/end`,
-			JSON.stringify(payload),
-			{
-				Authorization: `Bearer ${accessToken}`,
-				"content-type": "application/json",
-			}
-		);
+  const httpClient = new HttpClient("fly-action");
+  core.info(
+    `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
+  );
+  try {
+    const response = await httpClient.post(
+      `${flyUrl}/fly/api/v1/ci/end`,
+      JSON.stringify(payload),
+      {
+        Authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+    );
 
-		core.info(
-			`[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`
-		);
-		if (response.message.statusCode === 200) {
-			core.info("✅ CI end notification completed successfully");
+    core.info(
+      `[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`,
+    );
+    if (response.message.statusCode === 200) {
+      core.info("✅ CI end notification completed successfully");
 
-			// Add job summary for successful completion
-			try {
-				await core.summary
-					.addHeading("🏁 Fly CI Notification Complete!")
-					.addRaw(
-						"Hello World from the post-action! The CI end notification has been sent successfully.",
-						true
-					)
-					.addSeparator()
-					.addRaw(`**Fly URL:** ${flyUrl}`, true)
-					.addRaw(`**Status:** ${determinedStatus}`, true)
-					.addRaw(
-						`**Package Managers:** ${packageManagers?.join(", ") || "None"}`,
-						true
-					)
-					.write();
-			} catch (summaryError) {
-				// Gracefully handle summary errors (e.g., in test environments)
-				core.info(
-					"Job summary could not be written (this is normal in test environments)"
-				);
-			}
-		} else {
-			const body = await response.readBody();
-			core.error(
-				`Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`
-			);
-			throw new Error(
-				`Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`
-			);
-		}
-	} catch (error: unknown) {
-		const message = error instanceof Error ? error.message : String(error);
-		core.error(`Error during CI end notification: ${message}`);
-		throw error;
-	}
+      // Add job summary for successful completion
+      try {
+        await core.summary
+          .addHeading("🏁 Fly CI Notification Complete!")
+          .addRaw(
+            "Hello World from the post-action! The CI end notification has been sent successfully.",
+            true,
+          )
+          .addSeparator()
+          .addRaw(`**Fly URL:** ${flyUrl}`, true)
+          .addRaw(`**Status:** ${determinedStatus}`, true)
+          .addRaw(
+            `**Package Managers:** ${packageManagers?.join(", ") || "None"}`,
+            true,
+          )
+          .write();
+      } catch (summaryError) {
+        // Gracefully handle summary errors (e.g., in test environments)
+        core.info(
+          "Job summary could not be written (this is normal in test environments)",
+        );
+      }
+    } else {
+      const body = await response.readBody();
+      core.error(
+        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
+      );
+      throw new Error(
+        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
+      );
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    core.error(`Error during CI end notification: ${message}`);
+    throw error;
+  }
 }
 
 // New exported function to handle the main execution logic
 export async function runPostScriptLogic(): Promise<void> {
-	try {
-		await runPost();
-	} catch (error: unknown) {
-		const message = error instanceof Error ? error.message : String(error);
-		core.setFailed(message);
-	}
+  try {
+    await runPost();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    core.setFailed(message);
+  }
 }
 
 // Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
-	runPostScriptLogic();
+  runPostScriptLogic();
 }
