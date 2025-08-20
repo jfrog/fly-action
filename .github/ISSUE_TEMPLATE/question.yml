@@ -1,8 +1,8 @@
 ---
-name: "❓ Question"
+name: '❓ Question'
 description: Ask a question
-title: "(short question title)"
-labels: [ question ]
+title: '(short question title)'
+labels: [question]
 body:
   - type: textarea
     id: question

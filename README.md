@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       # Setup Fly registry with OIDC
       - name: Setup Fly Registry
         uses: jfrog/fly-action@v1
@@ -40,17 +40,19 @@ permissions:
 ```
 
 #### Required Inputs
+
 - `url`: Fly URL
 
 #### Optional Inputs
+
 - `ignore`: Comma-separated list of package managers to ignore (e.g., docker,pip)
 
 ## Inputs
 
-| Input | Description | Required | Default |
-| --- | --- | --- | --- |
-| `url` | Fly URL | Yes | N/A |
-| `ignore` | Comma-separated list of package managers to ignore | No | None |
+| Input    | Description                                        | Required | Default |
+| -------- | -------------------------------------------------- | -------- | ------- |
+| `url`    | Fly URL                                            | Yes      | N/A     |
+| `ignore` | Comma-separated list of package managers to ignore | No       | None    |
 
 ## OIDC Authentication
 

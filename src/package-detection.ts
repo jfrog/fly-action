@@ -1,82 +1,82 @@
-import * as core from "@actions/core";
-import * as fs from "fs";
-import * as path from "path";
+import * as core from '@actions/core';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Define constants at the module level for clarity and potential reuse.
 const PACKAGE_MANAGER_FILE_IDENTIFIERS = [
   // Node.js ecosystem - specific lock files first, then package.json for npm
-  { file: "pnpm-lock.yaml", manager: "pnpm" },
-  { file: "yarn.lock", manager: "yarn" },
-  { file: "package.json", manager: "npm" },
+  { file: 'pnpm-lock.yaml', manager: 'pnpm' },
+  { file: 'yarn.lock', manager: 'yarn' },
+  { file: 'package.json', manager: 'npm' },
 
   // Python ecosystem - specific lock files/project files first
-  { file: "poetry.lock", manager: "poetry" },
-  { file: "pipfile", manager: "pipenv" },
-  { file: ["requirements.txt", "setup.py", "pyproject.toml"], manager: "pip" },
+  { file: 'poetry.lock', manager: 'poetry' },
+  { file: 'pipfile', manager: 'pipenv' },
+  { file: ['requirements.txt', 'setup.py', 'pyproject.toml'], manager: 'pip' },
 
   // .NET ecosystem
   {
     file: [
-      "*.csproj",
-      "*.fsproj",
-      "*.vbproj",
-      "global.json",
-      "directory.build.props",
-      "packages.config",
+      '*.csproj',
+      '*.fsproj',
+      '*.vbproj',
+      'global.json',
+      'directory.build.props',
+      'packages.config',
     ],
-    manager: "dotnet",
+    manager: 'dotnet',
   },
-  { file: "*.nuspec", manager: "nuget" },
+  { file: '*.nuspec', manager: 'nuget' },
 
   // Java ecosystem
-  { file: "pom.xml", manager: "maven" },
-  { file: ["build.gradle", "build.gradle.kts"], manager: "gradle" },
+  { file: 'pom.xml', manager: 'maven' },
+  { file: ['build.gradle', 'build.gradle.kts'], manager: 'gradle' },
 
   // Ruby
-  { file: "gemfile", manager: "rubygems" },
+  { file: 'gemfile', manager: 'rubygems' },
 
   // Go
-  { file: "go.mod", manager: "go" },
+  { file: 'go.mod', manager: 'go' },
 
   // PHP
-  { file: "composer.json", manager: "composer" },
+  { file: 'composer.json', manager: 'composer' },
 
   // Containers
   {
     file: [
-      "dockerfile",
-      "docker-compose.yml",
-      "docker-compose.yaml",
-      "containerfile",
+      'dockerfile',
+      'docker-compose.yml',
+      'docker-compose.yaml',
+      'containerfile',
     ],
-    manager: "docker",
+    manager: 'docker',
   },
 
   // Kubernetes
-  { file: ["helmfile.yaml", "helmfile.yml", "chart.yaml"], manager: "helm" },
+  { file: ['helmfile.yaml', 'helmfile.yml', 'chart.yaml'], manager: 'helm' },
 
   // Rust
-  { file: "cargo.toml", manager: "cargo" },
+  { file: 'cargo.toml', manager: 'cargo' },
 ] as const;
 
 const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
-  "node_modules",
-  ".git",
-  ".github",
-  "dist",
-  "lib",
-  "bin",
-  "coverage",
-  ".vscode",
-  ".idea",
-  "target",
-  "build",
-  "__pycache__",
-  ".venv",
-  "venv",
-  "env",
-  ".env",
-  "site-packages",
+  'node_modules',
+  '.git',
+  '.github',
+  'dist',
+  'lib',
+  'bin',
+  'coverage',
+  '.vscode',
+  '.idea',
+  'target',
+  'build',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'env',
+  '.env',
+  'site-packages',
 ]);
 
 const MAX_DEPTH = 2;
@@ -87,7 +87,7 @@ function findFilesRecursive(
   maxDepth: number,
   excludedDirs: ReadonlySet<string>,
   foundManagers: Set<string>,
-  checks: typeof PACKAGE_MANAGER_FILE_IDENTIFIERS,
+  checks: typeof PACKAGE_MANAGER_FILE_IDENTIFIERS
 ) {
   if (depth > maxDepth) {
     core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
@@ -99,7 +99,7 @@ function findFilesRecursive(
     entries = fs.readdirSync(currentPath, { withFileTypes: true });
   } catch (error) {
     core.debug(
-      `Error reading directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Error reading directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`
     );
     return;
   }
@@ -111,7 +111,7 @@ function findFilesRecursive(
       stats = fs.statSync(entryPath);
     } catch (error) {
       core.debug(
-        `Error getting stats for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`,
+        `Error getting stats for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`
       );
       continue;
     }
@@ -127,7 +127,7 @@ function findFilesRecursive(
         maxDepth,
         excludedDirs,
         foundManagers,
-        checks,
+        checks
       );
     } else if (stats.isFile()) {
       const fileNameLower = entry.name.toLowerCase();
@@ -136,13 +136,13 @@ function findFilesRecursive(
         if (
           patterns.some((pattern: string) => {
             const lowerPattern = pattern.toLowerCase();
-            if (lowerPattern.startsWith("*.")) {
+            if (lowerPattern.startsWith('*.')) {
               const regexPattern = new RegExp(
                 // Construct regex: .*\.ext$ - e.g. .*\.csproj$
                 // We need to escape the dot in the extension.
                 // entry.name is used here as regex can handle case insensitivity itself.
                 `^.*\\${lowerPattern.substring(1)}$`,
-                "i", // Case-insensitive match
+                'i' // Case-insensitive match
               );
               return regexPattern.test(entry.name);
             } else {
@@ -169,11 +169,11 @@ export function detectPackageManagers(repoPath: string): string[] {
   const detected: Set<string> = new Set();
 
   core.debug(
-    `Detecting package managers in: ${repoPath}, max depth: ${MAX_DEPTH}`,
+    `Detecting package managers in: ${repoPath}, max depth: ${MAX_DEPTH}`
   );
   if (!repoPath || !fs.existsSync(repoPath)) {
     core.warning(
-      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`,
+      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`
     );
     return [];
   }
@@ -184,14 +184,14 @@ export function detectPackageManagers(repoPath: string): string[] {
     MAX_DEPTH,
     EXCLUDED_DIRS,
     detected,
-    PACKAGE_MANAGER_FILE_IDENTIFIERS,
+    PACKAGE_MANAGER_FILE_IDENTIFIERS
   );
 
   const result = Array.from(detected);
   if (result.length > 0) {
-    core.info(`Detected package managers: ${result.join(", ")}`);
+    core.info(`Detected package managers: ${result.join(', ')}`);
   } else {
-    core.info("Detected package managers: none");
+    core.info('Detected package managers: none');
   }
   return result;
 }

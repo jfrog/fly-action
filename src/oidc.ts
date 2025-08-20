@@ -1,7 +1,7 @@
-import * as core from "@actions/core";
-import * as http from "@actions/http-client";
-import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
-import { OutgoingHttpHeaders } from "http";
+import * as core from '@actions/core';
+import * as http from '@actions/http-client';
+import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from './types';
+import { OutgoingHttpHeaders } from 'http';
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -12,11 +12,11 @@ type TokenJson = { access_token?: string; [key: string]: unknown };
  */
 export async function getIDToken(): Promise<string | undefined> {
   try {
-    core.debug("Fetching OIDC token from GitHub");
+    core.debug('Fetching OIDC token from GitHub');
     return await core.getIDToken();
   } catch (error) {
     core.warning(
-      `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`
     );
     return undefined;
   }
@@ -28,11 +28,11 @@ export async function getIDToken(): Promise<string | undefined> {
  */
 export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   const idToken = await getIDToken();
-  if (!idToken) throw new Error("Failed to obtain OIDC token");
+  if (!idToken) throw new Error('Failed to obtain OIDC token');
   // Mask the raw ID token in logs
   core.setSecret(idToken);
 
-  const client = new http.HttpClient("fly-action");
+  const client = new http.HttpClient('fly-action');
   const oidcUrl = `${url}/fly/api/v1/ci/start-oidc`;
   core.debug(`Authenticating with Fly OIDC at ${oidcUrl}`);
 
@@ -49,7 +49,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   const rawResponse = await client.post(
     oidcUrl,
     JSON.stringify(payload),
-    headers,
+    headers
   );
   const body = await rawResponse.readBody();
   // Parse JSON to mask access_token and register secret
@@ -63,11 +63,11 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     parsedJson = {};
   }
   const maskedResponse = parsedJson.access_token
-    ? { ...parsedJson, access_token: "***" }
+    ? { ...parsedJson, access_token: '***' }
     : parsedJson;
   // Log response details
   core.debug(
-    `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
+    `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`
   );
   // Log success or error and throw on non-success status
   if (
@@ -79,15 +79,15 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   } else {
     core.error(
       `OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
-        maskedResponse,
-      )}`,
+        maskedResponse
+      )}`
     );
     throw new Error(`OIDC failed ${rawResponse.message.statusCode}: ${body}`);
   }
   const parsed = parsedJson as FlyOidcResponse;
   if (!parsed || !parsed.access_token) {
     throw new Error(
-      `OIDC response did not contain an access token, body: ${body}`,
+      `OIDC response did not contain an access token, body: ${body}`
     );
   }
   const accessToken = parsed.access_token;

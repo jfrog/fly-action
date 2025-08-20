@@ -1,8 +1,8 @@
 ---
-name: "⭐️ Feature request"
+name: '⭐️ Feature request'
 description: Suggest an idea for this project
-title: "(short feature description)"
-labels: [ feature request ]
+title: '(short feature description)'
+labels: [feature request]
 body:
   - type: textarea
     id: description
