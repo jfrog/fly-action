@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   integration-test:
-    runs-on: linux-arm64
+    runs-on: linux-amd64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
