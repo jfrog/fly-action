@@ -2,13 +2,7 @@ import { jest } from "@jest/globals";
 
 // Mock @actions/core
 const mockSummary = {
-  addHeading: jest.fn().mockReturnThis(),
   addRaw: jest.fn().mockReturnThis(),
-  addBreak: jest.fn().mockReturnThis(),
-  addQuote: jest.fn().mockReturnThis(),
-  addTable: jest.fn().mockReturnThis(),
-  addLink: jest.fn().mockReturnThis(),
-  addSeparator: jest.fn().mockReturnThis(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   write: jest.fn() as any,
 };
@@ -45,45 +39,36 @@ describe("createJobSummary", () => {
   it("should create job summary with npm artifacts", async () => {
     await createJobSummary(["npm"]);
 
-    expect(mockSummary.addHeading).toHaveBeenCalledWith("🚀 Fly Action", 1);
-    expect(mockSummary.addRaw).toHaveBeenCalledWith(
-      "✅ Completed successfully",
-    );
-    expect(mockSummary.addHeading).toHaveBeenCalledWith(
-      "📦 Published Artifacts",
-      2,
-    );
-    expect(mockSummary.addTable).toHaveBeenCalled();
-    expect(mockSummary.addLink).toHaveBeenCalledWith(
-      "📢 View Release In Fly",
-      expect.any(String),
-    );
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    expect(markdownContent).toContain("# 🚀 Fly Action");
+    expect(markdownContent).toContain("✅ **Completed successfully**");
+    expect(markdownContent).toContain("📦 Published Artifacts");
+    expect(markdownContent).toContain("ascii-frog-frontend");
+    expect(markdownContent).toContain("📢 [View Release In Fly]");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
   it("should create job summary with docker artifacts", async () => {
     await createJobSummary(["docker"]);
 
-    expect(mockSummary.addHeading).toHaveBeenCalledWith("🚀 Fly Action", 1);
-    expect(mockSummary.addTable).toHaveBeenCalled();
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    expect(markdownContent).toContain("ascii-frog");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
   it("should show no artifacts message when no supported package managers", async () => {
     await createJobSummary(["unsupported"]);
 
-    expect(mockSummary.addQuote).toHaveBeenCalledWith(
-      "📦 No artifacts published",
-    );
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    expect(markdownContent).toContain("> 📦 No artifacts published");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
   it("should show no artifacts message when empty package managers array", async () => {
     await createJobSummary([]);
 
-    expect(mockSummary.addQuote).toHaveBeenCalledWith(
-      "📦 No artifacts published",
-    );
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    expect(markdownContent).toContain("> 📦 No artifacts published");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
@@ -92,10 +77,8 @@ describe("createJobSummary", () => {
 
     await createJobSummary(["npm"]);
 
-    expect(mockSummary.addLink).toHaveBeenCalledWith(
-      "📢 View Release In Fly",
-      "https://fly.jfrogdev.org",
-    );
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    expect(markdownContent).toContain("https://fly.jfrogdev.org");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 

@@ -1,4 +1,6 @@
 import * as core from "@actions/core";
+import * as fs from "fs";
+import * as path from "path";
 
 interface Artifact {
   name: string;
@@ -26,6 +28,23 @@ const PACKAGE_MANAGER_MOCKS: Record<string, Artifact[]> = {
     { name: "ascii-frog", version: "latest", type: "docker", published: "" },
   ],
 };
+
+function generateArtifactsMarkdown(artifacts: Artifact[]): string {
+  if (artifacts.length === 0) {
+    return "> 📦 No artifacts published";
+  }
+
+  const tableHeader =
+    "| Artifact | Type | Published |\n|----------|------|-----------|";
+  const tableRows = artifacts
+    .map(
+      (artifact) =>
+        `| 📦 ${artifact.name} | ${artifact.type} | ${artifact.published} |`,
+    )
+    .join("\n");
+
+  return `${tableHeader}\n${tableRows}`;
+}
 
 export async function createJobSummary(
   packageManagers: string[],
@@ -55,42 +74,28 @@ export async function createJobSummary(
       releaseUrl = `https://fly.jfrogdev.org/dashboard/registry/git-repositories/${owner}/${repoName}/releases/${encodedJobName}/${encodedJobName}/artifacts`;
     }
 
-    // Create summary
-    let summary = core.summary
-      .addHeading("🚀 Fly Action", 1)
-      .addRaw("✅ Completed successfully")
-      .addBreak()
-      .addHeading("📦 Published Artifacts", 2);
+    // Read markdown template
+    const templatePath = path.join(
+      __dirname,
+      "..",
+      "templates",
+      "job-summary.md",
+    );
+    const template = fs.readFileSync(templatePath, "utf8");
 
-    if (artifacts.length === 0) {
-      summary = summary.addQuote("📦 No artifacts published");
-    } else {
-      const tableHeaders = [
-        { data: "Artifact", header: true },
-        { data: "Version", header: true },
-        { data: "Type", header: true },
-        { data: "Published", header: true },
-      ];
+    // Generate artifacts section
+    const artifactsMarkdown = generateArtifactsMarkdown(artifacts);
 
-      const tableData = artifacts.map((artifact) => [
-        `📦 ${artifact.name}`,
-        artifact.version,
-        artifact.type,
-        artifact.published,
-      ]);
+    // Replace template variables
+    const markdownContent = template
+      .replace("{{ARTIFACTS_SECTION}}", artifactsMarkdown)
+      .replace("{{RELEASE_URL}}", releaseUrl);
 
-      summary = summary.addTable([tableHeaders, ...tableData]);
-    }
-
-    summary = summary
-      .addBreak()
-      .addSeparator()
-      .addLink("📢 View Release In Fly", releaseUrl)
-      .addBreak()
-      .addSeparator();
+    // Create summary from markdown
+    const summary = core.summary.addRaw(markdownContent);
 
     await summary.write();
-    core.info("Job summary created successfully");
+    core.info("Job summary created successfully from markdown template");
   } catch (error) {
     core.warning(`Failed to create job summary: ${error}`);
   }
