@@ -41,6 +41,7 @@ describe("runPost", () => {
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {
         post: mockHttpClientPost, // Use renamed mock
+        dispose: jest.fn(), // Add dispose method to mock
       };
     });
 
@@ -215,6 +216,7 @@ describe("runPostScriptLogic", () => {
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {
         post: mockHttpClientPost,
+        dispose: jest.fn(),
       };
     });
   });
