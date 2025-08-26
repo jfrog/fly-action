@@ -6,6 +6,7 @@ import {
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
+import { createJobSummary } from "./job-summary";
 
 export async function runPost(): Promise<void> {
   core.info("🏁 Notifying Fly that CI job has ended...");
@@ -23,7 +24,7 @@ export async function runPost(): Promise<void> {
   }
 
   const packageManagersState = core.getState(STATE_FLY_PACKAGE_MANAGERS);
-  let packageManagers: string[] | undefined;
+  let packageManagers: string[] = [];
   if (packageManagersState) {
     try {
       packageManagers = JSON.parse(packageManagersState);
@@ -52,6 +53,7 @@ export async function runPost(): Promise<void> {
   core.info(
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
+
   try {
     const response = await httpClient.post(
       `${flyUrl}/fly/api/v1/ci/end`,
@@ -67,6 +69,7 @@ export async function runPost(): Promise<void> {
     );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
+      await createJobSummary(packageManagers);
     } else {
       const body = await response.readBody();
       core.error(

@@ -15,12 +15,28 @@ jest.mock("@actions/http-client");
 const mockCore = core as jest.Mocked<typeof core>;
 const mockHttpClientPost = jest.fn(); // Renamed for clarity
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockSummary: any;
+
 describe("runPost", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+
+    // Mock the summary object with chainable methods
+    mockSummary = {
+      addHeading: jest.fn().mockReturnThis(),
+      addRaw: jest.fn().mockReturnThis(),
+      addBreak: jest.fn().mockReturnThis(),
+      addQuote: jest.fn().mockReturnThis(),
+      addTable: jest.fn().mockReturnThis(),
+      addLink: jest.fn().mockReturnThis(),
+      write: jest.fn().mockResolvedValue(undefined),
+    };
+
+    mockCore.summary = mockSummary;
 
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {

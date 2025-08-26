@@ -90,10 +90,7 @@ describe("run", () => {
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
     expect(setSecretSpy).toHaveBeenCalledWith("token");
     expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_URL, "https://url");
-    expect(saveStateSpy).toHaveBeenCalledWith(
-      STATE_FLY_ACCESS_TOKEN,
-      "token",
-    );
+    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_ACCESS_TOKEN, "token");
     expect(execSpy).toHaveBeenCalled();
     expect(setFailedSpy).not.toHaveBeenCalled();
   });
@@ -188,9 +185,7 @@ describe("run exec and binary error branches", () => {
   it("calls setFailed when binary is missing", async () => {
     // stub no binary
     (fs.existsSync as jest.Mock).mockReturnValue(false);
-    (path.resolve as jest.Mock).mockReturnValue(
-      "/test/path/fly-darwin-arm64",
-    ); // Mock path.resolve to provide a concrete path for the error message
+    (path.resolve as jest.Mock).mockReturnValue("/test/path/fly-darwin-arm64"); // Mock path.resolve to provide a concrete path for the error message
     getInputSpy.mockImplementation(() => "");
 
     await run();
