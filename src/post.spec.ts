@@ -1,6 +1,8 @@
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
+import * as fs from "fs";
+import * as path from "path";
 import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
@@ -11,9 +13,17 @@ import { runPost, runPostScriptLogic } from "./post"; // Import with new name
 // Mock @actions/core
 jest.mock("@actions/core");
 jest.mock("@actions/http-client");
+jest.mock("fs", () => {
+  const actualFs = jest.requireActual("fs");
+  return {
+    ...actualFs,
+    existsSync: jest.fn(),
+  };
+});
 
 const mockCore = core as jest.Mocked<typeof core>;
 const mockHttpClientPost = jest.fn(); // Renamed for clarity
+const mockFs = fs as jest.Mocked<typeof fs>;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockSummary: any;
@@ -53,6 +63,9 @@ describe("runPost", () => {
         return JSON.stringify(["npm", "maven"]);
       return "";
     });
+
+    // Reset the fs mock for each test
+    mockFs.existsSync.mockReset();
   });
 
   afterEach(() => {
@@ -61,6 +74,9 @@ describe("runPost", () => {
   });
 
   it("should call notifyCiEnd with status 'success' and package managers if available", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () => "Notification sent",
@@ -87,6 +103,9 @@ describe("runPost", () => {
   });
 
   it("should call notifyCiEnd with status 'success' and no package managers if not available", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
@@ -114,6 +133,9 @@ describe("runPost", () => {
   });
 
   it("should skip notification if URL is not available", async () => {
+    // Mock file exists (not relevant since no URL, but for consistency)
+    jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return ""; // No URL
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
@@ -129,6 +151,9 @@ describe("runPost", () => {
   });
 
   it("should skip notification if access token is not available", async () => {
+    // Mock file exists (not relevant since no token, but for consistency)
+    jest.spyOn(fs, "existsSync").mockReturnValue(true);
+
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return ""; // No access token
@@ -144,6 +169,9 @@ describe("runPost", () => {
   });
 
   it("should re-throw errors during HTTP client post operation", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     // Standard mock for getState, ensuring URL and token are present
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
@@ -156,6 +184,9 @@ describe("runPost", () => {
   });
 
   it("should re-throw error if HTTP response is not 200", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
@@ -174,6 +205,9 @@ describe("runPost", () => {
   });
 
   it("should warn if package managers string is invalid JSON and send request without them", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
@@ -200,6 +234,93 @@ describe("runPost", () => {
       expect.any(Object),
     );
   });
+
+  it("should determine status as 'failure' when status file does not exist", async () => {
+    // Mock file doesn't exist
+    mockFs.existsSync.mockReturnValue(false);
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      expect.any(String),
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
+      expect.any(Object),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith("Job status: failure");
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "⚠️ No job success indicator file found - job may have failed or user hasn't added success marker step",
+    );
+  });
+
+  it("should determine status as 'failure' when filesystem error occurs", async () => {
+    // Mock filesystem error
+    mockFs.existsSync.mockImplementation(() => {
+      throw new Error("Filesystem access error");
+    });
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      "Error checking job status file: Error: Filesystem access error",
+    );
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      expect.any(String),
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
+      expect.any(Object),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith("Job status: failure");
+  });
+
+  it("should use GITHUB_WORKSPACE environment variable for status file path", async () => {
+    process.env.GITHUB_WORKSPACE = "/custom/workspace/path";
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockFs.existsSync).toHaveBeenCalledWith(
+      path.join("/custom/workspace/path", ".fly-job-status"),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "🔍 Looking for success file at: /custom/workspace/path/.fly-job-status",
+    );
+  });
+
+  it("should fallback to process.cwd() when GITHUB_WORKSPACE is not set", async () => {
+    delete process.env.GITHUB_WORKSPACE;
+    jest.spyOn(process, "cwd").mockReturnValue("/fallback/path");
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockFs.existsSync).toHaveBeenCalledWith(
+      path.join("/fallback/path", ".fly-job-status"),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "🔍 Looking for success file at: /fallback/path/.fly-job-status",
+    );
+  });
 });
 
 // Test suite for the mainRunner (now runPostScriptLogic)
@@ -219,16 +340,30 @@ describe("runPostScriptLogic", () => {
         dispose: jest.fn(),
       };
     });
+    // Reset the fs mock for each test
+    mockFs.existsSync.mockReset();
   });
 
   it("should call runPost and not setFailed on success", async () => {
-    // runPost is mocked to resolve successfully by default in beforeEach
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
+    // Mock successful HTTP response
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
     await runPostScriptLogic();
     expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
   it("should call runPost and setFailed on error", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     const errorMessage = "Test error from runPost";
     mockHttpClientPost.mockRejectedValueOnce(new Error(errorMessage));
 
@@ -239,6 +374,9 @@ describe("runPostScriptLogic", () => {
   });
 
   it("should handle non-Error objects thrown by runPost", async () => {
+    // Mock file exists (success case)
+    mockFs.existsSync.mockReturnValue(true);
+
     const errorString = "Just a string error";
     mockHttpClientPost.mockRejectedValueOnce(errorString);
 

@@ -1,4 +1,6 @@
 import * as core from "@actions/core";
+import * as fs from "fs";
+import * as path from "path";
 import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
@@ -7,6 +9,36 @@ import {
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 import { createJobSummary } from "./job-summary";
+
+/**
+ * Determines the current job status by checking for user-set success indicator file
+ * Simple approach: if file exists = success, if not = failure
+ */
+function determineJobStatus(): string {
+  try {
+    const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
+    const statusFilePath = path.join(workspacePath, ".fly-job-status");
+
+    core.info(`🔍 Looking for success file at: ${statusFilePath}`);
+    core.info(`📁 Workspace path: ${workspacePath}`);
+    core.info(`📁 Current working directory: ${process.cwd()}`);
+
+    if (fs.existsSync(statusFilePath)) {
+      core.info(
+        "✅ Found job success indicator file - user workflow completed successfully",
+      );
+      return "success";
+    } else {
+      core.info(
+        "⚠️ No job success indicator file found - job may have failed or user hasn't added success marker step",
+      );
+      return "failure";
+    }
+  } catch (error) {
+    core.warning(`Error checking job status file: ${error}`);
+    return "failure";
+  }
+}
 
 export async function runPost(): Promise<void> {
   core.info("🏁 Notifying Fly that CI job has ended...");
@@ -35,8 +67,8 @@ export async function runPost(): Promise<void> {
     }
   }
 
-  // Hardcoded status
-  const determinedStatus = "success";
+  // Determine actual job status
+  const determinedStatus = determineJobStatus();
   core.info(`Job status: ${determinedStatus}`); // Changed from debug to info
 
   const payload: EndCiRequest = {
@@ -69,7 +101,14 @@ export async function runPost(): Promise<void> {
     );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
-      await createJobSummary(packageManagers);
+
+      // Only create job summary if the job succeeded
+      if (determinedStatus === "success") {
+        core.info("📋 Creating job summary for successful job...");
+        await createJobSummary(packageManagers);
+      } else {
+        core.info("⚠️ Skipping job summary creation - job did not succeed");
+      }
     } else {
       const body = await response.readBody();
       core.error(
