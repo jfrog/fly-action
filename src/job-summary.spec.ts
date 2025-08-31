@@ -52,7 +52,7 @@ describe("createJobSummary", () => {
     await createJobSummary(["docker"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("ascii-frog");
+    expect(markdownContent).toContain("ascii-frog-app");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 

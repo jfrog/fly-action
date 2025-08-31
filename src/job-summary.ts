@@ -25,7 +25,12 @@ const PACKAGE_MANAGER_MOCKS: Record<string, Artifact[]> = {
     },
   ],
   docker: [
-    { name: "ascii-frog", version: "latest", type: "docker", published: "" },
+    {
+      name: "ascii-frog-app",
+      version: "latest",
+      type: "docker",
+      published: "",
+    },
   ],
 };
 
