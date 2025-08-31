@@ -40,11 +40,11 @@ describe("createJobSummary", () => {
     await createJobSummary(["npm"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("# 🚀 Fly Action");
+    expect(markdownContent).toContain("# 🚀 Fly action");
     expect(markdownContent).toContain("✅ **Completed successfully**");
-    expect(markdownContent).toContain("📦 Published Artifacts");
+    expect(markdownContent).toContain("📦 Published artifacts");
     expect(markdownContent).toContain("ascii-frog-frontend");
-    expect(markdownContent).toContain("📢 [View Release In Fly]");
+    expect(markdownContent).toContain("📢 [View release in Fly]");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
@@ -52,7 +52,7 @@ describe("createJobSummary", () => {
     await createJobSummary(["docker"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("ascii-frog");
+    expect(markdownContent).toContain("ascii-frog-app");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 

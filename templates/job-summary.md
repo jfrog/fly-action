@@ -1,13 +1,13 @@
-# 🚀 Fly Action
+# 🚀 Fly action
 
 ✅ **Completed successfully**
 
-## 📦 Published Artifacts
+## 📦 Published artifacts
 
 {{ARTIFACTS_SECTION}}
 
 ---
 
-### 📢 [View Release In Fly]({{RELEASE_URL}})
+### 📢 [View release in Fly]({{RELEASE_URL}})
 
 ---
