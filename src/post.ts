@@ -132,6 +132,7 @@ export async function runPost(): Promise<void> {
 export async function runPostScriptLogic(): Promise<void> {
   try {
     await runPost();
+    setTimeout(() => {}, 40000); // 40 seconds
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     core.setFailed(message);
