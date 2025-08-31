@@ -100,6 +100,9 @@ describe("runPost", () => {
       "✅ CI end notification completed successfully",
     );
     expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "✅ Found job success indicator file - user workflow completed successfully",
+    );
   });
 
   it("should call notifyCiEnd with status 'success' and no package managers if not available", async () => {
@@ -130,6 +133,9 @@ describe("runPost", () => {
       }),
     );
     expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "✅ Found job success indicator file - user workflow completed successfully",
+    );
   });
 
   it("should skip notification if URL is not available", async () => {
