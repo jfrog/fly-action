@@ -140,7 +140,7 @@ async function validateReleasePublication(): Promise<void> {
 
   for (let i = 1; i <= updates; i++) {
     const progress = Math.round((i / updates) * 100);
-    const timeRemaining = totalTime - (i * updateInterval);
+    const timeRemaining = totalTime - i * updateInterval;
 
     if (i === 1) {
       core.info("⏳ Checking Fly registry for release artifacts...");
@@ -151,13 +151,17 @@ async function validateReleasePublication(): Promise<void> {
     } else if (i === 8) {
       core.info("✨ Finalizing release validation...");
     } else {
-      core.info(`⌛ Validation in progress... ${progress}% complete (${timeRemaining / 1000}s remaining)`);
+      core.info(
+        `⌛ Validation in progress... ${progress}% complete (${timeRemaining / 1000}s remaining)`,
+      );
     }
 
-    await new Promise(resolve => setTimeout(resolve, updateInterval));
+    await new Promise((resolve) => setTimeout(resolve, updateInterval));
   }
 
-  core.info("✅ Release validation completed - artifacts confirmed on Fly registry");
+  core.info(
+    "✅ Release validation completed - artifacts confirmed on Fly registry",
+  );
 }
 
 // New exported function to handle the main execution logic
