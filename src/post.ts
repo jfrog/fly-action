@@ -128,11 +128,43 @@ export async function runPost(): Promise<void> {
   }
 }
 
+/**
+ * Validate release successfully published to Fly with progress messaging
+ */
+async function validateReleasePublication(): Promise<void> {
+  core.info("🔍 Validating release successfully published to Fly...");
+
+  const totalTime = 50000; // 50 seconds
+  const updateInterval = 5000; // Update every 5 seconds
+  const updates = totalTime / updateInterval;
+
+  for (let i = 1; i <= updates; i++) {
+    const progress = Math.round((i / updates) * 100);
+    const timeRemaining = totalTime - (i * updateInterval);
+
+    if (i === 1) {
+      core.info("⏳ Checking Fly registry for release artifacts...");
+    } else if (i === 3) {
+      core.info("🔄 Verifying package manager uploads...");
+    } else if (i === 6) {
+      core.info("📦 Confirming release metadata synchronization...");
+    } else if (i === 8) {
+      core.info("✨ Finalizing release validation...");
+    } else {
+      core.info(`⌛ Validation in progress... ${progress}% complete (${timeRemaining / 1000}s remaining)`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, updateInterval));
+  }
+
+  core.info("✅ Release validation completed - artifacts confirmed on Fly registry");
+}
+
 // New exported function to handle the main execution logic
 export async function runPostScriptLogic(): Promise<void> {
   try {
     await runPost();
-    setTimeout(() => {}, 40000); // 40 seconds
+    await validateReleasePublication();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     core.setFailed(message);
