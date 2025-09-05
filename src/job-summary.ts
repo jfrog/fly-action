@@ -73,11 +73,17 @@ export async function createJobSummary(
     const workflowName = process.env.GITHUB_WORKFLOW;
     const runNumber = process.env.GITHUB_RUN_NUMBER;
 
-    let releaseUrl = "https://fly.jfrogdev.org";
+    // Determine base URL based on owner
+    const baseUrl =
+      owner === "Frog-GenAI"
+        ? "https://fly.jfrog.ai"
+        : "https://fly.jfrogdev.org";
+
+    let releaseUrl = baseUrl;
     if (fullRepo && owner && workflowName && runNumber) {
       const repoName = fullRepo.split("/")[1];
       const encodedWorkflowName = encodeURIComponent(workflowName);
-      releaseUrl = `https://fly.jfrogdev.org/dashboard/registry/git-repositories/${owner}/${repoName}/releases/${encodedWorkflowName}/${runNumber}/artifacts`;
+      releaseUrl = `${baseUrl}/dashboard/registry/git-repositories/${owner}/${repoName}/releases/${encodedWorkflowName}/${runNumber}/artifacts`;
     }
 
     // Read markdown template
