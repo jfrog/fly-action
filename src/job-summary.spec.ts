@@ -40,7 +40,7 @@ describe("createJobSummary", () => {
     await createJobSummary(["npm"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("# 🚀 Fly action");
+    expect(markdownContent).toContain("# 🦋 Fly action");
     expect(markdownContent).toContain("✅ **Completed successfully**");
     expect(markdownContent).toContain("📦 Published artifacts");
     expect(markdownContent).toContain("ascii-frog-frontend");
