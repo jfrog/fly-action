@@ -76,6 +76,7 @@ export async function run(): Promise<void> {
     core.info("Fly CLI setup command completed successfully.");
   } catch (error) {
     core.error("Error occurred during execution.");
+
     if (error instanceof Error) core.setFailed(error.message);
     else core.setFailed("An unknown error occurred");
   }

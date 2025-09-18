@@ -1,7 +1,7 @@
 name: Integration Test
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
         id: run-action
         uses: ./
         with:
-          url: 'https://ffjobff1980806.jfrogdev.org'
+          url: "https://ffjobff1980806.jfrogdev.org"
           ignore: helm
 
       - name: Install setuptools with verbose output
