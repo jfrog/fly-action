@@ -1,4 +1,10 @@
-# fly-action
+<div align="center">
+
+# Fly Action
+
+[![Scanned by Frogbot](https://raw.githubusercontent.com/jfrog/frogbot/refs/heads/master/images/frogbot-badge.svg)](https://docs.jfrog-applications.jfrog.io/jfrog-applications/frogbot)
+
+</div>
 
 This GitHub Action downloads the Fly CLI and configures package managers to use Fly as a registry for dependencies.
 
@@ -40,9 +46,11 @@ permissions:
 ```
 
 #### Required Inputs
+
 - `url`: Fly URL
 
 #### Optional Inputs
+
 - `ignore`: Comma-separated list of package managers to ignore (e.g., docker,pip)
 
 ## Inputs
@@ -124,13 +132,17 @@ To develop and test locally:
 ### Publishing a new version
 
 - Ensure tests pass and build is up to date:
+
   ```bash
   npm test && npm run build
   ```
+
 - Push changes to the default branch (e.g., `main`):
+
   ```bash
   git push origin main
   ```
+
 - Draft a release in the GitHub UI:
   1. Go to the “Releases” page of your repository.
   2. Click **Draft a new release**.
