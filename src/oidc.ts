@@ -1,10 +1,6 @@
 import * as core from "@actions/core";
 import * as http from "@actions/http-client";
-import {
-  OidcAuthResult,
-  FlyOidcRequest,
-  FlyOidcResponse,
-} from "./types";
+import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
 
 // Represents the JSON body of the token exchange response

@@ -81,6 +81,8 @@ export async function runPost(): Promise<void> {
     core.error(`Error during CI end notification: ${message}`); // Use core.error for better visibility
     // Re-throw the error to be caught by the mainRunner or the test
     throw error;
+  } finally {
+    httpClient.dispose();
   }
 }
 
