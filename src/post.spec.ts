@@ -25,11 +25,20 @@ const mockCore = core as jest.Mocked<typeof core>;
 const mockHttpClientPost = jest.fn(); // Renamed for clarity
 const mockGithub = github as jest.Mocked<typeof github>;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockSummary: any;
+interface MockSummary {
+  addHeading: jest.Mock;
+  addRaw: jest.Mock;
+  addBreak: jest.Mock;
+  addQuote: jest.Mock;
+  addTable: jest.Mock;
+  addLink: jest.Mock;
+  write: jest.Mock;
+}
+
+let mockSummary: MockSummary;
 
 // Helper function to create mock GitHub API responses
-const createMockOctokit = (workflowRun: any, jobs: any) => ({
+const createMockOctokit = (workflowRun: unknown, jobs: unknown) => ({
   rest: {
     actions: {
       getWorkflowRun: jest.fn().mockResolvedValue({ data: workflowRun }),
@@ -49,7 +58,7 @@ const createMockJob = (
   name: string,
   status = "in_progress",
   conclusion = null,
-  steps: any[] = [],
+  steps: Array<{ name: string; conclusion: string | null }> = [],
 ) => ({
   name,
   status,
@@ -62,6 +71,9 @@ const createMockStep = (name: string, conclusion: string | null = null) => ({
   name,
   conclusion,
 });
+
+// Type for mock objects
+type MockOctokit = ReturnType<typeof createMockOctokit>;
 
 describe("runPost", () => {
   const originalEnv = process.env;
@@ -87,7 +99,7 @@ describe("runPost", () => {
       write: jest.fn().mockResolvedValue(undefined),
     };
 
-    mockCore.summary = mockSummary;
+    mockCore.summary = mockSummary as unknown as typeof mockCore.summary;
 
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {
@@ -125,7 +137,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -167,7 +181,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -233,7 +249,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     // Standard mock for getState, ensuring URL and token are present
     mockCore.getState.mockImplementation((name: string) => {
@@ -258,7 +276,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
@@ -289,7 +309,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
@@ -352,7 +374,9 @@ describe("runPost", () => {
         },
       },
     };
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -386,7 +410,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -421,7 +447,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -454,7 +482,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -489,7 +519,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -521,7 +553,9 @@ describe("runPost", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
@@ -570,13 +604,13 @@ describe("filterMainSteps", () => {
     const steps = [
       { name: "Checkout", conclusion: "success" },
       { name: undefined, conclusion: "success" },
-      { name: null, conclusion: "success" },
+      { name: undefined, conclusion: "success" },
     ];
     const result = filterMainSteps(steps);
     expect(result).toEqual([
       { name: "Checkout", conclusion: "success" },
       { name: undefined, conclusion: "success" },
-      { name: null, conclusion: "success" },
+      { name: undefined, conclusion: "success" },
     ]);
   });
 
@@ -612,7 +646,7 @@ describe("filterMainSteps", () => {
 });
 
 describe("analyzeJobSteps", () => {
-  const mockCoreInfo = jest.spyOn(require("@actions/core"), "info");
+  const mockCoreInfo = jest.spyOn(core, "info");
 
   beforeEach(() => {
     mockCoreInfo.mockClear();
@@ -743,7 +777,9 @@ describe("runPostScriptLogic", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     // Mock successful HTTP response
     const fakeResponse: HttpClientResponse = {
@@ -769,7 +805,9 @@ describe("runPostScriptLogic", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const errorMessage = "Test error from runPost";
     mockHttpClientPost.mockRejectedValueOnce(new Error(errorMessage));
@@ -792,7 +830,9 @@ describe("runPostScriptLogic", () => {
     };
 
     const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(mockOctokit as any);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
 
     const errorString = "Just a string error";
     mockHttpClientPost.mockRejectedValueOnce(errorString);

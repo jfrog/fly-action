@@ -100,7 +100,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect npm if package.json is present at root", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("package.json", false)];
       }
@@ -111,7 +111,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect yarn if yarn.lock is present at root", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("yarn.lock", false),
@@ -128,7 +128,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect pnpm if pnpm-lock.yaml is present at root", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("pnpm-lock.yaml", false),
@@ -143,7 +143,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect poetry if poetry.lock is present", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("poetry.lock", false),
@@ -158,7 +158,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect pipenv if Pipfile is present", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("pipfile", false), // Assuming 'pipfile' is the exact name checked (case-sensitively for mock)
@@ -173,7 +173,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect pip for requirements.txt", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("requirements.txt", false)];
       }
@@ -184,7 +184,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect maven for pom.xml", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("pom.xml", false)];
       }
@@ -195,7 +195,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect gradle for build.gradle", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("build.gradle", false)];
       }
@@ -206,7 +206,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect dotnet for .csproj file", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("myproject.csproj", false)];
       }
@@ -217,7 +217,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect nuget for .nuspec file", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("mypackage.nuspec", false)];
       }
@@ -228,7 +228,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect docker for Dockerfile (case-insensitive)", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("Dockerfile", false)];
       }
@@ -239,7 +239,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect helm for Chart.yaml (case-insensitive)", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [createDirent("Chart.yaml", false)];
       }
@@ -250,7 +250,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect multiple package managers at root", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("package.json", false),
@@ -265,7 +265,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should detect files in subdirectories up to MAX_DEPTH", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       const p = dirPath.toString();
       if (p === repoPath) {
         return [createDirent("subdir", true)];
@@ -288,7 +288,7 @@ describe("detectPackageManagers", () => {
 
   test("should ignore files beyond MAX_DEPTH", () => {
     // MAX_DEPTH is 2 (0, 1, 2). So level3dir (depth 3) should be ignored.
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       const p = dirPath.toString();
       if (p === repoPath) return [createDirent("level1dir", true)];
       if (p === path.join(repoPath, "level1dir"))
@@ -311,7 +311,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should ignore files in excluded directories", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       const p = dirPath.toString();
       if (p === repoPath) {
         // node_modules is a directory
@@ -330,7 +330,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should handle case insensitivity for found filenames", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("PACKAGE.JSON", false),
@@ -344,7 +344,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("should correctly identify unique managers if multiple indicator files for the same manager are found", () => {
-    mockedFs.readdirSync.mockImplementation((dirPath) => {
+    mockedFs.readdirSync.mockImplementation((dirPath: fs.PathLike) => {
       if (dirPath === repoPath) {
         return [
           createDirent("requirements.txt", false),
@@ -359,7 +359,7 @@ describe("detectPackageManagers", () => {
   });
 
   test("complex scenario with mixed files, depths, and excluded dirs", () => {
-    mockedFs.readdirSync.mockImplementation((p) => {
+    mockedFs.readdirSync.mockImplementation((p: fs.PathLike) => {
       const dirPathStr = p.toString();
       if (dirPathStr === repoPath) {
         return [

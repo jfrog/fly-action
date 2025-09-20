@@ -9,6 +9,18 @@ import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 import { createJobSummary } from "./job-summary";
 
+interface GitHubStep {
+  name?: string;
+  conclusion?: string | null;
+}
+
+interface GitHubJob {
+  name: string;
+  status: string;
+  conclusion?: string | null;
+  steps?: GitHubStep[];
+}
+
 interface GitHubEnv {
   runId: string;
   repository: string;
@@ -47,8 +59,8 @@ function getGitHubEnvironment(): GitHubEnv | null {
  * Filters to only main steps (excludes all post-action steps)
  * Main steps have completed by the time any post action runs
  */
-export function filterMainSteps(steps: any[]): any[] {
-  return steps.filter((step: any) => {
+export function filterMainSteps(steps: GitHubStep[]): GitHubStep[] {
+  return steps.filter((step: GitHubStep) => {
     // Post steps typically start with "Post " in their name
     const isPostStep = step.name?.toLowerCase().startsWith("post ");
     return !isPostStep;
@@ -58,11 +70,11 @@ export function filterMainSteps(steps: any[]): any[] {
 /**
  * Checks if any main step failed - simple success/failure determination
  */
-export function analyzeJobSteps(steps: any[]): string {
+export function analyzeJobSteps(steps: GitHubStep[]): string {
   const mainSteps = filterMainSteps(steps);
 
   const hasFailedStep = mainSteps.some(
-    (step: any) =>
+    (step: GitHubStep) =>
       step.conclusion === "failure" || step.conclusion === "cancelled",
   );
 
@@ -110,7 +122,9 @@ async function determineJobStatus(): Promise<string> {
       });
 
       // Find the current job
-      const currentJob = jobs.jobs.find((job: any) => job.name === env.jobName);
+      const currentJob = jobs.jobs.find(
+        (job: GitHubJob) => job.name === env.jobName,
+      );
 
       if (currentJob) {
         core.info(
