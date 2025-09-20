@@ -72,7 +72,6 @@ const createMockStep = (name: string, conclusion: string | null = null) => ({
   conclusion,
 });
 
-
 describe("runPost", () => {
   const originalEnv = process.env;
 
