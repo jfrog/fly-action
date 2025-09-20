@@ -72,8 +72,6 @@ const createMockStep = (name: string, conclusion: string | null = null) => ({
   conclusion,
 });
 
-// Type for mock objects
-type MockOctokit = ReturnType<typeof createMockOctokit>;
 
 describe("runPost", () => {
   const originalEnv = process.env;
