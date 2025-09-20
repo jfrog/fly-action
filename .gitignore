@@ -20,3 +20,6 @@ yarn-error.log*
 # Node modules
 node_modules/
 
+# Package lock files
+package-lock.json
+
