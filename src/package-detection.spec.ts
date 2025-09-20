@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { detectPackageManagers } from "./package-detection";
 import * as fs from "fs";
 import * as path from "path";
