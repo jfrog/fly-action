@@ -110,10 +110,6 @@ async function determineJobStatus(): Promise<string> {
         run_id: parseInt(env.runId),
       });
 
-      core.info(
-        `🔄 Workflow run status: ${workflowRun.status}, conclusion: ${workflowRun.conclusion}`,
-      );
-
       // Get jobs for this workflow run
       const { data: jobs } = await octokit.rest.actions.listJobsForWorkflowRun({
         owner,
@@ -127,10 +123,6 @@ async function determineJobStatus(): Promise<string> {
       );
 
       if (currentJob) {
-        core.info(
-          `📊 Current job status: ${currentJob.status}, conclusion: ${currentJob.conclusion}`,
-        );
-
         // Check individual step statuses
         if (currentJob.steps && currentJob.steps.length > 0) {
           return analyzeJobSteps(currentJob.steps);
