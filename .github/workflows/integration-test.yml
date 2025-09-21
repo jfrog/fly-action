@@ -27,6 +27,12 @@ jobs:
           url: "https://froggen.jfrog.io"
           ignore: helm, dotnet
 
+      - name: Mock failing step (for testing job status detection)
+        run: |
+          echo "This step will intentionally fail to test our post-action logic"
+          echo "Our post-action should detect this failure and report 'failure' status"
+          exit 1
+
       - name: Install setuptools with verbose output
         run: |
           pip cache purge
