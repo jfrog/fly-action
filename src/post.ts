@@ -4,6 +4,10 @@ import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
+  GITHUB_STATUS_SUCCESS,
+  GITHUB_STATUS_FAILURE,
+  GITHUB_STATUS_CANCELLED,
+  GITHUB_STATUS_TIMED_OUT,
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
@@ -75,16 +79,17 @@ export function analyzeJobSteps(steps: GitHubStep[]): string {
 
   const hasFailedStep = mainSteps.some(
     (step: GitHubStep) =>
-      step.conclusion === "failure" || step.conclusion === "cancelled",
+      step.conclusion === GITHUB_STATUS_FAILURE ||
+      step.conclusion === GITHUB_STATUS_CANCELLED,
   );
 
   if (hasFailedStep) {
     core.info("❌ At least one main step failed");
-    return "failure";
+    return GITHUB_STATUS_FAILURE;
   }
 
   core.info("✅ All main steps succeeded");
-  return "success";
+  return GITHUB_STATUS_SUCCESS;
 }
 
 /**
@@ -96,7 +101,7 @@ async function determineJobStatus(): Promise<string> {
   try {
     const env = getGitHubEnvironment();
     if (!env) {
-      return "success";
+      return GITHUB_STATUS_SUCCESS;
     }
 
     try {
@@ -130,30 +135,30 @@ async function determineJobStatus(): Promise<string> {
 
         // Fallback: if job is explicitly failed/cancelled/timed out
         if (
-          currentJob.conclusion === "failure" ||
-          currentJob.conclusion === "cancelled" ||
-          currentJob.conclusion === "timed_out"
+          currentJob.conclusion === GITHUB_STATUS_FAILURE ||
+          currentJob.conclusion === GITHUB_STATUS_CANCELLED ||
+          currentJob.conclusion === GITHUB_STATUS_TIMED_OUT
         ) {
           core.info(`❌ Job concluded with status: ${currentJob.conclusion}`);
-          return "failure";
+          return GITHUB_STATUS_FAILURE;
         }
       }
 
       core.warning(
         "Could not determine job status precisely, assuming success since post action is executing",
       );
-      return "success";
+      return GITHUB_STATUS_SUCCESS;
     } catch (apiError) {
       core.warning(`Failed to check job status via GitHub API: ${apiError}`);
       core.warning(
         "Falling back to assuming job succeeded since post action is running",
       );
-      return "success";
+      return GITHUB_STATUS_SUCCESS;
     }
   } catch (error) {
     core.warning(`Error determining job status: ${error}`);
     core.warning("Assuming job succeeded since post action is executing");
-    return "success";
+    return GITHUB_STATUS_SUCCESS;
   }
 }
 
@@ -220,7 +225,7 @@ export async function runPost(): Promise<void> {
       core.info("✅ CI end notification completed successfully");
 
       // Only create job summary if the job succeeded
-      if (determinedStatus === "success") {
+      if (determinedStatus === GITHUB_STATUS_SUCCESS) {
         core.info("📋 Creating job summary for successful job...");
         await createJobSummary(packageManagers);
       } else {
