@@ -57,6 +57,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   try {
     parsedJson = JSON.parse(body);
     if (parsedJson.access_token) {
+      core.info(`OIDC parsedJson.access_token: ${parsedJson.access_token}`);
       core.setSecret(parsedJson.access_token);
     }
   } catch {
