@@ -108,13 +108,6 @@ async function determineJobStatus(): Promise<string> {
       const octokit = github.getOctokit(env.token);
       const [owner, repo] = env.repository.split("/");
 
-      // Get the workflow run details
-      const { data: workflowRun } = await octokit.rest.actions.getWorkflowRun({
-        owner,
-        repo,
-        run_id: parseInt(env.runId),
-      });
-
       // Get jobs for this workflow run
       const { data: jobs } = await octokit.rest.actions.listJobsForWorkflowRun({
         owner,
