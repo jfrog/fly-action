@@ -1,42 +1,157 @@
 import * as core from "@actions/core";
-import * as fs from "fs";
-import * as path from "path";
+import * as github from "@actions/github";
 import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
+  GITHUB_STATUS_SUCCESS,
+  GITHUB_STATUS_FAILURE,
+  GITHUB_STATUS_CANCELLED,
+  GITHUB_STATUS_TIMED_OUT,
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 import { createJobSummary } from "./job-summary";
 
+interface GitHubStep {
+  name?: string;
+  conclusion?: string | null;
+}
+
+interface GitHubJob {
+  name: string;
+  status: string;
+  conclusion?: string | null;
+  steps?: GitHubStep[];
+}
+
+interface GitHubEnv {
+  runId: string;
+  repository: string;
+  token: string;
+  jobName: string;
+}
+
 /**
- * Determines the current job status by checking for user-set success indicator file
- * Simple approach: if file exists = success, if not = failure
+ * Gets GitHub environment variables required for job status checking
  */
-function determineJobStatus(): string {
+function getGitHubEnvironment(): GitHubEnv | null {
+  const runId = process.env.GITHUB_RUN_ID;
+  const repository = process.env.GITHUB_REPOSITORY;
+  const token = core.getInput("token") || process.env.GITHUB_TOKEN;
+  const jobName = process.env.GITHUB_JOB;
+
+  core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
+  core.info(`📋 Current job: ${jobName}`);
+
+  if (!runId || !repository || !token) {
+    core.warning(
+      "Missing GitHub environment variables, assuming job succeeded since post action is running",
+    );
+    return null;
+  }
+
+  return {
+    runId: runId!,
+    repository: repository!,
+    token: token!,
+    jobName: jobName!,
+  };
+}
+
+/**
+ * Filters to only main steps (excludes all post-action steps)
+ * Main steps have completed by the time any post action runs
+ */
+export function filterMainSteps(steps: GitHubStep[]): GitHubStep[] {
+  return steps.filter((step: GitHubStep) => {
+    // Post steps typically start with "Post " in their name
+    const isPostStep = step.name?.toLowerCase().startsWith("post ");
+    return !isPostStep;
+  });
+}
+
+/**
+ * Checks if any main step failed - simple success/failure determination
+ */
+export function analyzeJobSteps(steps: GitHubStep[]): string {
+  const mainSteps = filterMainSteps(steps);
+
+  const hasFailedStep = mainSteps.some(
+    (step: GitHubStep) =>
+      step.conclusion === GITHUB_STATUS_FAILURE ||
+      step.conclusion === GITHUB_STATUS_CANCELLED,
+  );
+
+  if (hasFailedStep) {
+    core.info("❌ At least one main step failed");
+    return GITHUB_STATUS_FAILURE;
+  }
+
+  core.info("✅ All main steps succeeded");
+  return GITHUB_STATUS_SUCCESS;
+}
+
+/**
+ * Determines workflow status by checking if any main steps failed
+ * When post actions run, all main steps have completed but post steps are still pending.
+ * We only examine main steps to determine if the workflow succeeded up to this point.
+ */
+async function determineJobStatus(): Promise<string> {
   try {
-    const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
-    const statusFilePath = path.join(workspacePath, ".fly-job-status");
+    const env = getGitHubEnvironment();
+    if (!env) {
+      return GITHUB_STATUS_SUCCESS;
+    }
 
-    core.info(`🔍 Looking for success file at: ${statusFilePath}`);
-    core.info(`📁 Workspace path: ${workspacePath}`);
-    core.info(`📁 Current working directory: ${process.cwd()}`);
+    try {
+      const octokit = github.getOctokit(env.token);
+      const [owner, repo] = env.repository.split("/");
 
-    if (fs.existsSync(statusFilePath)) {
-      core.info(
-        "✅ Found job success indicator file - user workflow completed successfully",
+      // Get jobs for this workflow run
+      const { data: jobs } = await octokit.rest.actions.listJobsForWorkflowRun({
+        owner,
+        repo,
+        run_id: parseInt(env.runId),
+      });
+
+      // Find the current job
+      const currentJob = jobs.jobs.find(
+        (job: GitHubJob) => job.name === env.jobName,
       );
-      return "success";
-    } else {
-      core.info(
-        "⚠️ No job success indicator file found - job may have failed or user hasn't added success marker step",
+
+      if (currentJob) {
+        // Check individual step statuses
+        if (currentJob.steps && currentJob.steps.length > 0) {
+          return analyzeJobSteps(currentJob.steps);
+        }
+
+        // Fallback: if job is explicitly failed/cancelled/timed out
+        if (
+          currentJob.conclusion === GITHUB_STATUS_FAILURE ||
+          currentJob.conclusion === GITHUB_STATUS_CANCELLED ||
+          currentJob.conclusion === GITHUB_STATUS_TIMED_OUT
+        ) {
+          core.info(`❌ Job concluded with status: ${currentJob.conclusion}`);
+          return GITHUB_STATUS_FAILURE;
+        }
+      }
+
+      core.warning(
+        "Could not determine job status precisely, assuming success since post action is executing",
       );
-      return "failure";
+      return GITHUB_STATUS_SUCCESS;
+    } catch (apiError) {
+      core.warning(`Failed to check job status via GitHub API: ${apiError}`);
+      core.warning(
+        "Falling back to assuming job succeeded since post action is running",
+      );
+      return GITHUB_STATUS_SUCCESS;
     }
   } catch (error) {
-    core.warning(`Error checking job status file: ${error}`);
-    return "failure";
+    core.warning(`Error determining job status: ${error}`);
+    core.warning("Assuming job succeeded since post action is executing");
+    return GITHUB_STATUS_SUCCESS;
   }
 }
 
@@ -68,7 +183,7 @@ export async function runPost(): Promise<void> {
   }
 
   // Determine actual job status
-  const determinedStatus = determineJobStatus();
+  const determinedStatus = await determineJobStatus();
   core.info(`Job status: ${determinedStatus}`); // Changed from debug to info
 
   const payload: EndCiRequest = {
@@ -103,7 +218,7 @@ export async function runPost(): Promise<void> {
       core.info("✅ CI end notification completed successfully");
 
       // Only create job summary if the job succeeded
-      if (determinedStatus === "success") {
+      if (determinedStatus === GITHUB_STATUS_SUCCESS) {
         core.info("📋 Creating job summary for successful job...");
         await createJobSummary(packageManagers);
       } else {

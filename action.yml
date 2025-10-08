@@ -9,6 +9,10 @@ inputs:
   ignore:
     description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'
     required: false
+  token:
+    description: 'GitHub token for accessing workflow run information'
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: 'node20'
