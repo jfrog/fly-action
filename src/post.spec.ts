@@ -366,8 +366,9 @@ describe("runPost", () => {
     const mockOctokit = {
       rest: {
         actions: {
-          getWorkflowRun: jest.fn().mockRejectedValue(new Error("API Error")),
-          listJobsForWorkflowRun: jest.fn(),
+          listJobsForWorkflowRun: jest
+            .fn()
+            .mockRejectedValue(new Error("API Error")),
         },
       },
     };
