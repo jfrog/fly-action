@@ -159,4 +159,4 @@ Once the release is published, the GitHub Actions workflow will:
 
 ## License
 
-This GitHub Action is licensed under the [MIT License](LICENSE).
+This GitHub Action is licensed under the [Apache-2.0](LICENSE).
