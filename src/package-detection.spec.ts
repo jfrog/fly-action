@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 import { detectPackageManagers } from "./package-detection";
 import * as fs from "fs";
 import * as path from "path";

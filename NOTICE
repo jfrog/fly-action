@@ -1,0 +1,50 @@
+Fly action
+Copyright 2025 JFrog Ltd.
+
+This product includes software developed at
+JFrog Ltd. (https://jfrog.com/).
+
+The following components are developed by GitHub, Inc. (https://github.com/).
+Copyright GitHub, Inc. All Rights Reserved.
+
+The @actions/core package (https://github.com/actions/toolkit/tree/main/packages/core)
+is licensed under the MIT License.
+
+The @actions/exec package (https://github.com/actions/toolkit/tree/main/packages/exec)
+is licensed under the MIT License.
+
+The @actions/github package (https://github.com/actions/toolkit/tree/main/packages/github)
+is licensed under the MIT License.
+
+The @actions/http-client package (https://github.com/actions/toolkit/tree/main/packages/http-client)
+is licensed under the MIT License.
+
+The eslint and @eslint/js packages (https://github.com/eslint/eslint)
+are licensed under the MIT License. Copyright OpenJS Foundation and other contributors.
+
+The TypeScript type definitions (@types/jest, @types/node) from DefinitelyTyped
+(https://github.com/DefinitelyTyped/DefinitelyTyped) are licensed under the MIT License.
+
+The typescript-eslint packages (@typescript-eslint/eslint-plugin, @typescript-eslint/parser)
+(https://github.com/typescript-eslint/typescript-eslint) are licensed under the MIT License.
+
+The @vercel/ncc package (https://github.com/vercel/ncc)
+is licensed under the MIT License. Copyright Vercel, Inc.
+
+The husky package (https://github.com/typicode/husky)
+is licensed under the MIT License. Copyright typicode.
+
+The jest package (https://github.com/jestjs/jest)
+is licensed under the MIT License. Copyright Meta Platforms, Inc. and affiliates.
+
+The prettier package (https://github.com/prettier/prettier)
+is licensed under the MIT License. Copyright James Long and contributors.
+
+The test-exclude package (https://github.com/istanbuljs/test-exclude)
+is licensed under the ISC License.
+
+The ts-jest package (https://github.com/kulshekhar/ts-jest)
+is licensed under the MIT License.
+
+The typescript package (https://github.com/microsoft/TypeScript)
+is licensed under the Apache License 2.0. Copyright Microsoft Corporation.

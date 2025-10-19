@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 // Mock fs and path modules
 jest.mock("fs", () => {
   const actual = jest.requireActual("fs");

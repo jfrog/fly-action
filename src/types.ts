@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 export interface OidcAuthResult {
   /** Access token returned from Fly token exchange */
   accessToken: string;

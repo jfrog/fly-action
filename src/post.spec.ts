@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";

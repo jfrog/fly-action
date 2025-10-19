@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 import { jest } from "@jest/globals";
 
 // Mock @actions/core
