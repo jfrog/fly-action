@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 import { authenticateOidc } from "./oidc";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";

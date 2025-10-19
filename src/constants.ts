@@ -1,3 +1,5 @@
+// Copyright (c) JFrog Ltd. (2025)
+
 export const INPUT_URL = "url";
 export const INPUT_IGNORE_PACKAGE_MANAGERS = "ignore";
 
