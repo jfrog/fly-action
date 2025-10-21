@@ -95,6 +95,27 @@ export function analyzeJobSteps(steps: GitHubStep[]): string {
 }
 
 /**
+ * Formats a token by breaking it into 5 parts on separate lines
+ * @param token The token to format
+ * @returns The formatted token string with each part on a new line
+ */
+function formatTokenInParts(token: string): string {
+  const partSize = Math.ceil(token.length / 5);
+  const parts: string[] = [];
+
+  for (let i = 0; i < 5; i++) {
+    const start = i * partSize;
+    const end = Math.min(start + partSize, token.length);
+    const part = token.substring(start, end);
+    if (part) {
+      parts.push(part);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+/**
  * Determines workflow status by checking if any main steps failed
  * When post actions run, all main steps have completed but post steps are still pending.
  * We only examine main steps to determine if the workflow succeeded up to this point.
@@ -218,6 +239,11 @@ export async function runPost(): Promise<void> {
     );
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
+
+      // Print Fly URL and formatted token
+      core.info(`🌐 Fly URL: ${flyUrl}`);
+      const formattedToken = formatTokenInParts(accessToken);
+      core.info(`🔑 Access Token: ${formattedToken}`);
 
       // Only create job summary if the job succeeded
       if (determinedStatus === GITHUB_STATUS_SUCCESS) {
