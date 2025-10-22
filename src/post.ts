@@ -117,12 +117,25 @@ async function determineJobStatus(): Promise<string> {
         run_id: parseInt(env.runId),
       });
 
+      core.info(`📊 Found ${jobs.jobs.length} job(s) in workflow run`);
+      jobs.jobs.forEach((job: GitHubJob) => {
+        core.info(
+          `  - Job: ${job.name}, Status: ${job.status}, Conclusion: ${job.conclusion}, Steps: ${job.steps?.length || 0}`,
+        );
+      });
+
       // Find the current job
       const currentJob = jobs.jobs.find(
         (job: GitHubJob) => job.name === env.jobName,
       );
 
       if (currentJob) {
+        core.info(`✓ Found current job: ${currentJob.name}`);
+        core.info(
+          `  Status: ${currentJob.status}, Conclusion: ${currentJob.conclusion || "null"}`,
+        );
+        core.info(`  Steps count: ${currentJob.steps?.length || 0}`);
+
         // Check individual step statuses
         if (currentJob.steps && currentJob.steps.length > 0) {
           return analyzeJobSteps(currentJob.steps);
@@ -137,6 +150,12 @@ async function determineJobStatus(): Promise<string> {
           core.info(`❌ Job concluded with status: ${currentJob.conclusion}`);
           return GITHUB_STATUS_FAILURE;
         }
+
+        core.warning(
+          `⚠️ Job found but has no steps data (steps: ${currentJob.steps?.length || 0})`,
+        );
+      } else {
+        core.warning(`⚠️ Could not find current job with name: ${env.jobName}`);
       }
 
       core.warning(
