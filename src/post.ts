@@ -124,9 +124,10 @@ async function determineJobStatus(): Promise<string> {
         );
       });
 
-      // Find the current job
+      // Find the current job (case-insensitive comparison)
       const currentJob = jobs.jobs.find(
-        (job: GitHubJob) => job.name === env.jobName,
+        (job: GitHubJob) =>
+          job.name.toLowerCase() === env.jobName.toLowerCase(),
       );
 
       if (currentJob) {
