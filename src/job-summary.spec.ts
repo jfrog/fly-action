@@ -38,39 +38,35 @@ describe("createJobSummary", () => {
     delete process.env.GITHUB_JOB;
   });
 
-  it("should create job summary with npm artifacts", async () => {
+  it("should create job summary without artifacts table", async () => {
     await createJobSummary(["npm"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
     expect(markdownContent).toContain("# 🦋 Fly action");
     expect(markdownContent).toContain("✅ **Completed successfully**");
     expect(markdownContent).toContain("📦 Published artifacts");
-    expect(markdownContent).toContain("ascii-frog-frontend");
     expect(markdownContent).toContain("📢 [View release in Fly]");
+    expect(markdownContent).toContain("https://fly.jfrog.ai");
+    // Should NOT contain mock artifacts
+    expect(markdownContent).not.toContain("ascii-frog-frontend");
+    expect(markdownContent).not.toContain("ascii-frog-app");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
-  it("should create job summary with docker artifacts", async () => {
-    await createJobSummary(["docker"]);
+  it("should create job summary with any package manager type", async () => {
+    await createJobSummary(["docker", "npm", "pip"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("ascii-frog-app");
+    expect(markdownContent).toContain("# 🦋 Fly action");
+    expect(markdownContent).toContain("https://fly.jfrog.ai");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
-  it("should show no artifacts message when no supported package managers", async () => {
-    await createJobSummary(["unsupported"]);
-
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("> 📦 No artifacts published");
-    expect(mockSummary.write).toHaveBeenCalled();
-  });
-
-  it("should show no artifacts message when empty package managers array", async () => {
+  it("should create job summary even with empty package managers array", async () => {
     await createJobSummary([]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("> 📦 No artifacts published");
+    expect(markdownContent).toContain("# 🦋 Fly action");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
@@ -80,7 +76,7 @@ describe("createJobSummary", () => {
     await createJobSummary(["npm"]);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("https://fly.jfrogdev.org");
+    expect(markdownContent).toContain("https://fly.jfrog.ai");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
