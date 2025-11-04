@@ -40,7 +40,7 @@ interface GitHubEnv {
 function getGitHubEnvironment(): GitHubEnv | null {
   const runId = process.env.GITHUB_RUN_ID;
   const repository = process.env.GITHUB_REPOSITORY;
-  const token = core.getInput("token") || process.env.GITHUB_TOKEN;
+  const token = process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
