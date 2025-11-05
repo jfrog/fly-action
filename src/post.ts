@@ -242,7 +242,7 @@ export async function runPost(): Promise<void> {
       // Only create job summary if the job succeeded
       if (determinedStatus === GITHUB_STATUS_SUCCESS) {
         core.info("📋 Creating job summary for successful job...");
-        await createJobSummary(packageManagers);
+        await createJobSummary();
       } else {
         core.info("⚠️ Skipping job summary creation - job did not succeed");
       }
