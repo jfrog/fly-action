@@ -22,6 +22,10 @@ This GitHub Action downloads the Fly CLI and configures package managers to use 
 name: Build with Fly Registry
 on: [push]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,7 +36,7 @@ jobs:
       - name: Setup Fly Registry
         uses: jfrog/fly-action@v1
         with:
-          url: https://fly.example.com
+          url: https://<your-fly-subdomain>.jfrog.io
           # ignore: docker,pip (optional)
 ```
 
@@ -42,6 +46,7 @@ This action only supports OIDC authentication for enhanced security. You must se
 
 ```yaml
 permissions:
+  contents: read
   id-token: write # Required for OIDC authentication
 ```
 
