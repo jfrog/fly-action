@@ -41,13 +41,14 @@ interface GitHubEnv {
 function getGitHubEnvironment(): GitHubEnv | null {
   const runId = process.env.GITHUB_RUN_ID;
   const repository = process.env.GITHUB_REPOSITORY;
-  const token = core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
+  const githubToken =
+    core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
   core.info(`📋 Current job: ${jobName}`);
 
-  if (!runId || !repository || !token) {
+  if (!runId || !repository || !githubToken) {
     core.warning(
       "Missing GitHub environment variables, assuming job succeeded since post action is running",
     );
@@ -57,7 +58,7 @@ function getGitHubEnvironment(): GitHubEnv | null {
   return {
     runId: runId!,
     repository: repository!,
-    token: token!,
+    token: githubToken!,
     jobName: jobName!,
   };
 }
