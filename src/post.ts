@@ -10,6 +10,7 @@ import {
   GITHUB_STATUS_FAILURE,
   GITHUB_STATUS_CANCELLED,
   GITHUB_STATUS_TIMED_OUT,
+  INPUT_GITHUB_TOKEN,
 } from "./constants";
 import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
@@ -40,7 +41,7 @@ interface GitHubEnv {
 function getGitHubEnvironment(): GitHubEnv | null {
   const runId = process.env.GITHUB_RUN_ID;
   const repository = process.env.GITHUB_REPOSITORY;
-  const token = core.getInput("token") || process.env.GITHUB_TOKEN;
+  const token = core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
