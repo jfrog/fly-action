@@ -16,10 +16,15 @@ import * as fs from "fs";
 import * as path from "path";
 import { resolveFlyCLIBinaryPath, run } from "./index";
 import { authenticateOidc } from "./oidc";
+import { detectPackageManagers } from "./package-detection";
 import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
 
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
+}));
+
+jest.mock("./package-detection", () => ({
+  detectPackageManagers: jest.fn(),
 }));
 
 describe("resolveFlyCLIBinaryPath", () => {
@@ -75,6 +80,8 @@ describe("run", () => {
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
+    // Default: no package managers detected
+    (detectPackageManagers as jest.Mock).mockResolvedValue([]);
   });
 
   it("runs successfully when exec returns 0", async () => {
@@ -155,6 +162,91 @@ describe("run", () => {
     await run();
     expect(setFailedSpy).toHaveBeenCalledWith("An unknown error occurred");
   });
+
+  it("passes detected package managers to fly CLI", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    (detectPackageManagers as jest.Mock).mockResolvedValue([
+      "npm",
+      "maven",
+      "docker",
+    ]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should call exec with detected package managers as arguments
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup", "npm", "maven", "docker"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses fallback when no package managers detected", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    (detectPackageManagers as jest.Mock).mockResolvedValue([]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should call exec without package manager arguments
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("passes single detected package manager to fly CLI", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    (detectPackageManagers as jest.Mock).mockResolvedValue(["npm"]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should call exec with single package manager
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup", "npm"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("run exec and binary error branches", () => {
@@ -172,6 +264,8 @@ describe("run exec and binary error branches", () => {
       user: "u",
       accessToken: "t",
     });
+    // Default: no package managers detected
+    (detectPackageManagers as jest.Mock).mockResolvedValue([]);
   });
 
   it("calls setFailed when exec throws error", async () => {

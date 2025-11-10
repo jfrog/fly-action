@@ -81,24 +81,113 @@ const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
   "site-packages",
 ]);
 
-const MAX_DEPTH = 2;
+const MAX_DEPTH = 3;
 
-function findFilesRecursive(
+// Pre-compile regex patterns at module initialization for performance
+interface CompiledPattern {
+  regex?: RegExp;
+  literal: string;
+}
+
+interface CompiledCheck {
+  manager: string;
+  patterns: CompiledPattern[];
+}
+
+/**
+ * Pre-compiles regex patterns for file matching to avoid recreating them on every file check.
+ * Converts wildcard patterns (e.g., "*.csproj") into RegExp objects at module initialization.
+ */
+function precompileFilePatternRegexes(): CompiledCheck[] {
+  return PACKAGE_MANAGER_FILE_IDENTIFIERS.map((check) => {
+    const filePatterns: string[] = Array.isArray(check.file)
+      ? [...check.file]
+      : [check.file];
+    const patterns: CompiledPattern[] = filePatterns.map((pattern: string) => {
+      const lowerPattern = pattern.toLowerCase();
+      if (lowerPattern.startsWith("*.")) {
+        // Pre-compile wildcard patterns into regex for fast matching
+        const extension = lowerPattern.substring(1);
+        return {
+          regex: new RegExp(`^.*\\${extension}$`, "i"),
+          literal: lowerPattern,
+        };
+      } else {
+        return {
+          literal: lowerPattern,
+        };
+      }
+    });
+    return {
+      manager: check.manager,
+      patterns,
+    };
+  });
+}
+
+// Pre-compile all file pattern regexes once at module load time for performance
+const PRECOMPILED_FILE_PATTERN_REGEXES = precompileFilePatternRegexes();
+
+/**
+ * Check if a file matches any package manager patterns using pre-compiled regexes
+ */
+function checkFileForPackageManager(
+  fileName: string,
+  filePath: string,
+  foundManagers: Set<string>,
+): void {
+  const fileNameLower = fileName.toLowerCase();
+
+  for (const check of PRECOMPILED_FILE_PATTERN_REGEXES) {
+    // Skip if we already found this manager
+    if (foundManagers.has(check.manager)) {
+      continue;
+    }
+
+    const matches = check.patterns.some((pattern) => {
+      if (pattern.regex) {
+        // Use pre-compiled regex for wildcard patterns
+        return pattern.regex.test(fileName);
+      } else {
+        // Simple string comparison for exact matches
+        return fileNameLower === pattern.literal;
+      }
+    });
+
+    if (matches) {
+      core.debug(`Found ${check.manager} file: ${filePath}`);
+      foundManagers.add(check.manager);
+    }
+  }
+}
+
+/**
+ * Recursively search for package manager files
+ */
+async function findFilesRecursive(
   currentPath: string,
   depth: number,
   maxDepth: number,
   excludedDirs: ReadonlySet<string>,
   foundManagers: Set<string>,
-  checks: typeof PACKAGE_MANAGER_FILE_IDENTIFIERS,
-) {
+): Promise<void> {
   if (depth > maxDepth) {
     core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
     return;
   }
 
+  // Early exit: stop searching if we've found all possible package managers
+  const totalPossibleManagers = PRECOMPILED_FILE_PATTERN_REGEXES.length;
+  if (foundManagers.size >= totalPossibleManagers) {
+    core.debug(
+      `Early exit: Found all ${totalPossibleManagers} possible package managers, stopping search at ${currentPath}`,
+    );
+    return;
+  }
+
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(currentPath, { withFileTypes: true });
+    entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
   } catch (error) {
     core.debug(
       `Error reading directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -106,68 +195,46 @@ function findFilesRecursive(
     return;
   }
 
-  for (const entry of entries) {
-    const entryPath = path.join(currentPath, entry.name);
-    let stats;
-    try {
-      stats = fs.statSync(entryPath);
-    } catch (error) {
-      core.debug(
-        `Error getting stats for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      continue;
-    }
+  // Process all entries in parallel for maximum performance
+  await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(currentPath, entry.name);
 
-    if (stats.isDirectory()) {
-      if (excludedDirs.has(entry.name)) {
-        core.debug(`Skipping excluded directory: ${entryPath}`);
-        continue;
-      }
-      findFilesRecursive(
-        entryPath,
-        depth + 1,
-        maxDepth,
-        excludedDirs,
-        foundManagers,
-        checks,
-      );
-    } else if (stats.isFile()) {
-      const fileNameLower = entry.name.toLowerCase();
-      for (const check of checks) {
-        const patterns = Array.isArray(check.file) ? check.file : [check.file];
-        if (
-          patterns.some((pattern: string) => {
-            const lowerPattern = pattern.toLowerCase();
-            if (lowerPattern.startsWith("*.")) {
-              const regexPattern = new RegExp(
-                // Construct regex: .*\.ext$ - e.g. .*\.csproj$
-                // We need to escape the dot in the extension.
-                // entry.name is used here as regex can handle case insensitivity itself.
-                `^.*\\${lowerPattern.substring(1)}$`,
-                "i", // Case-insensitive match
-              );
-              return regexPattern.test(entry.name);
-            } else {
-              return fileNameLower.endsWith(lowerPattern);
-            }
-          })
-        ) {
-          if (!foundManagers.has(check.manager)) {
-            core.debug(`Found ${check.manager} file: ${entryPath}`);
-            foundManagers.add(check.manager);
+      try {
+        if (entry.isDirectory()) {
+          if (excludedDirs.has(entry.name)) {
+            core.debug(`Skipping excluded directory: ${entryPath}`);
+            return;
           }
+          // Recursively search subdirectories in parallel
+          await findFilesRecursive(
+            entryPath,
+            depth + 1,
+            maxDepth,
+            excludedDirs,
+            foundManagers,
+          );
+        } else if (entry.isFile()) {
+          // Check if this file matches any package manager
+          checkFileForPackageManager(entry.name, entryPath, foundManagers);
         }
+      } catch (error) {
+        core.debug(
+          `Error processing ${entryPath}: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
-    }
-  }
+    }),
+  );
 }
 
 /**
  * Detects package managers used in the repository.
  * @param repoPath The root path of the repository.
- * @returns An array of detected package manager names.
+ * @returns A promise that resolves to an array of detected package manager names.
  */
-export function detectPackageManagers(repoPath: string): string[] {
+export async function detectPackageManagers(
+  repoPath: string,
+): Promise<string[]> {
   const detected: Set<string> = new Set();
 
   core.debug(
@@ -180,14 +247,7 @@ export function detectPackageManagers(repoPath: string): string[] {
     return [];
   }
 
-  findFilesRecursive(
-    repoPath,
-    0,
-    MAX_DEPTH,
-    EXCLUDED_DIRS,
-    detected,
-    PACKAGE_MANAGER_FILE_IDENTIFIERS,
-  );
+  await findFilesRecursive(repoPath, 0, MAX_DEPTH, EXCLUDED_DIRS, detected);
 
   const result = Array.from(detected);
   if (result.length > 0) {

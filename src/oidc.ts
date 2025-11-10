@@ -34,7 +34,10 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   // Mask the raw ID token in logs
   core.setSecret(idToken);
 
-  const client = new http.HttpClient("fly-action");
+  // Create HTTP client with 30 second timeout to prevent hanging
+  const client = new http.HttpClient("fly-action", undefined, {
+    socketTimeout: 30000,
+  });
   const oidcUrl = `${url}/fly/api/v1/ci/start-oidc`;
   core.debug(`Authenticating with Fly OIDC at ${oidcUrl}`);
 

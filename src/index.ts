@@ -49,7 +49,7 @@ export async function run(): Promise<void> {
 
     // Detect and save package managers
     const workspacePath = process.env.GITHUB_WORKSPACE || "";
-    const detectedPackageManagers = detectPackageManagers(workspacePath);
+    const detectedPackageManagers = await detectPackageManagers(workspacePath);
     core.saveState(
       STATE_FLY_PACKAGE_MANAGERS,
       JSON.stringify(detectedPackageManagers),
@@ -69,8 +69,23 @@ export async function run(): Promise<void> {
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
-    core.info("Executing Fly CLI setup command...");
-    const exitCode = await exec.exec(binPath, ["setup"], options);
+
+    // Pass detected managers to fly-client for optimized parallel execution
+    let exitCode: number;
+    if (detectedPackageManagers.length > 0) {
+      core.info(
+        `Executing Fly CLI setup for detected managers: ${detectedPackageManagers.join(", ")}`,
+      );
+      const args = ["setup", ...detectedPackageManagers];
+      exitCode = await exec.exec(binPath, args, options);
+    } else {
+      // Fallback: Let fly-client detect and configure all available
+      core.info(
+        "No package managers detected, letting Fly CLI detect and configure all available...",
+      );
+      exitCode = await exec.exec(binPath, ["setup"], options);
+    }
+
     if (exitCode !== 0) {
       core.error("Fly setup command failed with non-zero exit code.");
       throw new Error("Fly setup command failed");

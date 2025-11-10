@@ -218,7 +218,10 @@ export async function runPost(): Promise<void> {
   core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-  const httpClient = new HttpClient("fly-action");
+  // Create HTTP client with 30 second timeout to prevent hanging
+  const httpClient = new HttpClient("fly-action", undefined, {
+    socketTimeout: 30000, // 30 seconds
+  });
   core.info(
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
