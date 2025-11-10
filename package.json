@@ -1,5 +1,5 @@
 {
-  "name": "fly-action",
+  "name": "@jfrog/fly-action",
   "version": "1.0.0",
   "description": "GitHub Action to setup Fly CLI",
   "main": "lib/index.js",
@@ -49,8 +49,8 @@
     "action",
     "fly"
   ],
-  "author": "Your Name",
-  "license": "MIT",
+  "author": "JFrog",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/jfrog/fly-action/issues"
   },
