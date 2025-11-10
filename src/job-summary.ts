@@ -4,9 +4,7 @@ import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
 
-export async function createJobSummary(
-  packageManagers: string[],
-): Promise<void> {
+export async function createJobSummary(): Promise<void> {
   try {
     // Build release URL
     const fullRepo = process.env.GITHUB_REPOSITORY;
