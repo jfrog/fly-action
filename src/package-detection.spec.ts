@@ -457,4 +457,150 @@ describe("detectPackageManagers", () => {
     // - cargo.toml at depth 4 is too deep (ignored)
     expect(result.sort()).toEqual(["go", "maven", "npm", "pip"].sort());
   });
+
+  describe("Forgiving Detection", () => {
+    it("should detect multiple Python package managers from pyproject.toml", async () => {
+      const repoPath = "/test/python-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([
+        createDirent("pyproject.toml", false),
+      ]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      // pyproject.toml should detect: poetry, pip, and twine
+      expect(result.sort()).toEqual(["pip", "poetry", "twine"].sort());
+    });
+
+    it("should detect both docker and podman from dockerfile", async () => {
+      const repoPath = "/test/container-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("dockerfile", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      // dockerfile should detect both docker and podman
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    it("should detect both docker and podman from docker-compose.yml", async () => {
+      const repoPath = "/test/compose-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([
+        createDirent("docker-compose.yml", false),
+      ]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    it("should detect twine from setup.py", async () => {
+      const repoPath = "/test/twine-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("setup.py", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      // setup.py should detect: pip and twine
+      expect(result.sort()).toEqual(["pip", "twine"].sort());
+    });
+
+    it("should detect poetry from pyproject.toml", async () => {
+      const repoPath = "/test/poetry-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([
+        createDirent("pyproject.toml", false),
+        createDirent("poetry.lock", false),
+      ]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      // Should detect: poetry (from both files), pip, and twine (from pyproject.toml)
+      expect(result.sort()).toEqual(["pip", "poetry", "twine"].sort());
+    });
+
+    it("should detect npm from package-lock.json", async () => {
+      const repoPath = "/test/npm-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([
+        createDirent("package-lock.json", false),
+      ]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result).toEqual(["npm"]);
+    });
+
+    it("should detect go from go.sum", async () => {
+      const repoPath = "/test/go-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("go.sum", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result).toEqual(["go"]);
+    });
+
+    it("should detect pipenv from pipfile.lock", async () => {
+      const repoPath = "/test/pipenv-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("pipfile.lock", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result).toEqual(["pipenv"]);
+    });
+
+    it("should detect helm from Chart.yaml (capital C)", async () => {
+      const repoPath = "/test/helm-project";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("Chart.yaml", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result).toEqual(["helm"]);
+    });
+
+    it("should detect helm from values.yaml", async () => {
+      const repoPath = "/test/helm-values";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([createDirent("values.yaml", false)]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      expect(result).toEqual(["helm"]);
+    });
+
+    it("should detect all Python managers in a complex project", async () => {
+      const repoPath = "/test/complex-python";
+      mockedFs.existsSync.mockReturnValue(true);
+
+      mockReaddirAsync.mockResolvedValue([
+        createDirent("pyproject.toml", false),
+        createDirent("poetry.lock", false),
+        createDirent("requirements.txt", false),
+        createDirent("setup.py", false),
+        createDirent(".pypirc", false),
+        createDirent("pipfile", false),
+      ]);
+
+      const result = await detectPackageManagers(repoPath);
+
+      // Should detect all Python package managers
+      expect(result.sort()).toEqual(
+        ["pip", "pipenv", "poetry", "twine"].sort(),
+      );
+    });
+  });
 });

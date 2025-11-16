@@ -3,18 +3,25 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  compileFilePattern,
+  FileMatchPattern,
+  getErrorMessage,
+  normalizeToArray,
+} from "./utils";
 
 // Define constants at the module level for clarity and potential reuse.
 const PACKAGE_MANAGER_FILE_IDENTIFIERS = [
   // Node.js ecosystem - specific lock files first, then package.json for npm
   { file: "pnpm-lock.yaml", manager: "pnpm" },
   { file: "yarn.lock", manager: "yarn" },
-  { file: "package.json", manager: "npm" },
+  { file: ["package.json", "package-lock.json"], manager: "npm" },
 
-  // Python ecosystem - specific lock files/project files first
-  { file: "poetry.lock", manager: "poetry" },
-  { file: "pipfile", manager: "pipenv" },
+  // Python ecosystem - forgiving detection allows multiple managers from same files
+  { file: ["poetry.lock", "pyproject.toml"], manager: "poetry" },
+  { file: ["pipfile", "pipfile.lock"], manager: "pipenv" },
   { file: ["requirements.txt", "setup.py", "pyproject.toml"], manager: "pip" },
+  { file: ["setup.py", "pyproject.toml", ".pypirc"], manager: "twine" },
 
   // .NET ecosystem
   {
@@ -38,24 +45,37 @@ const PACKAGE_MANAGER_FILE_IDENTIFIERS = [
   { file: "gemfile", manager: "rubygems" },
 
   // Go
-  { file: "go.mod", manager: "go" },
+  { file: ["go.mod", "go.sum"], manager: "go" },
 
   // PHP
   { file: "composer.json", manager: "composer" },
 
-  // Containers
+  // Containers - docker and podman can both be detected from same files
+  {
+    file: ["dockerfile", "docker-compose.yml", "docker-compose.yaml"],
+    manager: "docker",
+  },
   {
     file: [
       "dockerfile",
+      "containerfile",
       "docker-compose.yml",
       "docker-compose.yaml",
-      "containerfile",
     ],
-    manager: "docker",
+    manager: "podman",
   },
 
   // Kubernetes
-  { file: ["helmfile.yaml", "helmfile.yml", "chart.yaml"], manager: "helm" },
+  {
+    file: [
+      "helmfile.yaml",
+      "helmfile.yml",
+      "chart.yaml",
+      "Chart.yaml",
+      "values.yaml",
+    ],
+    manager: "helm",
+  },
 
   // Rust
   { file: "cargo.toml", manager: "cargo" },
@@ -81,55 +101,52 @@ const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
   "site-packages",
 ]);
 
-const MAX_DEPTH = 3;
+// Maximum depth to scan for package manager files.
+const MAX_PACKAGE_MANAGER_SCAN_DEPTH = 3;
 
-// Pre-compile regex patterns at module initialization for performance
-interface CompiledPattern {
-  regex?: RegExp;
-  literal: string;
-}
-
-interface CompiledCheck {
+/**
+ * Associates a package manager with its pre-compiled file patterns.
+ */
+interface PackageManagerMatcher {
   manager: string;
-  patterns: CompiledPattern[];
+  filePatterns: FileMatchPattern[];
 }
 
 /**
- * Pre-compiles regex patterns for file matching to avoid recreating them on every file check.
- * Converts wildcard patterns (e.g., "*.csproj") into RegExp objects at module initialization.
+ * Compiles all file patterns into optimized matchers.
  */
-function precompileFilePatternRegexes(): CompiledCheck[] {
-  return PACKAGE_MANAGER_FILE_IDENTIFIERS.map((check) => {
-    const filePatterns: string[] = Array.isArray(check.file)
-      ? [...check.file]
-      : [check.file];
-    const patterns: CompiledPattern[] = filePatterns.map((pattern: string) => {
-      const lowerPattern = pattern.toLowerCase();
-      if (lowerPattern.startsWith("*.")) {
-        // Pre-compile wildcard patterns into regex for fast matching
-        const extension = lowerPattern.substring(1);
-        return {
-          regex: new RegExp(`^.*\\${extension}$`, "i"),
-          literal: lowerPattern,
-        };
-      } else {
-        return {
-          literal: lowerPattern,
-        };
-      }
-    });
+function compileFilePatternMatchers(): PackageManagerMatcher[] {
+  return PACKAGE_MANAGER_FILE_IDENTIFIERS.map((identifier) => {
+    // Normalize the file patterns to an array of strings
+    // The package manager file identifiers can be a single string or an array of strings
+    // We need to normalize it to an array of strings so we can map over it
+    const filenames = normalizeToArray(identifier.file);
+    // Compile the file patterns to an array of FileMatchPattern objects
+    // This is a performance optimization to avoid creating RegExp objects repeatedly during directory scanning.
+    const compiledPatterns = filenames.map(compileFilePattern);
+
     return {
-      manager: check.manager,
-      patterns,
+      manager: identifier.manager,
+      filePatterns: compiledPatterns,
     };
   });
 }
 
-// Pre-compile all file pattern regexes once at module load time for performance
-const PRECOMPILED_FILE_PATTERN_REGEXES = precompileFilePatternRegexes();
+/** Pre-compiles all file pattern matchers once at module load time for performance
+ * This avoids creating RegExp objects repeatedly during directory scanning.
+ *
+ * Performance optimization: Patterns are compiled once when the module loads,
+ * then reused for every file check during package manager detection.
+ */
+const PACKAGE_MANAGER_FILE_MATCHERS = compileFilePatternMatchers();
 
 /**
- * Check if a file matches any package manager patterns using pre-compiled regexes
+ * Checks if a file matches any package manager patterns and updates the found set.
+ * Uses pre-compiled matchers for efficient pattern matching.
+ *
+ * @param fileName - The name of the file to check
+ * @param filePath - The full path to the file (for logging)
+ * @param foundManagers - Set to update with detected package managers
  */
 function checkFileForPackageManager(
   fileName: string,
@@ -138,31 +155,38 @@ function checkFileForPackageManager(
 ): void {
   const fileNameLower = fileName.toLowerCase();
 
-  for (const check of PRECOMPILED_FILE_PATTERN_REGEXES) {
-    // Skip if we already found this manager
-    if (foundManagers.has(check.manager)) {
+  for (const matcher of PACKAGE_MANAGER_FILE_MATCHERS) {
+    // Skip if we already detected this package manager
+    if (foundManagers.has(matcher.manager)) {
       continue;
     }
 
-    const matches = check.patterns.some((pattern) => {
+    // Check if any file pattern matches this file
+    const isMatch = matcher.filePatterns.some((pattern) => {
       if (pattern.regex) {
-        // Use pre-compiled regex for wildcard patterns
+        // Use pre-compiled regex for wildcard patterns (e.g., *.csproj)
         return pattern.regex.test(fileName);
-      } else {
-        // Simple string comparison for exact matches
-        return fileNameLower === pattern.literal;
       }
+      // Use exact string comparison for non-wildcard patterns
+      return fileNameLower === pattern.exactName;
     });
 
-    if (matches) {
-      core.debug(`Found ${check.manager} file: ${filePath}`);
-      foundManagers.add(check.manager);
+    if (isMatch) {
+      core.debug(`Found ${matcher.manager} file: ${filePath}`);
+      foundManagers.add(matcher.manager);
     }
   }
 }
 
 /**
- * Recursively search for package manager files
+ * Recursively scans directories for package manager files.
+ * Uses parallel async operations for optimal performance.
+ *
+ * @param currentPath - The directory path to scan
+ * @param depth - Current recursion depth
+ * @param maxDepth - Maximum depth to recurse
+ * @param excludedDirs - Set of directory names to skip
+ * @param foundManagers - Set to accumulate detected package managers
  */
 async function findFilesRecursive(
   currentPath: string,
@@ -171,13 +195,14 @@ async function findFilesRecursive(
   excludedDirs: ReadonlySet<string>,
   foundManagers: Set<string>,
 ): Promise<void> {
+  // Stop if we've reached maximum recursion depth
   if (depth > maxDepth) {
     core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
     return;
   }
 
-  // Early exit: stop searching if we've found all possible package managers
-  const totalPossibleManagers = PRECOMPILED_FILE_PATTERN_REGEXES.length;
+  // Early exit optimization: stop if we've found all possible package managers
+  const totalPossibleManagers = PACKAGE_MANAGER_FILE_MATCHERS.length;
   if (foundManagers.size >= totalPossibleManagers) {
     core.debug(
       `Early exit: Found all ${totalPossibleManagers} possible package managers, stopping search at ${currentPath}`,
@@ -185,12 +210,13 @@ async function findFilesRecursive(
     return;
   }
 
+  // Read directory entries with file type information
   let entries: fs.Dirent[];
   try {
     entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
   } catch (error) {
     core.debug(
-      `Error reading directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Error reading directory ${currentPath}: ${getErrorMessage(error)}`,
     );
     return;
   }
@@ -202,11 +228,12 @@ async function findFilesRecursive(
 
       try {
         if (entry.isDirectory()) {
+          // Skip excluded directories (node_modules, .git, etc.)
           if (excludedDirs.has(entry.name)) {
             core.debug(`Skipping excluded directory: ${entryPath}`);
             return;
           }
-          // Recursively search subdirectories in parallel
+          // Recursively scan subdirectories in parallel
           await findFilesRecursive(
             entryPath,
             depth + 1,
@@ -215,45 +242,62 @@ async function findFilesRecursive(
             foundManagers,
           );
         } else if (entry.isFile()) {
-          // Check if this file matches any package manager
+          // Check if this file indicates a package manager
           checkFileForPackageManager(entry.name, entryPath, foundManagers);
         }
       } catch (error) {
-        core.debug(
-          `Error processing ${entryPath}: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        core.debug(`Error processing ${entryPath}: ${getErrorMessage(error)}`);
       }
     }),
   );
 }
 
 /**
- * Detects package managers used in the repository.
- * @param repoPath The root path of the repository.
- * @returns A promise that resolves to an array of detected package manager names.
+ * Detects package managers used in the repository by scanning for characteristic files.
+ * Performs an async parallel directory scan up to MAX_DEPTH levels deep.
+ *
+ * @param repoPath - The root path of the repository to scan
+ * @returns A promise that resolves to an array of detected package manager names
+ *
+ * @example
+ * const managers = await detectPackageManagers('/path/to/repo');
+ * // Returns: ['npm', 'docker', 'pip']
  */
 export async function detectPackageManagers(
   repoPath: string,
 ): Promise<string[]> {
-  const detected: Set<string> = new Set();
+  const detectedManagers: Set<string> = new Set();
 
   core.debug(
-    `Detecting package managers in: ${repoPath}, max depth: ${MAX_DEPTH}`,
+    `Starting package manager detection in: ${repoPath} (max depth: ${MAX_PACKAGE_MANAGER_SCAN_DEPTH})`,
   );
+
+  // Validate repository path exists
   if (!repoPath || !fs.existsSync(repoPath)) {
     core.warning(
-      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`,
+      `Repository path (${repoPath}) not set or does not exist. Cannot detect package managers.`,
     );
     return [];
   }
 
-  await findFilesRecursive(repoPath, 0, MAX_DEPTH, EXCLUDED_DIRS, detected);
+  // Scan repository for package manager files
+  await findFilesRecursive(
+    repoPath,
+    0,
+    MAX_PACKAGE_MANAGER_SCAN_DEPTH,
+    EXCLUDED_DIRS,
+    detectedManagers,
+  );
 
-  const result = Array.from(detected);
+  // Convert Set to sorted array for consistent output
+  const result = Array.from(detectedManagers).sort();
+
+  // Log results
   if (result.length > 0) {
     core.info(`Detected package managers: ${result.join(", ")}`);
   } else {
-    core.info("Detected package managers: none");
+    core.info("No package managers detected");
   }
+
   return result;
 }
