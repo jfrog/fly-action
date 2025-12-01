@@ -13,6 +13,9 @@ import {
 /**
  * Supported standard package managers - always sent to fly-client (no detection needed).
  * The fly-client will attempt to configure all of these.
+ *
+ * These are sent without detection because their setup is fast and lightweight.
+ * The fly-client will skip any that aren't installed on the system.
  */
 export const SUPPORTED_PACKAGE_MANAGERS = [
   "npm",
@@ -30,6 +33,15 @@ export const SUPPORTED_PACKAGE_MANAGERS = [
 /**
  * Container-based package managers - these are detected from files.
  * Only detected container managers are sent to fly-client.
+ *
+ * Unlike standard package managers (which are always sent), container managers
+ * are only sent when detected because:
+ * 1. They take longer to set up and authenticate
+ * 2. They require authentication during setup (e.g., docker login)
+ * 3. Detecting them precisely avoids unnecessary setup overhead
+ *
+ * Detection is "forgiving" - e.g., Dockerfile triggers both docker AND podman
+ * since Podman can use Dockerfiles as a drop-in replacement.
  */
 const CONTAINER_PACKAGE_MANAGER_IDENTIFIERS = [
   // Docker - dockerfile and docker-compose files
