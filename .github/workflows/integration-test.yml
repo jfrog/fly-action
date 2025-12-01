@@ -1,4 +1,4 @@
-name: "Fly Client Integration Tests"
+name: "Integration Tests"
 on:
   push:
     branches: [main]
@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 jobs:
-  fly-client-integration-tests:
+  integration-tests:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]

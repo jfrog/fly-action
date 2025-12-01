@@ -70,7 +70,7 @@ const spawnBinary = (
     }) => {
       if (!resolved) {
         resolved = true;
-        clearTimeout(timeoutId);
+        global.clearTimeout(timeoutId);
         resolve(result);
       }
     };
@@ -92,7 +92,7 @@ const spawnBinary = (
     });
 
     // Timeout after 10 seconds
-    const timeoutId = setTimeout(() => {
+    const timeoutId = global.setTimeout(() => {
       child.kill();
       cleanup({ stdout, stderr: "Timeout", exitCode: 124 });
     }, 10000);
@@ -112,14 +112,12 @@ describe("Fly Client Integration Tests", () => {
       expect(stats.isFile()).toBe(true);
       // Check if file has execute permissions (on Unix-like systems)
       if (process.platform !== "win32") {
-        // eslint-disable-next-line no-bitwise
         const isExecutable = !!(stats.mode & fs.constants.X_OK);
         if (!isExecutable) {
           // Make it executable for the test
           fs.chmodSync(binPath, 0o755);
         }
         const updatedStats = fs.statSync(binPath);
-        // eslint-disable-next-line no-bitwise
         expect(!!(updatedStats.mode & fs.constants.X_OK)).toBe(true);
       }
     });
