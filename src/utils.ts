@@ -12,10 +12,10 @@ import { HttpClient } from "@actions/http-client";
  * Patterns starting with "*." are compiled to regex, others use exact string matching.
  */
 export interface FileMatchPattern {
-	/** Optional regex for wildcard patterns (e.g., "*.csproj" -> /^.*\.csproj$/i) */
-	regex?: RegExp;
-	/** Lowercase filename for exact matching or debugging */
-	exactName: string;
+  /** Optional regex for wildcard patterns (e.g., "*.csproj" -> /^.*\.csproj$/i) */
+  regex?: RegExp;
+  /** Lowercase filename for exact matching or debugging */
+  exactName: string;
 }
 
 /**
@@ -30,12 +30,12 @@ export interface FileMatchPattern {
  * normalizeToArray(['a.txt', 'b.txt']) // ['a.txt', 'b.txt']
  */
 export function normalizeToArray(
-	value: string | string[] | readonly string[]
+  value: string | string[] | readonly string[],
 ): string[] {
-	if (Array.isArray(value)) {
-		return [...value];
-	}
-	return [value as string];
+  if (Array.isArray(value)) {
+    return [...value];
+  }
+  return [value as string];
 }
 
 /**
@@ -54,21 +54,21 @@ export function normalizeToArray(
  * // { exactName: 'package.json' }
  */
 export function compileFilePattern(pattern: string): FileMatchPattern {
-	const normalizedPattern = pattern.toLowerCase();
+  const normalizedPattern = pattern.toLowerCase();
 
-	if (normalizedPattern.startsWith("*.")) {
-		// Wildcard pattern: compile to regex for fast matching
-		const extension = normalizedPattern.substring(1); // includes the dot
-		return {
-			regex: new RegExp(`^.*\\${extension}$`, "i"),
-			exactName: normalizedPattern,
-		};
-	}
+  if (normalizedPattern.startsWith("*.")) {
+    // Wildcard pattern: compile to regex for fast matching
+    const extension = normalizedPattern.substring(1); // includes the dot
+    return {
+      regex: new RegExp(`^.*\\${extension}$`, "i"),
+      exactName: normalizedPattern,
+    };
+  }
 
-	// Exact filename match
-	return {
-		exactName: normalizedPattern,
-	};
+  // Exact filename match
+  return {
+    exactName: normalizedPattern,
+  };
 }
 
 /**
@@ -84,10 +84,10 @@ export function compileFilePattern(pattern: string): FileMatchPattern {
  * getErrorMessage({ code: 404 }) // '[object Object]'
  */
 export function getErrorMessage(error: unknown): string {
-	if (error instanceof Error) {
-		return error.message;
-	}
-	return String(error);
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }
 
 /**
@@ -111,7 +111,7 @@ export const DEFAULT_HTTP_TIMEOUT_MS = 30000; // 30 seconds
  * const client = createHttpClient("my-custom-agent");
  */
 export function createHttpClient(userAgent = "fly-action"): HttpClient {
-	return new HttpClient(userAgent, undefined, {
-		socketTimeout: DEFAULT_HTTP_TIMEOUT_MS,
-	});
+  return new HttpClient(userAgent, undefined, {
+    socketTimeout: DEFAULT_HTTP_TIMEOUT_MS,
+  });
 }

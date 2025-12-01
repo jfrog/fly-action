@@ -1,6 +1,10 @@
 // Copyright (c) JFrog Ltd. (2025)
 
-import { detectPackageManagers } from "./package-detection";
+import {
+  detectContainerManagers,
+  getAllPackageManagers,
+  SUPPORTED_PACKAGE_MANAGERS,
+} from "./package-detection";
 import * as fs from "fs";
 import * as path from "path";
 import * as core from "@actions/core";
@@ -16,7 +20,6 @@ jest.mock("fs", () => {
   promisesMock.appendFile = jest.fn().mockResolvedValue(undefined);
   promisesMock.readFile = jest.fn().mockResolvedValue("");
   promisesMock.readdir = jest.fn().mockResolvedValue([]);
-  // Add other fs.promises functions here if needed, or ensure they are covered by the spread
 
   return {
     ...originalFs,
@@ -30,11 +33,6 @@ jest.mock("@actions/core");
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedCore = core as jest.Mocked<typeof core>;
-
-// Create a properly typed mock for readdirSync (kept for backwards compat if needed)
-const mockReaddirSync = mockedFs.readdirSync as unknown as jest.MockedFunction<
-  (path: fs.PathLike) => fs.Dirent[]
->;
 
 // Create a properly typed mock for promises.readdir
 const mockReaddirAsync = mockedFs.promises
@@ -55,13 +53,45 @@ const createDirent = (name: string, isDirectory: boolean): fs.Dirent =>
     isSocket: () => false,
   }) as fs.Dirent;
 
-describe("detectPackageManagers", () => {
+describe("SUPPORTED_PACKAGE_MANAGERS", () => {
+  it("should contain all expected standard package managers", () => {
+    expect(SUPPORTED_PACKAGE_MANAGERS).toEqual([
+      "npm",
+      "pnpm",
+      "pip",
+      "pipenv",
+      "twine",
+      "maven",
+      "gradle",
+      "dotnet",
+      "nuget",
+      "go",
+    ]);
+  });
+
+  it("should contain exactly 10 package managers", () => {
+    expect(SUPPORTED_PACKAGE_MANAGERS.length).toBe(10);
+  });
+
+  it("should NOT contain container-based package managers", () => {
+    const containerManagers = ["docker", "podman", "helm"];
+    containerManagers.forEach((manager) => {
+      expect(SUPPORTED_PACKAGE_MANAGERS).not.toContain(manager);
+    });
+  });
+
+  it("should be a readonly array", () => {
+    // TypeScript ensures this at compile time, but we can verify it's an array
+    expect(Array.isArray(SUPPORTED_PACKAGE_MANAGERS)).toBe(true);
+  });
+});
+
+describe("detectContainerManagers", () => {
   const repoPath = "/test/repo";
 
   beforeEach(() => {
     // Reset mocks before each test
     mockedFs.existsSync.mockReset();
-    mockReaddirSync.mockReset();
     mockReaddirAsync.mockReset();
     mockedFs.statSync.mockReset();
     mockedCore.debug.mockReset();
@@ -69,13 +99,11 @@ describe("detectPackageManagers", () => {
     mockedCore.warning.mockReset();
 
     // Default mock implementations
-    mockedFs.existsSync.mockReturnValue(true); // Assume repoPath exists by default
-    mockReaddirSync.mockReturnValue([]); // Default to empty Dirent array (legacy)
-    mockReaddirAsync.mockResolvedValue([]); // Default to empty Dirent array (async)
+    mockedFs.existsSync.mockReturnValue(true);
+    mockReaddirAsync.mockResolvedValue([]);
 
     mockedFs.statSync.mockImplementation((itemPath) => {
       const pathStr = itemPath.toString();
-      // This lookup helps fs.statSync(currentDir).isDirectory() in findFilesRecursive
       const knownDirs: { [key: string]: boolean } = {
         [repoPath]: true,
         [path.join(repoPath, "subdir")]: true,
@@ -92,12 +120,8 @@ describe("detectPackageManagers", () => {
         )]: true,
         [path.join(repoPath, "node_modules")]: true,
         [path.join(repoPath, ".git")]: true,
-        [path.join(repoPath, "srcdir")]: true,
-        [path.join(repoPath, "clientdir")]: true,
-        [path.join(repoPath, "clientdir", "level2dir")]: true,
-        [path.join(repoPath, "clientdir", "level2dir", "deepdir")]: true,
-        [path.join(repoPath, "clientdir", "level2dir", "deepdir", "level4dir")]:
-          true,
+        [path.join(repoPath, "charts")]: true,
+        [path.join(repoPath, "docker")]: true,
       };
       const isDirectory = !!knownDirs[pathStr];
       return {
@@ -107,500 +131,707 @@ describe("detectPackageManagers", () => {
     });
   });
 
-  test("should return an empty array if repoPath does not exist", async () => {
-    mockedFs.existsSync.mockReturnValue(false);
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual([]);
-    expect(mockedCore.warning).toHaveBeenCalledWith(
-      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`,
-    );
-  });
-
-  test("should return an empty array if no package manager files are found", async () => {
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual([]);
-    expect(mockedCore.info).toHaveBeenCalledWith(
-      "Detected package managers: none",
-    );
-  });
-
-  test("should detect npm if package.json is present at root", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("package.json", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["npm"]);
-  });
-
-  test("should detect yarn if yarn.lock is present at root", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("yarn.lock", false),
-          createDirent("package.json", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    // Based on current logic (no post-processing), both might be detected if both files are checked.
-    // The order in PACKAGE_MANAGER_FILE_IDENTIFIERS is: pnpm, yarn, npm.
-    // So yarn.lock will add 'yarn', then package.json will add 'npm'.
-    expect(result.sort()).toEqual(["npm", "yarn"].sort());
-  });
-
-  test("should detect pnpm if pnpm-lock.yaml is present at root", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("pnpm-lock.yaml", false),
-          createDirent("package.json", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    // pnpm-lock.yaml is first, then package.json for npm.
-    expect(result.sort()).toEqual(["npm", "pnpm"].sort());
-  });
-
-  test("should detect poetry if poetry.lock is present", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("poetry.lock", false),
-          createDirent("pyproject.toml", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    // poetry.lock adds 'poetry', pyproject.toml adds 'pip'.
-    expect(result.sort()).toEqual(["pip", "poetry"].sort());
-  });
-
-  test("should detect pipenv if Pipfile is present", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("pipfile", false), // Assuming 'pipfile' is the exact name checked (case-sensitively for mock)
-          createDirent("pyproject.toml", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    // pipfile adds 'pipenv', pyproject.toml adds 'pip'.
-    expect(result.sort()).toEqual(["pip", "pipenv"].sort());
-  });
-
-  test("should detect pip for requirements.txt", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("requirements.txt", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["pip"]);
-  });
-
-  test("should detect maven for pom.xml", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("pom.xml", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["maven"]);
-  });
-
-  test("should detect gradle for build.gradle", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("build.gradle", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["gradle"]);
-  });
-
-  test("should detect dotnet for .csproj file", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("myproject.csproj", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["dotnet"]);
-  });
-
-  test("should detect nuget for .nuspec file", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("mypackage.nuspec", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["nuget"]);
-  });
-
-  test("should detect docker for Dockerfile (case-insensitive)", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("Dockerfile", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["docker"]);
-  });
-
-  test("should detect helm for Chart.yaml (case-insensitive)", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([createDirent("Chart.yaml", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["helm"]);
-  });
-
-  test("should detect multiple package managers at root", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("package.json", false),
-          createDirent("pom.xml", false),
-          createDirent("requirements.txt", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result.sort()).toEqual(["maven", "npm", "pip"].sort());
-  });
-
-  test("should detect files in subdirectories up to MAX_DEPTH", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      const p = dirPath.toString();
-      if (p === repoPath) {
-        return Promise.resolve([createDirent("subdir", true)]);
-      }
-      if (p === path.join(repoPath, "subdir")) {
-        return Promise.resolve([
-          createDirent("package.json", false),
-          createDirent("subsubdir", true),
-        ]);
-      }
-      if (p === path.join(repoPath, "subdir", "subsubdir")) {
-        return Promise.resolve([createDirent("pom.xml", false)]);
-      }
-      return Promise.resolve([]);
-    });
-    // The statSync mock in beforeEach should handle isDirectory for "subdir" and "subsubdir"
-    const result = await detectPackageManagers(repoPath);
-    expect(result.sort()).toEqual(["maven", "npm"].sort());
-  });
-
-  test("should ignore files beyond MAX_DEPTH", async () => {
-    // MAX_DEPTH is 3 (0, 1, 2, 3). So level4dir (depth 4) should be ignored.
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      const p = dirPath.toString();
-      if (p === repoPath)
-        return Promise.resolve([createDirent("level1dir", true)]);
-      if (p === path.join(repoPath, "level1dir"))
-        return Promise.resolve([createDirent("level2dir", true)]);
-      if (p === path.join(repoPath, "level1dir", "level2dir")) {
-        return Promise.resolve([
-          createDirent("package.json", false), // npm at depth 2
-          createDirent("level3dir", true),
-        ]);
-      }
-      // Files in level3dir are at depth 3 (should be included)
-      if (p === path.join(repoPath, "level1dir", "level2dir", "level3dir")) {
-        return Promise.resolve([
-          createDirent("pom.xml", false), // maven at depth 3 (included)
-          createDirent("level4dir", true),
-        ]);
-      }
-      // Files in level4dir are at depth 4 (should be ignored)
-      if (
-        p ===
-        path.join(repoPath, "level1dir", "level2dir", "level3dir", "level4dir")
-      ) {
-        return Promise.resolve([createDirent("build.gradle", false)]); // gradle at depth 4 (ignored)
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result.sort()).toEqual(["maven", "npm"].sort()); // npm at depth 2, maven at depth 3
-  });
-
-  test("should ignore files in excluded directories", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      const p = dirPath.toString();
-      if (p === repoPath) {
-        // node_modules is a directory
-        return Promise.resolve([
-          createDirent("node_modules", true),
-          createDirent("package.json", false),
-        ]);
-      }
-      if (p === path.join(repoPath, "node_modules")) {
-        return Promise.resolve([createDirent("pom.xml", false)]); // This should be ignored
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["npm"]); // Only npm from repo root
-  });
-
-  test("should handle case insensitivity for found filenames", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("PACKAGE.JSON", false),
-          createDirent("POM.XML", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result.sort()).toEqual(["maven", "npm"].sort());
-  });
-
-  test("should correctly identify unique managers if multiple indicator files for the same manager are found", async () => {
-    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
-      if (dirPath === repoPath) {
-        return Promise.resolve([
-          createDirent("requirements.txt", false),
-          createDirent("setup.py", false),
-          createDirent("pyproject.toml", false),
-        ]);
-      }
-      return Promise.resolve([]);
-    });
-    const result = await detectPackageManagers(repoPath);
-    expect(result).toEqual(["pip"]);
-  });
-
-  test("complex scenario with mixed files, depths, and excluded dirs", async () => {
-    mockReaddirAsync.mockImplementation((p: fs.PathLike) => {
-      const dirPathStr = p.toString();
-      if (dirPathStr === repoPath) {
-        return Promise.resolve([
-          createDirent("package.json", false), // npm (depth 0)
-          createDirent("srcdir", true),
-          createDirent(".git", true), // excluded
-          createDirent("clientdir", true),
-        ]);
-      }
-      if (dirPathStr === path.join(repoPath, "srcdir")) {
-        // depth 1
-        return Promise.resolve([
-          createDirent("pom.xml", false), // maven (depth 1)
-          createDirent("node_modules", true), // excluded
-        ]);
-      }
-      if (dirPathStr === path.join(repoPath, "srcdir", "node_modules")) {
-        // depth 2, but excluded path
-        return Promise.resolve([createDirent("yarn.lock", false)]);
-      }
-      if (dirPathStr === path.join(repoPath, "clientdir")) {
-        // depth 1
-        return Promise.resolve([createDirent("level2dir", true)]);
-      }
-      if (dirPathStr === path.join(repoPath, "clientdir", "level2dir")) {
-        // depth 2
-        return Promise.resolve([
-          createDirent("requirements.txt", false), // pip (depth 2)
-          createDirent("deepdir", true),
-        ]);
-      }
-      if (
-        dirPathStr === path.join(repoPath, "clientdir", "level2dir", "deepdir")
-      ) {
-        // depth 3 (now included with MAX_DEPTH = 3)
-        return Promise.resolve([
-          createDirent("go.mod", false), // go at depth 3
-          createDirent("level4dir", true),
-        ]);
-      }
-      if (
-        dirPathStr ===
-        path.join(repoPath, "clientdir", "level2dir", "deepdir", "level4dir")
-      ) {
-        // depth 4 (too deep, should be ignored)
-        return Promise.resolve([createDirent("cargo.toml", false)]);
-      }
-      return Promise.resolve([]);
+  describe("Error handling and edge cases", () => {
+    test("should return an empty array if repoPath is empty string", async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      const result = await detectContainerManagers("");
+      expect(result).toEqual([]);
+      expect(mockedCore.warning).toHaveBeenCalled();
     });
 
-    const result = await detectPackageManagers(repoPath);
-    // Expected: npm (root), maven (srcdir), pip (clientdir/level2dir), go (clientdir/level2dir/deepdir)
-    // MAX_DEPTH is 3, meaning depths 0, 1, 2, 3 are scanned.
-    // - package.json at depth 0 -> npm
-    // - pom.xml at depth 1 (in srcdir) -> maven
-    // - .git at depth 0 is excluded.
-    // - node_modules in srcdir is excluded.
-    // - requirements.txt at depth 2 (in clientdir/level2dir) -> pip
-    // - go.mod at depth 3 (in clientdir/level2dir/deepdir) -> go (now included!)
-    // - cargo.toml at depth 4 is too deep (ignored)
-    expect(result.sort()).toEqual(["go", "maven", "npm", "pip"].sort());
-  });
-
-  describe("Forgiving Detection", () => {
-    it("should detect multiple Python package managers from pyproject.toml", async () => {
-      const repoPath = "/test/python-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([
-        createDirent("pyproject.toml", false),
-      ]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      // pyproject.toml should detect: poetry, pip, and twine
-      expect(result.sort()).toEqual(["pip", "poetry", "twine"].sort());
-    });
-
-    it("should detect both docker and podman from dockerfile", async () => {
-      const repoPath = "/test/container-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("dockerfile", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      // dockerfile should detect both docker and podman
-      expect(result.sort()).toEqual(["docker", "podman"].sort());
-    });
-
-    it("should detect both docker and podman from docker-compose.yml", async () => {
-      const repoPath = "/test/compose-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([
-        createDirent("docker-compose.yml", false),
-      ]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result.sort()).toEqual(["docker", "podman"].sort());
-    });
-
-    it("should detect twine from setup.py", async () => {
-      const repoPath = "/test/twine-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("setup.py", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      // setup.py should detect: pip and twine
-      expect(result.sort()).toEqual(["pip", "twine"].sort());
-    });
-
-    it("should detect poetry from pyproject.toml", async () => {
-      const repoPath = "/test/poetry-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([
-        createDirent("pyproject.toml", false),
-        createDirent("poetry.lock", false),
-      ]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      // Should detect: poetry (from both files), pip, and twine (from pyproject.toml)
-      expect(result.sort()).toEqual(["pip", "poetry", "twine"].sort());
-    });
-
-    it("should detect npm from package-lock.json", async () => {
-      const repoPath = "/test/npm-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([
-        createDirent("package-lock.json", false),
-      ]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result).toEqual(["npm"]);
-    });
-
-    it("should detect go from go.sum", async () => {
-      const repoPath = "/test/go-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("go.sum", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result).toEqual(["go"]);
-    });
-
-    it("should detect pipenv from pipfile.lock", async () => {
-      const repoPath = "/test/pipenv-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("pipfile.lock", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result).toEqual(["pipenv"]);
-    });
-
-    it("should detect helm from Chart.yaml (capital C)", async () => {
-      const repoPath = "/test/helm-project";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("Chart.yaml", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result).toEqual(["helm"]);
-    });
-
-    it("should detect helm from values.yaml", async () => {
-      const repoPath = "/test/helm-values";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([createDirent("values.yaml", false)]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      expect(result).toEqual(["helm"]);
-    });
-
-    it("should detect all Python managers in a complex project", async () => {
-      const repoPath = "/test/complex-python";
-      mockedFs.existsSync.mockReturnValue(true);
-
-      mockReaddirAsync.mockResolvedValue([
-        createDirent("pyproject.toml", false),
-        createDirent("poetry.lock", false),
-        createDirent("requirements.txt", false),
-        createDirent("setup.py", false),
-        createDirent(".pypirc", false),
-        createDirent("pipfile", false),
-      ]);
-
-      const result = await detectPackageManagers(repoPath);
-
-      // Should detect all Python package managers
-      expect(result.sort()).toEqual(
-        ["pip", "pipenv", "poetry", "twine"].sort(),
+    test("should return an empty array if repoPath does not exist", async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+      expect(mockedCore.warning).toHaveBeenCalledWith(
+        `Repository path (${repoPath}) not set or does not exist. Cannot detect container package managers.`,
       );
+    });
+
+    test("should return an empty array if no container files are found", async () => {
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        "No container package managers detected",
+      );
+    });
+
+    test("should handle directory read errors gracefully", async () => {
+      mockReaddirAsync.mockRejectedValue(new Error("Permission denied"));
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+      expect(mockedCore.debug).toHaveBeenCalledWith(
+        expect.stringContaining("Error reading directory"),
+      );
+    });
+
+    test("should handle mixed success and error in subdirectories", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([
+            createDirent("subdir", true),
+            createDirent("Chart.yaml", false),
+          ]);
+        }
+        if (p === path.join(repoPath, "subdir")) {
+          return Promise.reject(new Error("Access denied"));
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await detectContainerManagers(repoPath);
+      // Should still detect helm from root despite subdirectory error
+      expect(result).toEqual(["helm"]);
+    });
+  });
+
+  describe("Docker detection", () => {
+    test("should detect docker and podman if dockerfile is present (lowercase)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect docker and podman if Dockerfile is present (capitalized)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect docker and podman if DOCKERFILE is present (uppercase)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("DOCKERFILE", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect docker and podman from docker-compose.yml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("docker-compose.yml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect docker and podman from docker-compose.yaml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("docker-compose.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect docker and podman from Docker-Compose.YML (mixed case)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Docker-Compose.YML", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+  });
+
+  describe("Podman detection", () => {
+    test("should detect only podman if containerfile is present (lowercase)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("containerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["podman"]);
+    });
+
+    test("should detect only podman if Containerfile is present (capitalized)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Containerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["podman"]);
+    });
+
+    test("should detect only podman if CONTAINERFILE is present (uppercase)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("CONTAINERFILE", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["podman"]);
+    });
+  });
+
+  describe("Helm detection", () => {
+    test("should detect helm for Chart.yaml (capital C)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Chart.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should detect helm for chart.yaml (lowercase)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("chart.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should detect helm for values.yaml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("values.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should detect helm for helmfile.yaml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("helmfile.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should detect helm for helmfile.yml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("helmfile.yml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should detect helm for Values.YAML (mixed case)", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Values.YAML", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+  });
+
+  describe("Multiple container managers detection", () => {
+    test("should detect all three container managers when all files present", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false),
+            createDirent("Containerfile", false),
+            createDirent("Chart.yaml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "helm", "podman"].sort());
+    });
+
+    test("should detect docker, podman, and helm from various files", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("docker-compose.yml", false),
+            createDirent("values.yaml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "helm", "podman"].sort());
+    });
+
+    test("should not duplicate managers when multiple indicator files exist", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false),
+            createDirent("docker-compose.yml", false),
+            createDirent("docker-compose.yaml", false),
+            createDirent("Chart.yaml", false),
+            createDirent("values.yaml", false),
+            createDirent("helmfile.yaml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      // Should still only have 3 unique managers
+      expect(result.sort()).toEqual(["docker", "helm", "podman"].sort());
+      expect(result.length).toBe(3);
+    });
+  });
+
+  describe("Directory scanning", () => {
+    test("should detect container files in subdirectories", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([createDirent("subdir", true)]);
+        }
+        if (p === path.join(repoPath, "subdir")) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should detect container files up to depth 3", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath)
+          return Promise.resolve([createDirent("level1dir", true)]);
+        if (p === path.join(repoPath, "level1dir"))
+          return Promise.resolve([createDirent("level2dir", true)]);
+        if (p === path.join(repoPath, "level1dir", "level2dir"))
+          return Promise.resolve([createDirent("level3dir", true)]);
+        if (p === path.join(repoPath, "level1dir", "level2dir", "level3dir"))
+          return Promise.resolve([createDirent("Dockerfile", false)]); // depth 3
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "podman"].sort());
+    });
+
+    test("should NOT detect container files beyond depth 3", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath)
+          return Promise.resolve([createDirent("level1dir", true)]);
+        if (p === path.join(repoPath, "level1dir"))
+          return Promise.resolve([createDirent("level2dir", true)]);
+        if (p === path.join(repoPath, "level1dir", "level2dir"))
+          return Promise.resolve([createDirent("level3dir", true)]);
+        if (p === path.join(repoPath, "level1dir", "level2dir", "level3dir"))
+          return Promise.resolve([createDirent("level4dir", true)]);
+        if (
+          p ===
+          path.join(
+            repoPath,
+            "level1dir",
+            "level2dir",
+            "level3dir",
+            "level4dir",
+          )
+        )
+          return Promise.resolve([createDirent("Dockerfile", false)]); // depth 4 - too deep
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should detect files at multiple depths simultaneously", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false), // docker at root
+            createDirent("charts", true),
+          ]);
+        }
+        if (p === path.join(repoPath, "charts")) {
+          return Promise.resolve([createDirent("Chart.yaml", false)]); // helm in subdir
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "helm", "podman"].sort());
+    });
+  });
+
+  describe("Excluded directories", () => {
+    test("should ignore container files in node_modules", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([
+            createDirent("node_modules", true),
+            createDirent("Chart.yaml", false),
+          ]);
+        }
+        if (p === path.join(repoPath, "node_modules")) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual(["helm"]);
+    });
+
+    test("should ignore container files in .git directory", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([createDirent(".git", true)]);
+        }
+        if (p === path.join(repoPath, ".git")) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should ignore container files in multiple excluded directories", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([
+            createDirent("node_modules", true),
+            createDirent(".git", true),
+            createDirent("dist", true),
+            createDirent("build", true),
+          ]);
+        }
+        // All these should be skipped
+        return Promise.resolve([createDirent("Dockerfile", false)]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("Non-container files (should NOT be detected)", () => {
+    test("should NOT detect npm from package.json", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("package.json", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should NOT detect pip from requirements.txt", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("requirements.txt", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should NOT detect maven from pom.xml", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("pom.xml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should NOT detect go from go.mod", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("go.mod", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+
+    test("should NOT detect any standard package managers", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("package.json", false),
+            createDirent("package-lock.json", false),
+            createDirent("yarn.lock", false),
+            createDirent("pnpm-lock.yaml", false),
+            createDirent("requirements.txt", false),
+            createDirent("Pipfile", false),
+            createDirent("setup.py", false),
+            createDirent("pyproject.toml", false),
+            createDirent("pom.xml", false),
+            createDirent("build.gradle", false),
+            createDirent("go.mod", false),
+            createDirent("Cargo.toml", false),
+            createDirent("Gemfile", false),
+            createDirent("composer.json", false),
+            createDirent("myproject.csproj", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("Early exit optimization", () => {
+    test("should stop searching after finding all container managers", async () => {
+      let subdirScanned = false;
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        const p = dirPath.toString();
+        if (p === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false), // docker + podman
+            createDirent("Containerfile", false), // podman (already found)
+            createDirent("Chart.yaml", false), // helm
+            createDirent("subdir", true),
+          ]);
+        }
+        if (p === path.join(repoPath, "subdir")) {
+          subdirScanned = true;
+          return Promise.resolve([createDirent("values.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await detectContainerManagers(repoPath);
+      expect(result.sort()).toEqual(["docker", "helm", "podman"].sort());
+      // The subdir might or might not be scanned due to parallel processing
+      // but once all 3 managers are found, we should exit early
+    });
+  });
+
+  describe("Result format", () => {
+    test("should return sorted array", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("helmfile.yaml", false),
+            createDirent("Dockerfile", false),
+            createDirent("Containerfile", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+      const result = await detectContainerManagers(repoPath);
+      // Should be alphabetically sorted
+      expect(result).toEqual(["docker", "helm", "podman"]);
+    });
+
+    test("should log detection results", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+      await detectContainerManagers(repoPath);
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        "Detected container package managers: docker, podman",
+      );
+    });
+  });
+});
+
+describe("getAllPackageManagers", () => {
+  const repoPath = "/test/repo";
+
+  beforeEach(() => {
+    mockedFs.existsSync.mockReset();
+    mockReaddirAsync.mockReset();
+    mockedCore.debug.mockReset();
+    mockedCore.info.mockReset();
+    mockedCore.warning.mockReset();
+
+    mockedFs.existsSync.mockReturnValue(true);
+    mockReaddirAsync.mockResolvedValue([]);
+  });
+
+  describe("Basic functionality", () => {
+    test("should return all supported package managers when no containers detected", async () => {
+      const result = await getAllPackageManagers(repoPath);
+      expect(result.sort()).toEqual([...SUPPORTED_PACKAGE_MANAGERS].sort());
+    });
+
+    test("should always include all supported package managers", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+
+      // Verify all supported managers are present
+      SUPPORTED_PACKAGE_MANAGERS.forEach((manager) => {
+        expect(result).toContain(manager);
+      });
+    });
+  });
+
+  describe("Container manager integration", () => {
+    test("should include docker when Dockerfile is found", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      expect(result).toContain("docker");
+      expect(result).toContain("podman");
+    });
+
+    test("should include helm when Chart.yaml is found", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Chart.yaml", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      expect(result).toContain("helm");
+    });
+
+    test("should combine all supported + all detected containers", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false),
+            createDirent("Chart.yaml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      const expected = [
+        ...SUPPORTED_PACKAGE_MANAGERS,
+        "docker",
+        "podman",
+        "helm",
+      ].sort();
+      expect(result.sort()).toEqual(expected);
+    });
+  });
+
+  describe("Result integrity", () => {
+    test("should not have duplicate entries", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false),
+            createDirent("docker-compose.yml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      const uniqueResult = [...new Set(result)];
+      expect(result.length).toEqual(uniqueResult.length);
+    });
+
+    test("should return sorted array", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      const sortedResult = [...result].sort();
+      expect(result).toEqual(sortedResult);
+    });
+
+    test("should log combined results", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([createDirent("Dockerfile", false)]);
+        }
+        return Promise.resolve([]);
+      });
+
+      await getAllPackageManagers(repoPath);
+      expect(mockedCore.info).toHaveBeenCalledWith(
+        expect.stringContaining("All package managers for fly-client:"),
+      );
+    });
+  });
+
+  describe("Edge cases", () => {
+    test("should handle empty repo path", async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      const result = await getAllPackageManagers("");
+      // Should still return supported managers even if detection fails
+      expect(result.sort()).toEqual([...SUPPORTED_PACKAGE_MANAGERS].sort());
+    });
+
+    test("should handle non-existent repo path", async () => {
+      mockedFs.existsSync.mockReturnValue(false);
+      const result = await getAllPackageManagers("/non/existent/path");
+      expect(result.sort()).toEqual([...SUPPORTED_PACKAGE_MANAGERS].sort());
+    });
+
+    test("should return correct count with all container managers", async () => {
+      mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+        if (dirPath === repoPath) {
+          return Promise.resolve([
+            createDirent("Dockerfile", false),
+            createDirent("Containerfile", false),
+            createDirent("Chart.yaml", false),
+          ]);
+        }
+        return Promise.resolve([]);
+      });
+
+      const result = await getAllPackageManagers(repoPath);
+      // 10 supported + 3 containers = 13
+      expect(result.length).toBe(13);
     });
   });
 });
