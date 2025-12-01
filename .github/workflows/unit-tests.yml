@@ -24,7 +24,7 @@ jobs:
         run: npm run lint
 
       - name: Run unit tests
-        run: npm test -- --testPathIgnorePatterns=integration-tests
+        run: npm test -- --testPathIgnorePatterns=integration-tests --testPathIgnorePatterns=dist --testPathIgnorePatterns=lib
 
       - name: Build
         run: npm run build
