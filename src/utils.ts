@@ -32,10 +32,13 @@ export interface FileMatchPattern {
 export function normalizeToArray(
   value: string | string[] | readonly string[],
 ): string[] {
-  if (Array.isArray(value)) {
-    return [...value];
+  // Array.isArray doesn't narrow readonly arrays properly in TypeScript,
+  // so we check for string first
+  if (typeof value === "string") {
+    return [value];
   }
-  return [value as string];
+  // value is now string[] | readonly string[]
+  return [...value];
 }
 
 /**

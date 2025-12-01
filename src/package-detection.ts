@@ -61,13 +61,7 @@ const CONTAINER_PACKAGE_MANAGER_IDENTIFIERS = [
   },
   // Helm - Kubernetes package manager
   {
-    file: [
-      "helmfile.yaml",
-      "helmfile.yml",
-      "chart.yaml",
-      "Chart.yaml",
-      "values.yaml",
-    ],
+    file: ["helmfile.yaml", "helmfile.yml", "chart.yaml", "values.yaml"],
     manager: "helm",
   },
 ] as const;

@@ -835,3 +835,237 @@ describe("getAllPackageManagers", () => {
     });
   });
 });
+
+describe("Performance tests for large repositories", () => {
+  const repoPath = "/test/large-repo";
+
+  beforeEach(() => {
+    mockedFs.existsSync.mockReset();
+    mockReaddirAsync.mockReset();
+    mockedCore.debug.mockReset();
+    mockedCore.info.mockReset();
+    mockedCore.warning.mockReset();
+
+    mockedFs.existsSync.mockReturnValue(true);
+  });
+
+  /**
+   * Helper to generate a large directory structure.
+   * Creates nested directories with many files per directory.
+   */
+  const generateLargeDirectoryMock = (
+    totalDirs: number,
+    filesPerDir: number,
+    containerFileAtDepth?: number,
+  ) => {
+    const dirPaths = new Set<string>();
+    dirPaths.add(repoPath);
+
+    // Generate directory paths up to depth 3
+    for (let i = 0; i < totalDirs; i++) {
+      const depth = (i % 3) + 1; // depth 1, 2, or 3
+      let currentPath = repoPath;
+      for (let d = 0; d < depth; d++) {
+        currentPath = path.join(currentPath, `dir${i}_level${d}`);
+        dirPaths.add(currentPath);
+      }
+    }
+
+    return (dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (!dirPaths.has(p) && p !== repoPath) {
+        return Promise.resolve([]);
+      }
+
+      const entries: fs.Dirent[] = [];
+
+      // Add files
+      for (let f = 0; f < filesPerDir; f++) {
+        entries.push(createDirent(`file${f}.txt`, false));
+        entries.push(createDirent(`config${f}.json`, false));
+        entries.push(createDirent(`script${f}.sh`, false));
+      }
+
+      // Add subdirectories (only at depth < 3)
+      const currentDepth = (p.match(/level/g) || []).length;
+      if (currentDepth < 3) {
+        for (let d = 0; d < 5; d++) {
+          entries.push(createDirent(`subdir${d}`, true));
+        }
+      }
+
+      // Optionally add a container file at a specific depth
+      if (
+        containerFileAtDepth !== undefined &&
+        currentDepth === containerFileAtDepth
+      ) {
+        entries.push(createDirent("Dockerfile", false));
+      }
+
+      return Promise.resolve(entries);
+    };
+  };
+
+  test("should scan large repository (100 dirs, 20 files each) in reasonable time", async () => {
+    mockReaddirAsync.mockImplementation(generateLargeDirectoryMock(100, 20));
+
+    const startTime = Date.now();
+    const result = await detectContainerManagers(repoPath);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    expect(result).toEqual([]);
+    // Should complete in under 5 seconds for mocked fs
+    expect(duration).toBeLessThan(5000);
+    console.log(`Large repo scan (100 dirs, 20 files) took ${duration}ms`);
+  });
+
+  test("should scan very large repository (500 dirs, 50 files each) in reasonable time", async () => {
+    mockReaddirAsync.mockImplementation(generateLargeDirectoryMock(500, 50));
+
+    const startTime = Date.now();
+    const result = await detectContainerManagers(repoPath);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    expect(result).toEqual([]);
+    // Should complete in under 10 seconds for mocked fs
+    expect(duration).toBeLessThan(10000);
+    console.log(`Very large repo scan (500 dirs, 50 files) took ${duration}ms`);
+  });
+
+  test("should find container file quickly even in large repository", async () => {
+    // Create a large repo with a Dockerfile at depth 1
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (p === repoPath) {
+        const entries: fs.Dirent[] = [];
+        // Add many directories
+        for (let i = 0; i < 100; i++) {
+          entries.push(createDirent(`dir${i}`, true));
+        }
+        // Add many files
+        for (let i = 0; i < 50; i++) {
+          entries.push(createDirent(`file${i}.txt`, false));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // At depth 1 - add files and subdirs
+      if (p.startsWith(repoPath) && !p.includes(path.sep + "subdir")) {
+        const entries: fs.Dirent[] = [];
+        for (let i = 0; i < 20; i++) {
+          entries.push(createDirent(`file${i}.json`, false));
+          entries.push(createDirent(`subdir${i}`, true));
+        }
+        // Add Dockerfile in dir50
+        if (p === path.join(repoPath, "dir50")) {
+          entries.push(createDirent("Dockerfile", false));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // Deeper directories - just files
+      return Promise.resolve([
+        createDirent("config.json", false),
+        createDirent("data.txt", false),
+      ]);
+    });
+
+    const startTime = Date.now();
+    const result = await detectContainerManagers(repoPath);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    // Should find docker and podman
+    expect(result.sort()).toEqual(["docker", "podman"]);
+    // Should still be fast
+    expect(duration).toBeLessThan(5000);
+    console.log(
+      `Large repo with container file scan took ${duration}ms, found: ${result.join(", ")}`,
+    );
+  });
+
+  test("should benefit from early exit when all managers found quickly", async () => {
+    // All container files at root level
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (p === repoPath) {
+        const entries: fs.Dirent[] = [
+          createDirent("Dockerfile", false),
+          createDirent("Containerfile", false),
+          createDirent("Chart.yaml", false),
+        ];
+        // Add many subdirectories that should be skipped due to early exit
+        for (let i = 0; i < 100; i++) {
+          entries.push(createDirent(`subdir${i}`, true));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // This should rarely be called due to early exit
+      return Promise.resolve([
+        createDirent("file1.txt", false),
+        createDirent("file2.txt", false),
+      ]);
+    });
+
+    const startTime = Date.now();
+    const result = await detectContainerManagers(repoPath);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    expect(result.sort()).toEqual(["docker", "helm", "podman"]);
+    // Should be very fast due to early exit
+    expect(duration).toBeLessThan(1000);
+    console.log(`Early exit optimization took ${duration}ms`);
+  });
+
+  test("should handle repository with max depth efficiently", async () => {
+    // Create a deep directory structure up to depth 3
+    const deepPaths: { [key: string]: fs.Dirent[] } = {
+      [repoPath]: [],
+    };
+
+    // Generate 50 parallel deep paths
+    for (let branch = 0; branch < 50; branch++) {
+      let currentPath = repoPath;
+      for (let depth = 0; depth < 3; depth++) {
+        const nextDir = `branch${branch}_depth${depth}`;
+        if (!deepPaths[currentPath]) {
+          deepPaths[currentPath] = [];
+        }
+        deepPaths[currentPath].push(createDirent(nextDir, true));
+
+        currentPath = path.join(currentPath, nextDir);
+        deepPaths[currentPath] = [];
+
+        // Add some files at each level
+        for (let f = 0; f < 10; f++) {
+          deepPaths[currentPath].push(createDirent(`file${f}.txt`, false));
+        }
+      }
+      // Add Dockerfile at leaf (depth 3) for one branch
+      if (branch === 25) {
+        deepPaths[currentPath].push(createDirent("Dockerfile", false));
+      }
+    }
+
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+      return Promise.resolve(deepPaths[p] || []);
+    });
+
+    const startTime = Date.now();
+    const result = await detectContainerManagers(repoPath);
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+
+    expect(result.sort()).toEqual(["docker", "podman"]);
+    expect(duration).toBeLessThan(5000);
+    console.log(`Deep directory structure scan took ${duration}ms`);
+  });
+});
