@@ -836,6 +836,152 @@ describe("getAllPackageManagers", () => {
   });
 });
 
+describe("Scan limit protection", () => {
+  const repoPath = "/test/repo";
+
+  beforeEach(() => {
+    mockedFs.existsSync.mockReset();
+    mockReaddirAsync.mockReset();
+    mockedCore.debug.mockReset();
+    mockedCore.info.mockReset();
+    mockedCore.warning.mockReset();
+
+    mockedFs.existsSync.mockReturnValue(true);
+  });
+
+  test("should stop scanning when max files limit is reached", async () => {
+    // Create a repo with more than 10,000 files
+    let fileCounter = 0;
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (p === repoPath) {
+        const entries: fs.Dirent[] = [];
+        // Add many subdirectories
+        for (let i = 0; i < 100; i++) {
+          entries.push(createDirent(`dir${i}`, true));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // Each subdirectory has 200 files (100 dirs * 200 files = 20,000 files total)
+      const entries: fs.Dirent[] = [];
+      for (let i = 0; i < 200; i++) {
+        fileCounter++;
+        entries.push(createDirent(`file${i}.txt`, false));
+      }
+      return Promise.resolve(entries);
+    });
+
+    await detectContainerManagers(repoPath);
+
+    // Should have logged a warning about hitting the limit
+    expect(mockedCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("max file limit"),
+    );
+  });
+
+  test("should emit warning only once when limit is reached", async () => {
+    // Create a repo with way more than 10,000 files
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (p === repoPath) {
+        const entries: fs.Dirent[] = [];
+        for (let i = 0; i < 50; i++) {
+          entries.push(createDirent(`dir${i}`, true));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // Each subdirectory has 500 files
+      const entries: fs.Dirent[] = [];
+      for (let i = 0; i < 500; i++) {
+        entries.push(createDirent(`file${i}.txt`, false));
+      }
+      return Promise.resolve(entries);
+    });
+
+    await detectContainerManagers(repoPath);
+
+    // Warning should be called exactly once, not multiple times
+    const warningCalls = mockedCore.warning.mock.calls.filter((call) =>
+      call[0].toString().includes("max file limit"),
+    );
+    expect(warningCalls.length).toBe(1);
+  });
+
+  test("should return managers found before hitting the limit", async () => {
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      const p = dirPath.toString();
+
+      if (p === repoPath) {
+        const entries: fs.Dirent[] = [
+          createDirent("Dockerfile", false), // Found early
+        ];
+        // Add many subdirectories to trigger limit
+        for (let i = 0; i < 100; i++) {
+          entries.push(createDirent(`dir${i}`, true));
+        }
+        return Promise.resolve(entries);
+      }
+
+      // Each subdirectory has many files
+      const entries: fs.Dirent[] = [];
+      for (let i = 0; i < 200; i++) {
+        entries.push(createDirent(`file${i}.txt`, false));
+      }
+      return Promise.resolve(entries);
+    });
+
+    const result = await detectContainerManagers(repoPath);
+
+    // Should still have found docker and podman from the root Dockerfile
+    expect(result).toContain("docker");
+    expect(result).toContain("podman");
+  });
+
+  test("should not emit warning when under the limit", async () => {
+    // Create a small repo
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      if (dirPath === repoPath) {
+        return Promise.resolve([
+          createDirent("Dockerfile", false),
+          createDirent("file1.txt", false),
+          createDirent("file2.txt", false),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await detectContainerManagers(repoPath);
+
+    // Should not have warning about limit
+    expect(mockedCore.warning).not.toHaveBeenCalledWith(
+      expect.stringContaining("max file limit"),
+    );
+  });
+
+  test("should log total files scanned in debug", async () => {
+    mockReaddirAsync.mockImplementation((dirPath: fs.PathLike) => {
+      if (dirPath === repoPath) {
+        return Promise.resolve([
+          createDirent("file1.txt", false),
+          createDirent("file2.txt", false),
+          createDirent("file3.txt", false),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    await detectContainerManagers(repoPath);
+
+    expect(mockedCore.debug).toHaveBeenCalledWith(
+      expect.stringContaining("scanned 3 files"),
+    );
+  });
+});
+
 describe("Performance tests for large repositories", () => {
   const repoPath = "/test/large-repo";
 

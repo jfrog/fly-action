@@ -89,6 +89,9 @@ const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
 // Maximum depth to scan for container package manager files.
 const MAX_CONTAINER_SCAN_DEPTH = 3;
 
+// Maximum number of files to scan to prevent runaway scanning on large repos.
+const MAX_FILES_TO_SCAN = 10000;
+
 /**
  * Associates a package manager with its pre-compiled file patterns.
  */
@@ -160,6 +163,7 @@ function checkFileForContainerManager(
  * @param maxDepth - Maximum depth to recurse
  * @param excludedDirs - Set of directory names to skip
  * @param foundManagers - Set to accumulate detected container package managers
+ * @param scanCount - Counter object to track files scanned (passed by reference)
  */
 async function findContainerFilesRecursive(
   currentPath: string,
@@ -167,7 +171,19 @@ async function findContainerFilesRecursive(
   maxDepth: number,
   excludedDirs: ReadonlySet<string>,
   foundManagers: Set<string>,
+  scanCount: { value: number; limitReached: boolean },
 ): Promise<void> {
+  // Stop if we've exceeded the maximum files to scan
+  if (scanCount.value >= MAX_FILES_TO_SCAN) {
+    if (!scanCount.limitReached) {
+      core.warning(
+        `Container detection reached max file limit (${MAX_FILES_TO_SCAN}). Some container managers may not be detected.`,
+      );
+      scanCount.limitReached = true;
+    }
+    return;
+  }
+
   // Stop if we've reached maximum recursion depth
   if (depth > maxDepth) {
     core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
@@ -197,6 +213,17 @@ async function findContainerFilesRecursive(
   // Process all entries in parallel for maximum performance
   await Promise.all(
     entries.map(async (entry) => {
+      // Check scan limit before processing each entry
+      if (scanCount.value >= MAX_FILES_TO_SCAN) {
+        if (!scanCount.limitReached) {
+          core.warning(
+            `Container detection reached max file limit (${MAX_FILES_TO_SCAN}). Some container managers may not be detected.`,
+          );
+          scanCount.limitReached = true;
+        }
+        return;
+      }
+
       const entryPath = path.join(currentPath, entry.name);
 
       try {
@@ -213,9 +240,11 @@ async function findContainerFilesRecursive(
             maxDepth,
             excludedDirs,
             foundManagers,
+            scanCount,
           );
         } else if (entry.isFile()) {
-          // Check if this file indicates a container package manager
+          // Increment scan counter and check if this file indicates a container package manager
+          scanCount.value++;
           checkFileForContainerManager(entry.name, entryPath, foundManagers);
         }
       } catch (error) {
@@ -254,13 +283,17 @@ export async function detectContainerManagers(
   }
 
   // Scan repository for container package manager files
+  const scanCount = { value: 0, limitReached: false };
   await findContainerFilesRecursive(
     repoPath,
     0,
     MAX_CONTAINER_SCAN_DEPTH,
     EXCLUDED_DIRS,
     detectedManagers,
+    scanCount,
   );
+
+  core.debug(`Container detection scanned ${scanCount.value} files`);
 
   // Convert Set to sorted array for consistent output
   const result = Array.from(detectedManagers).sort();
