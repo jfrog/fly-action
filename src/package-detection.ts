@@ -3,62 +3,67 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
+import {
+  compileFilePattern,
+  FileMatchPattern,
+  getErrorMessage,
+  normalizeToArray,
+} from "./utils";
 
-// Define constants at the module level for clarity and potential reuse.
-const PACKAGE_MANAGER_FILE_IDENTIFIERS = [
-  // Node.js ecosystem - specific lock files first, then package.json for npm
-  { file: "pnpm-lock.yaml", manager: "pnpm" },
-  { file: "yarn.lock", manager: "yarn" },
-  { file: "package.json", manager: "npm" },
+/**
+ * Supported standard package managers - always sent to fly-client (no detection needed).
+ * The fly-client will attempt to configure all of these.
+ *
+ * These are sent without detection because their setup is fast and lightweight.
+ * The fly-client will skip any that aren't installed on the system.
+ */
+export const SUPPORTED_PACKAGE_MANAGERS = [
+  "npm",
+  "pnpm",
+  "pip",
+  "pipenv",
+  "twine",
+  "maven",
+  "gradle",
+  "dotnet",
+  "nuget",
+  "go",
+] as const;
 
-  // Python ecosystem - specific lock files/project files first
-  { file: "poetry.lock", manager: "poetry" },
-  { file: "pipfile", manager: "pipenv" },
-  { file: ["requirements.txt", "setup.py", "pyproject.toml"], manager: "pip" },
-
-  // .NET ecosystem
+/**
+ * Container-based package managers - these are detected from files.
+ * Only detected container managers are sent to fly-client.
+ *
+ * Unlike standard package managers (which are always sent), container managers
+ * are only sent when detected because:
+ * 1. They take longer to set up and authenticate
+ * 2. They require authentication during setup (e.g., docker login)
+ * 3. Detecting them precisely avoids unnecessary setup overhead
+ *
+ * Detection is "forgiving" - e.g., Dockerfile triggers both docker AND podman
+ * since Podman can use Dockerfiles as a drop-in replacement.
+ */
+const CONTAINER_PACKAGE_MANAGER_IDENTIFIERS = [
+  // Docker - dockerfile and docker-compose files
   {
-    file: [
-      "*.csproj",
-      "*.fsproj",
-      "*.vbproj",
-      "global.json",
-      "directory.build.props",
-      "packages.config",
-    ],
-    manager: "dotnet",
+    file: ["dockerfile", "docker-compose.yml", "docker-compose.yaml"],
+    manager: "docker",
   },
-  { file: "*.nuspec", manager: "nuget" },
-
-  // Java ecosystem
-  { file: "pom.xml", manager: "maven" },
-  { file: ["build.gradle", "build.gradle.kts"], manager: "gradle" },
-
-  // Ruby
-  { file: "gemfile", manager: "rubygems" },
-
-  // Go
-  { file: "go.mod", manager: "go" },
-
-  // PHP
-  { file: "composer.json", manager: "composer" },
-
-  // Containers
+  // Podman - containerfile is podman-specific, but dockerfile and docker-compose also work with podman
   {
     file: [
       "dockerfile",
+      "containerfile",
       "docker-compose.yml",
       "docker-compose.yaml",
-      "containerfile",
     ],
-    manager: "docker",
+    manager: "podman",
   },
-
-  // Kubernetes
-  { file: ["helmfile.yaml", "helmfile.yml", "chart.yaml"], manager: "helm" },
-
-  // Rust
-  { file: "cargo.toml", manager: "cargo" },
+  // Helm - Kubernetes package manager
+  {
+    file: ["helmfile.yaml", "helmfile.yml", "chart.yaml", "values.yaml"],
+    manager: "helm",
+  },
 ] as const;
 
 const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
@@ -81,119 +86,251 @@ const EXCLUDED_DIRS: ReadonlySet<string> = new Set([
   "site-packages",
 ]);
 
-const MAX_DEPTH = 2;
+// Maximum depth to scan for container package manager files.
+const MAX_CONTAINER_SCAN_DEPTH = 3;
 
-function findFilesRecursive(
-  currentPath: string,
-  depth: number,
-  maxDepth: number,
-  excludedDirs: ReadonlySet<string>,
+// Maximum number of files to scan to prevent runaway scanning on large repos.
+const MAX_FILES_TO_SCAN = 10000;
+
+/**
+ * Associates a package manager with its pre-compiled file patterns.
+ */
+interface PackageManagerMatcher {
+  manager: string;
+  filePatterns: FileMatchPattern[];
+}
+
+/**
+ * Compiles all container file patterns into optimized matchers.
+ */
+function compileContainerPatternMatchers(): PackageManagerMatcher[] {
+  return CONTAINER_PACKAGE_MANAGER_IDENTIFIERS.map((identifier) => {
+    const filenames = normalizeToArray(identifier.file);
+    const compiledPatterns = filenames.map(compileFilePattern);
+
+    return {
+      manager: identifier.manager,
+      filePatterns: compiledPatterns,
+    };
+  });
+}
+
+/** Pre-compiles all container file pattern matchers once at module load time for performance */
+const CONTAINER_PACKAGE_MANAGER_MATCHERS = compileContainerPatternMatchers();
+
+/**
+ * Checks if a file matches any container package manager patterns and updates the found set.
+ * Uses pre-compiled matchers for efficient pattern matching.
+ *
+ * @param fileName - The name of the file to check
+ * @param filePath - The full path to the file (for logging)
+ * @param foundManagers - Set to update with detected container package managers
+ */
+function checkFileForContainerManager(
+  fileName: string,
+  filePath: string,
   foundManagers: Set<string>,
-  checks: typeof PACKAGE_MANAGER_FILE_IDENTIFIERS,
-) {
-  if (depth > maxDepth) {
-    core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
-    return;
-  }
+): void {
+  const fileNameLower = fileName.toLowerCase();
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(currentPath, { withFileTypes: true });
-  } catch (error) {
-    core.debug(
-      `Error reading directory ${currentPath}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return;
-  }
-
-  for (const entry of entries) {
-    const entryPath = path.join(currentPath, entry.name);
-    let stats;
-    try {
-      stats = fs.statSync(entryPath);
-    } catch (error) {
-      core.debug(
-        `Error getting stats for ${entryPath}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+  for (const matcher of CONTAINER_PACKAGE_MANAGER_MATCHERS) {
+    // Skip if we already detected this package manager
+    if (foundManagers.has(matcher.manager)) {
       continue;
     }
 
-    if (stats.isDirectory()) {
-      if (excludedDirs.has(entry.name)) {
-        core.debug(`Skipping excluded directory: ${entryPath}`);
-        continue;
+    // Check if any file pattern matches this file
+    const isMatch = matcher.filePatterns.some((pattern) => {
+      if (pattern.regex) {
+        return pattern.regex.test(fileName);
       }
-      findFilesRecursive(
-        entryPath,
-        depth + 1,
-        maxDepth,
-        excludedDirs,
-        foundManagers,
-        checks,
-      );
-    } else if (stats.isFile()) {
-      const fileNameLower = entry.name.toLowerCase();
-      for (const check of checks) {
-        const patterns = Array.isArray(check.file) ? check.file : [check.file];
-        if (
-          patterns.some((pattern: string) => {
-            const lowerPattern = pattern.toLowerCase();
-            if (lowerPattern.startsWith("*.")) {
-              const regexPattern = new RegExp(
-                // Construct regex: .*\.ext$ - e.g. .*\.csproj$
-                // We need to escape the dot in the extension.
-                // entry.name is used here as regex can handle case insensitivity itself.
-                `^.*\\${lowerPattern.substring(1)}$`,
-                "i", // Case-insensitive match
-              );
-              return regexPattern.test(entry.name);
-            } else {
-              return fileNameLower.endsWith(lowerPattern);
-            }
-          })
-        ) {
-          if (!foundManagers.has(check.manager)) {
-            core.debug(`Found ${check.manager} file: ${entryPath}`);
-            foundManagers.add(check.manager);
-          }
-        }
-      }
+      return fileNameLower === pattern.exactName;
+    });
+
+    if (isMatch) {
+      core.debug(`Found ${matcher.manager} file: ${filePath}`);
+      foundManagers.add(matcher.manager);
     }
   }
 }
 
 /**
- * Detects package managers used in the repository.
- * @param repoPath The root path of the repository.
- * @returns An array of detected package manager names.
+ * Recursively scans directories for container package manager files.
+ * Uses parallel async operations for optimal performance.
+ *
+ * @param currentPath - The directory path to scan
+ * @param depth - Current recursion depth
+ * @param maxDepth - Maximum depth to recurse
+ * @param excludedDirs - Set of directory names to skip
+ * @param foundManagers - Set to accumulate detected container package managers
+ * @param scanCount - Counter object to track files scanned (passed by reference)
  */
-export function detectPackageManagers(repoPath: string): string[] {
-  const detected: Set<string> = new Set();
+async function findContainerFilesRecursive(
+  currentPath: string,
+  depth: number,
+  maxDepth: number,
+  excludedDirs: ReadonlySet<string>,
+  foundManagers: Set<string>,
+  scanCount: { value: number; limitReached: boolean },
+): Promise<void> {
+  // Stop if we've exceeded the maximum files to scan
+  if (scanCount.value >= MAX_FILES_TO_SCAN) {
+    if (!scanCount.limitReached) {
+      core.warning(
+        `Container detection reached max file limit (${MAX_FILES_TO_SCAN}). Some container managers may not be detected.`,
+      );
+      scanCount.limitReached = true;
+    }
+    return;
+  }
+
+  // Stop if we've reached maximum recursion depth
+  if (depth > maxDepth) {
+    core.debug(`Max depth ${maxDepth} reached at ${currentPath}`);
+    return;
+  }
+
+  // Early exit optimization: stop if we've found all possible container managers
+  const totalPossibleManagers = CONTAINER_PACKAGE_MANAGER_MATCHERS.length;
+  if (foundManagers.size >= totalPossibleManagers) {
+    core.debug(
+      `Early exit: Found all ${totalPossibleManagers} container package managers, stopping search at ${currentPath}`,
+    );
+    return;
+  }
+
+  // Read directory entries with file type information
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
+  } catch (error) {
+    core.debug(
+      `Error reading directory ${currentPath}: ${getErrorMessage(error)}`,
+    );
+    return;
+  }
+
+  // Process all entries in parallel for maximum performance
+  await Promise.all(
+    entries.map(async (entry) => {
+      // Check scan limit before processing each entry
+      if (scanCount.value >= MAX_FILES_TO_SCAN) {
+        if (!scanCount.limitReached) {
+          core.warning(
+            `Container detection reached max file limit (${MAX_FILES_TO_SCAN}). Some container managers may not be detected.`,
+          );
+          scanCount.limitReached = true;
+        }
+        return;
+      }
+
+      const entryPath = path.join(currentPath, entry.name);
+
+      try {
+        if (entry.isDirectory()) {
+          // Skip excluded directories (node_modules, .git, etc.)
+          if (excludedDirs.has(entry.name)) {
+            core.debug(`Skipping excluded directory: ${entryPath}`);
+            return;
+          }
+          // Recursively scan subdirectories in parallel
+          await findContainerFilesRecursive(
+            entryPath,
+            depth + 1,
+            maxDepth,
+            excludedDirs,
+            foundManagers,
+            scanCount,
+          );
+        } else if (entry.isFile()) {
+          // Increment scan counter and check if this file indicates a container package manager
+          scanCount.value++;
+          checkFileForContainerManager(entry.name, entryPath, foundManagers);
+        }
+      } catch (error) {
+        core.debug(`Error processing ${entryPath}: ${getErrorMessage(error)}`);
+      }
+    }),
+  );
+}
+
+/**
+ * Detects container-based package managers (docker, podman, helm) by scanning for characteristic files.
+ * Performs an async parallel directory scan up to MAX_CONTAINER_SCAN_DEPTH levels deep.
+ *
+ * @param repoPath - The root path of the repository to scan
+ * @returns A promise that resolves to an array of detected container package manager names
+ *
+ * @example
+ * const containers = await detectContainerManagers('/path/to/repo');
+ * // Returns: ['docker', 'podman'] if dockerfile is found
+ */
+export async function detectContainerManagers(
+  repoPath: string,
+): Promise<string[]> {
+  const detectedManagers: Set<string> = new Set();
 
   core.debug(
-    `Detecting package managers in: ${repoPath}, max depth: ${MAX_DEPTH}`,
+    `Starting container package manager detection in: ${repoPath} (max depth: ${MAX_CONTAINER_SCAN_DEPTH})`,
   );
+
+  // Validate repository path exists
   if (!repoPath || !fs.existsSync(repoPath)) {
     core.warning(
-      `GITHUB_WORKSPACE (${repoPath}) not set or does not exist. Cannot detect package managers.`,
+      `Repository path (${repoPath}) not set or does not exist. Cannot detect container package managers.`,
     );
     return [];
   }
 
-  findFilesRecursive(
+  // Scan repository for container package manager files
+  const scanCount = { value: 0, limitReached: false };
+  await findContainerFilesRecursive(
     repoPath,
     0,
-    MAX_DEPTH,
+    MAX_CONTAINER_SCAN_DEPTH,
     EXCLUDED_DIRS,
-    detected,
-    PACKAGE_MANAGER_FILE_IDENTIFIERS,
+    detectedManagers,
+    scanCount,
   );
 
-  const result = Array.from(detected);
+  core.debug(`Container detection scanned ${scanCount.value} files`);
+
+  // Convert Set to sorted array for consistent output
+  const result = Array.from(detectedManagers).sort();
+
+  // Log results
   if (result.length > 0) {
-    core.info(`Detected package managers: ${result.join(", ")}`);
+    core.info(`Detected container package managers: ${result.join(", ")}`);
   } else {
-    core.info("Detected package managers: none");
+    core.info("No container package managers detected");
   }
+
   return result;
+}
+
+/**
+ * Gets all package managers to send to fly-client.
+ * Combines all supported standard package managers with detected container managers.
+ *
+ * @param repoPath - The root path of the repository to scan for container managers
+ * @returns A promise that resolves to an array of all package manager names to configure
+ *
+ * @example
+ * const managers = await getAllPackageManagers('/path/to/repo');
+ * // Returns: ['npm', 'pnpm', 'pip', ..., 'docker', 'helm']
+ */
+export async function getAllPackageManagers(
+  repoPath: string,
+): Promise<string[]> {
+  const containerManagers = await detectContainerManagers(repoPath);
+
+  // Combine supported standard managers with detected container managers
+  const allManagers = [
+    ...SUPPORTED_PACKAGE_MANAGERS,
+    ...containerManagers,
+  ].sort();
+
+  core.info(`All package managers for fly-client: ${allManagers.join(", ")}`);
+
+  return allManagers;
 }

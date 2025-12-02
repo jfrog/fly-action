@@ -5,7 +5,7 @@ import * as exec from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
 import { authenticateOidc } from "./oidc";
-import { detectPackageManagers } from "./package-detection"; // Import from new file
+import { getAllPackageManagers } from "./package-detection";
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
@@ -47,15 +47,15 @@ export async function run(): Promise<void> {
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
-    // Detect and save package managers
+    // Get all package managers (supported standard + detected containers)
     const workspacePath = process.env.GITHUB_WORKSPACE || "";
-    const detectedPackageManagers = detectPackageManagers(workspacePath);
+    const allPackageManagers = await getAllPackageManagers(workspacePath);
     core.saveState(
       STATE_FLY_PACKAGE_MANAGERS,
-      JSON.stringify(detectedPackageManagers),
+      JSON.stringify(allPackageManagers),
     );
     core.info(
-      `Saved detected package managers to state: ${JSON.stringify(detectedPackageManagers)}`,
+      `Saved package managers to state: ${JSON.stringify(allPackageManagers)}`,
     );
 
     const binPath = resolveFlyCLIBinaryPath();
@@ -69,8 +69,14 @@ export async function run(): Promise<void> {
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
-    core.info("Executing Fly CLI setup command...");
-    const exitCode = await exec.exec(binPath, ["setup"], options);
+
+    // Pass all package managers to fly-client
+    core.info(
+      `Executing Fly CLI setup for managers: ${allPackageManagers.join(", ")}`,
+    );
+    const args = ["setup", ...allPackageManagers];
+    const exitCode = await exec.exec(binPath, args, options);
+
     if (exitCode !== 0) {
       core.error("Fly setup command failed with non-zero exit code.");
       throw new Error("Fly setup command failed");

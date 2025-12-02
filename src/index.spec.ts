@@ -16,10 +16,30 @@ import * as fs from "fs";
 import * as path from "path";
 import { resolveFlyCLIBinaryPath, run } from "./index";
 import { authenticateOidc } from "./oidc";
+import {
+  getAllPackageManagers,
+  SUPPORTED_PACKAGE_MANAGERS,
+} from "./package-detection";
 import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
 
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
+}));
+
+jest.mock("./package-detection", () => ({
+  getAllPackageManagers: jest.fn(),
+  SUPPORTED_PACKAGE_MANAGERS: [
+    "npm",
+    "pnpm",
+    "pip",
+    "pipenv",
+    "twine",
+    "maven",
+    "gradle",
+    "dotnet",
+    "nuget",
+    "go",
+  ],
 }));
 
 describe("resolveFlyCLIBinaryPath", () => {
@@ -75,6 +95,10 @@ describe("run", () => {
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
+    // Default: return all supported package managers (no container managers detected)
+    (getAllPackageManagers as jest.Mock).mockResolvedValue([
+      ...SUPPORTED_PACKAGE_MANAGERS,
+    ]);
   });
 
   it("runs successfully when exec returns 0", async () => {
@@ -155,6 +179,99 @@ describe("run", () => {
     await run();
     expect(setFailedSpy).toHaveBeenCalledWith("An unknown error occurred");
   });
+
+  it("passes all package managers (supported + detected containers) to fly CLI", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    // Simulate detected container managers added to supported managers
+    (getAllPackageManagers as jest.Mock).mockResolvedValue([
+      ...SUPPORTED_PACKAGE_MANAGERS,
+      "docker",
+      "helm",
+    ]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should call exec with all package managers as arguments
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup", ...SUPPORTED_PACKAGE_MANAGERS, "docker", "helm"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("passes only supported managers when no containers detected", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    (getAllPackageManagers as jest.Mock).mockResolvedValue([
+      ...SUPPORTED_PACKAGE_MANAGERS,
+    ]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should call exec with all supported package managers
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup", ...SUPPORTED_PACKAGE_MANAGERS],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("includes podman when dockerfile is detected", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    // Dockerfile triggers both docker and podman
+    (getAllPackageManagers as jest.Mock).mockResolvedValue([
+      ...SUPPORTED_PACKAGE_MANAGERS,
+      "docker",
+      "podman",
+    ]);
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should include both docker and podman
+    expect(execSpy).toHaveBeenCalledWith(
+      "/fake/bin",
+      ["setup", ...SUPPORTED_PACKAGE_MANAGERS, "docker", "podman"],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          FLY_URL: "https://test.com",
+          FLY_ACCESS_TOKEN: "token",
+        }),
+      }),
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("run exec and binary error branches", () => {
@@ -172,6 +289,10 @@ describe("run exec and binary error branches", () => {
       user: "u",
       accessToken: "t",
     });
+    // Default: return all supported package managers
+    (getAllPackageManagers as jest.Mock).mockResolvedValue([
+      ...SUPPORTED_PACKAGE_MANAGERS,
+    ]);
   });
 
   it("calls setFailed when exec throws error", async () => {

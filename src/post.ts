@@ -12,8 +12,8 @@ import {
   GITHUB_STATUS_TIMED_OUT,
   INPUT_GITHUB_TOKEN,
 } from "./constants";
-import { HttpClient } from "@actions/http-client";
 import { EndCiRequest } from "./types";
+import { createHttpClient } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 interface GitHubStep {
@@ -220,7 +220,7 @@ export async function runPost(): Promise<void> {
   core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-  const httpClient = new HttpClient("fly-action");
+  const httpClient = createHttpClient();
   core.info(
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );

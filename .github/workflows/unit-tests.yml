@@ -23,8 +23,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      - name: Run unit tests
+        run: npm test -- --testPathIgnorePatterns=integration-tests --testPathIgnorePatterns=dist --testPathIgnorePatterns=lib
 
       - name: Build
         run: npm run build
