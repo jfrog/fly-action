@@ -429,6 +429,58 @@ describe("Fly Client Integration Tests", () => {
   });
 });
 
+describe("Package manager installation tolerance", () => {
+  it("should not fail due to package managers not being installed on the system", async () => {
+    // Run setup with all package managers - some may not be installed on the test machine
+    // (e.g., dotnet, nuget, gradle, helm, podman are often not installed)
+    // The fly-client should NOT fail because a package manager isn't installed
+    const result = await spawnBinary([
+      "setup",
+      ...SUPPORTED_PACKAGE_MANAGERS,
+      "docker",
+      "podman",
+      "helm",
+      "--url",
+      "https://test.example.com",
+    ]);
+
+    const combinedOutput = result.stdout + result.stderr;
+
+    // Should NOT contain errors about package managers not being installed/found
+    // Error format: "failed to setup "dotnet": ... executable file not found in $PATH"
+    expect(combinedOutput).not.toContain("executable file not found");
+    expect(combinedOutput).not.toContain("not found in $PATH");
+
+    // The only failure should be authentication-related, not package-manager-availability-related
+    // Exit code will be non-zero due to missing auth, which is expected
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  // Test individual package managers that are commonly NOT installed
+  const uncommonManagers = ["dotnet", "nuget", "gradle", "helm", "podman"];
+
+  uncommonManagers.forEach((manager) => {
+    it(`should not fail when ${manager} is not installed on the system`, async () => {
+      const result = await spawnBinary([
+        "setup",
+        manager,
+        "--url",
+        "https://test.example.com",
+      ]);
+
+      const combinedOutput = result.stdout + result.stderr;
+
+      // Should NOT fail because the package manager binary isn't installed
+      // Error format: "failed to setup "dotnet": ... executable file not found in $PATH"
+      expect(combinedOutput).not.toContain("executable file not found");
+      expect(combinedOutput).not.toContain("not found in $PATH");
+
+      // Failure should be auth-related, not package-manager-availability-related
+      expect(result.exitCode).not.toBe(0);
+    });
+  });
+});
+
 describe("Fly client cross-platform check", () => {
   it("should have all platform fly-client binaries present", () => {
     const binDir = path.resolve(__dirname, "..", "..", "bin");
