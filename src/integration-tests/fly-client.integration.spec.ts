@@ -4,28 +4,102 @@
  * Integration tests for the Fly Client CLI.
  * These tests verify that the fly-client is functional and accepts expected arguments.
  *
- * Note: These tests run against the actual fly-client binary and require:
- * - The appropriate binary for your platform (darwin-arm64, darwin-x64, linux-arm64, linux-x64)
- * - The binary to be present in the bin/ directory
+ * Note: These tests download the actual fly-client binary and test it.
  */
 
 import * as fs from "fs";
 import * as path from "path";
+import * as tc from "@actions/tool-cache";
 import { execSync, spawn, SpawnOptions } from "child_process";
 import { SUPPORTED_PACKAGE_MANAGERS } from "../package-detection";
+import { FLY_CLIENT_BASE_URL } from "../constants";
 
-// Determine the correct binary for the current platform
-const getBinaryPath = (): string => {
-  const binName = `fly-${process.platform}-${process.arch}`;
-  return path.resolve(__dirname, "..", "..", "bin", binName);
+// Import the download functionality (same as in fly-download.integration.spec.ts)
+const PLATFORM_MAP: Record<string, string> = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
 };
+
+const ARCH_MAP: Record<string, string> = {
+  x64: "amd64",
+  arm64: "arm64",
+};
+
+const FLY_TOOL_NAME = "fly-client";
+const FLY_BINARY_NAME = "fly";
+const FLY_CACHE_VERSION = "latest";
+
+function getPlatformInfo(): { os: string; arch: string; extension: string } {
+  const os = PLATFORM_MAP[process.platform];
+  if (!os) {
+    throw new Error(`Unsupported platform: ${process.platform}`);
+  }
+
+  const arch = ARCH_MAP[process.arch];
+  if (!arch) {
+    throw new Error(`Unsupported architecture: ${process.arch}`);
+  }
+
+  const extension = process.platform === "win32" ? ".exe" : "";
+
+  return { os, arch, extension };
+}
+
+async function downloadAndCacheFlyClient(): Promise<string> {
+  const { os, arch, extension } = getPlatformInfo();
+
+  // Check cache first
+  const cachedPath = tc.find(FLY_TOOL_NAME, FLY_CACHE_VERSION, `${os}-${arch}`);
+
+  if (cachedPath) {
+    const binPath = path.join(cachedPath, `${FLY_BINARY_NAME}${extension}`);
+    if (fs.existsSync(binPath)) {
+      return binPath;
+    }
+  }
+
+  // Download the binary
+  const downloadUrl = `${FLY_CLIENT_BASE_URL}/[RELEASE]/${os}-${arch}/${FLY_BINARY_NAME}${extension}`;
+
+  const downloadPath = await tc.downloadTool(downloadUrl);
+
+  // Create temp directory for the binary
+  const tempDir = path.join(
+    process.env.RUNNER_TEMP || "/tmp",
+    `${FLY_TOOL_NAME}-${Date.now()}`,
+  );
+  fs.mkdirSync(tempDir, { recursive: true });
+
+  // Move and rename the downloaded file
+  const binaryName = `${FLY_BINARY_NAME}${extension}`;
+  const binaryPath = path.join(tempDir, binaryName);
+  fs.renameSync(downloadPath, binaryPath);
+
+  // Make executable on Unix
+  if (process.platform !== "win32") {
+    fs.chmodSync(binaryPath, 0o755);
+  }
+
+  // Cache it
+  const finalCachedPath = await tc.cacheDir(
+    tempDir,
+    FLY_TOOL_NAME,
+    FLY_CACHE_VERSION,
+    `${os}-${arch}`,
+  );
+
+  return path.join(finalCachedPath, binaryName);
+}
+
+// Global binary path that will be set once
+let binPath: string;
 
 // Helper to execute binary and capture output
 const execBinary = (
   args: string[],
   env?: Record<string, string>,
 ): { stdout: string; stderr: string; exitCode: number } => {
-  const binPath = getBinaryPath();
   try {
     const result = execSync(`"${binPath}" ${args.join(" ")}`, {
       encoding: "utf-8",
@@ -53,7 +127,6 @@ const spawnBinary = (
   env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   return new Promise((resolve) => {
-    const binPath = getBinaryPath();
     const options: SpawnOptions = {
       env: { ...process.env, ...env },
     };
@@ -100,7 +173,24 @@ const spawnBinary = (
 };
 
 describe("Fly Client Integration Tests", () => {
-  const binPath = getBinaryPath();
+  // Increase timeout for these tests as they involve actual downloads
+  jest.setTimeout(60000); // 60 seconds
+
+  beforeAll(async () => {
+    // Set up environment for local testing if needed
+    if (!process.env.GITHUB_ACTIONS) {
+      const tempToolCache = path.join(
+        process.env.RUNNER_TEMP || "/tmp",
+        "tool-cache-test",
+      );
+      fs.mkdirSync(tempToolCache, { recursive: true });
+      process.env.RUNNER_TOOL_CACHE = tempToolCache;
+      process.env.RUNNER_TEMP = process.env.RUNNER_TEMP || "/tmp";
+    }
+
+    // Download and cache the binary once for all tests
+    binPath = await downloadAndCacheFlyClient();
+  });
 
   describe("Fly client existence and permissions", () => {
     it("should have the fly-client file present", () => {
@@ -481,28 +571,30 @@ describe("Package manager installation tolerance", () => {
   });
 });
 
-describe("Fly client cross-platform check", () => {
-  it("should have all platform fly-client binaries present", () => {
-    const binDir = path.resolve(__dirname, "..", "..", "bin");
-    const expectedBinaries = [
-      "fly-darwin-arm64",
-      "fly-darwin-x64",
-      "fly-linux-arm64",
-      "fly-linux-x64",
-    ];
-
-    expectedBinaries.forEach((binName) => {
-      const binPath = path.join(binDir, binName);
-      expect(fs.existsSync(binPath)).toBe(true);
-    });
+describe("Fly client download verification", () => {
+  it("should successfully download binary for current platform", () => {
+    // Binary should have been downloaded in beforeAll
+    expect(binPath).toBeTruthy();
+    expect(fs.existsSync(binPath)).toBe(true);
   });
 
-  it("should have consistent version across all fly-client binaries", () => {
-    // Get version from current platform fly-client
+  it("should have downloaded binary with version information", () => {
+    // Get version from downloaded fly-client
     const currentResult = execBinary(["version"]);
     const currentVersion = currentResult.stdout;
 
-    // We can only test the current platform's fly-client
+    // Verify the downloaded binary works and has version info
     expect(currentVersion).toContain("Version:");
+  });
+
+  it("should have correct platform-specific binary", () => {
+    const { extension } = getPlatformInfo();
+
+    // Verify extension matches platform
+    if (process.platform === "win32") {
+      expect(binPath).toMatch(/\.exe$/);
+    } else {
+      expect(binPath).not.toMatch(/\.exe$/);
+    }
   });
 });
