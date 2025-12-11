@@ -11,6 +11,10 @@ export const STATE_FLY_PACKAGE_MANAGERS = "fly-package-managers";
 export const FLY_CLI_PATH = "fly-cli-path";
 export const FLY_CLI_SETUP_OUTPUT_PATH = "fly-cli-setup-output-path";
 
+// Fly client download configuration
+export const FLY_CLIENT_BASE_URL =
+  "https://releases.jfrog.io/artifactory/fly-client/v1";
+
 // GitHub step/job conclusion statuses
 export const GITHUB_STATUS_SUCCESS = "success";
 export const GITHUB_STATUS_FAILURE = "failure";

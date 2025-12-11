@@ -1,17 +1,28 @@
 // Copyright (c) JFrog Ltd. (2025)
 
-// Mock fs and path modules
+// Mock modules before importing - preserve fs.promises for @actions/core
+jest.mock("@actions/tool-cache");
 jest.mock("fs", () => {
   const actual = jest.requireActual("fs");
-  return { ...actual, existsSync: jest.fn(), chmodSync: jest.fn() };
+  return {
+    ...actual,
+    existsSync: jest.fn(),
+    chmodSync: jest.fn(),
+    mkdirSync: jest.fn(),
+    renameSync: jest.fn(),
+  };
 });
 jest.mock("path", () => {
   const actual = jest.requireActual("path");
-  return { ...actual, resolve: jest.fn() };
+  return {
+    ...actual,
+    join: jest.fn(),
+  };
 });
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
+import * as tc from "@actions/tool-cache";
 import * as fs from "fs";
 import * as path from "path";
 import { resolveFlyCLIBinaryPath, run } from "./index";
@@ -42,44 +53,323 @@ jest.mock("./package-detection", () => ({
   ],
 }));
 
-describe("resolveFlyCLIBinaryPath", () => {
-  afterEach(() => jest.resetAllMocks());
+// Helper to mock platform and arch
+const mockPlatform = (platform: string, arch: string) => {
+  Object.defineProperty(process, "platform", {
+    value: platform,
+    configurable: true,
+  });
+  Object.defineProperty(process, "arch", {
+    value: arch,
+    configurable: true,
+  });
+};
 
-  it("returns resolved path when binary exists and sets permissions", () => {
-    const fakePath = "/fake/bin";
-    (path.resolve as jest.Mock).mockReturnValue(fakePath);
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
+describe("getPlatformInfo", () => {
+  const originalPlatform = process.platform;
+  const originalArch = process.arch;
 
-    const result = resolveFlyCLIBinaryPath();
-    expect(result).toBe(fakePath);
-    expect(fs.chmodSync as jest.Mock).toHaveBeenCalledWith(fakePath, 0o755);
+  afterEach(() => {
+    mockPlatform(originalPlatform, originalArch);
+    jest.resetAllMocks();
   });
 
-  it("throws error when binary does not exist", () => {
-    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
+  it("maps darwin x64 correctly", async () => {
+    mockPlatform("darwin", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
 
-    expect(() => resolveFlyCLIBinaryPath()).toThrow(
-      `Fly CLI binary not found at /fake/bin for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("darwin-amd64/fly"),
+    );
+  });
+
+  it("maps darwin arm64 correctly", async () => {
+    mockPlatform("darwin", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("darwin-arm64/fly"),
+    );
+  });
+
+  it("maps linux x64 correctly", async () => {
+    mockPlatform("linux", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("linux-amd64/fly"),
+    );
+  });
+
+  it("maps win32 x64 correctly with .exe extension", async () => {
+    mockPlatform("win32", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly.exe");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("windows-amd64/fly.exe"),
+    );
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+  });
+
+  it("throws error for unsupported platform", async () => {
+    mockPlatform("freebsd", "x64");
+
+    await expect(resolveFlyCLIBinaryPath()).rejects.toThrow(
+      "Unsupported platform: freebsd",
+    );
+  });
+
+  it("throws error for unsupported architecture", async () => {
+    mockPlatform("linux", "ia32");
+
+    await expect(resolveFlyCLIBinaryPath()).rejects.toThrow(
+      "Unsupported architecture: ia32",
     );
   });
 });
 
-describe("resolveFlyCLIBinaryPath Windows behavior", () => {
-  it("does not chmod on win32 platform", () => {
-    // Temporarily override platform
-    const origPlatform = process.platform;
-    Object.defineProperty(process, "platform", { value: "win32" });
-    (path.resolve as jest.Mock).mockReturnValue("/fake/win/bin");
+describe("findCachedBinary", () => {
+  const originalPlatform = process.platform;
+  const originalArch = process.arch;
+
+  beforeEach(() => {
+    mockPlatform(originalPlatform, originalArch);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it("returns cached binary path when found", async () => {
+    mockPlatform("darwin", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("/cached/fly-client/latest");
     (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockReturnValue("/cached/fly-client/latest/fly");
 
-    const result = resolveFlyCLIBinaryPath();
-    expect(result).toBe("/fake/win/bin");
-    // chmod should not be called
-    expect(fs.chmodSync as jest.Mock).not.toHaveBeenCalled();
+    const result = await resolveFlyCLIBinaryPath();
 
-    // Restore platform
-    Object.defineProperty(process, "platform", { value: origPlatform });
+    expect(result).toBe("/cached/fly-client/latest/fly");
+    expect(tc.downloadTool).not.toHaveBeenCalled();
+  });
+
+  it("downloads when cache is not found", async () => {
+    mockPlatform("linux", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalled();
+    expect(tc.cacheDir).toHaveBeenCalled();
+  });
+
+  it("re-downloads when cached path exists but binary does not", async () => {
+    mockPlatform("darwin", "x64");
+    (tc.find as jest.Mock).mockReturnValue("/cached/fly-client");
+    (fs.existsSync as jest.Mock)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/new-cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalled();
+  });
+});
+
+describe("downloadBinary", () => {
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it("downloads from correct URL with [RELEASE]", async () => {
+    mockPlatform("linux", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("[RELEASE]/linux-arm64/fly"),
+    );
+    expect(tc.downloadTool).toHaveBeenCalledWith(
+      expect.stringContaining("releases.jfrog.io/artifactory/fly-client/v1"),
+    );
+  });
+
+  it("throws error when download fails", async () => {
+    mockPlatform("darwin", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockRejectedValue(
+      new Error("Network error"),
+    );
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await expect(resolveFlyCLIBinaryPath()).rejects.toThrow(
+      "Failed to download from",
+    );
+  });
+});
+
+describe("prepareBinary", () => {
+  const originalPlatform = process.platform;
+  const originalArch = process.arch;
+
+  beforeEach(() => {
+    mockPlatform(originalPlatform, originalArch);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it("sets executable permissions on Unix systems", async () => {
+    mockPlatform("linux", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(fs.chmodSync).toHaveBeenCalledWith(expect.any(String), 0o755);
+  });
+
+  it("does not set permissions on Windows", async () => {
+    mockPlatform("win32", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly.exe");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(fs.chmodSync).not.toHaveBeenCalled();
+  });
+
+  it("caches the binary with correct parameters", async () => {
+    mockPlatform("darwin", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockImplementation((...args) => args.join("/"));
+
+    await resolveFlyCLIBinaryPath();
+
+    expect(tc.cacheDir).toHaveBeenCalledWith(
+      expect.any(String),
+      "fly-client",
+      "latest",
+      "darwin-arm64",
+    );
+  });
+});
+
+describe("resolveFlyCLIBinaryPath", () => {
+  const originalPlatform = process.platform;
+  const originalArch = process.arch;
+
+  beforeEach(() => {
+    mockPlatform(originalPlatform, originalArch);
+  });
+
+  afterEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it("returns path after successful download and cache", async () => {
+    mockPlatform("darwin", "arm64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.join as jest.Mock).mockReturnValue("/cached/fly-client/fly");
+
+    const result = await resolveFlyCLIBinaryPath();
+
+    expect(result).toBe("/cached/fly-client/fly");
+  });
+
+  it("throws error if binary does not exist after download", async () => {
+    mockPlatform("linux", "x64");
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockResolvedValue("/tmp/fly");
+    (tc.cacheDir as jest.Mock).mockResolvedValue("/cached/fly-client");
+    (fs.mkdirSync as jest.Mock).mockReturnValue(undefined);
+    (fs.renameSync as jest.Mock).mockReturnValue(undefined);
+    (fs.chmodSync as jest.Mock).mockReturnValue(undefined);
+    (fs.existsSync as jest.Mock).mockReturnValue(false);
+    (path.join as jest.Mock).mockReturnValue("/cached/fly-client/fly");
+
+    await expect(resolveFlyCLIBinaryPath()).rejects.toThrow(
+      "Fly CLI binary not found at /cached/fly-client/fly after download",
+    );
   });
 });
 
@@ -89,13 +379,17 @@ describe("run", () => {
   const setSecretSpy = jest.spyOn(core, "setSecret");
   const saveStateSpy = jest.spyOn(core, "saveState");
   const execSpy = jest.spyOn(exec, "exec");
+  const originalPlatform = process.platform;
+  const originalArch = process.arch;
 
   beforeEach(() => {
+    mockPlatform(originalPlatform, originalArch);
     jest.resetAllMocks();
-    // Stub file system to simulate binary present
+    // Stub binary download and cache
+    (tc.find as jest.Mock).mockReturnValue("/cached/fly-client");
     (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
-    // Default: return all supported package managers (no container managers detected)
+    (path.join as jest.Mock).mockReturnValue("/cached/fly-client/fly");
+    // Default: return all supported package managers
     (getAllPackageManagers as jest.Mock).mockResolvedValue([
       ...SUPPORTED_PACKAGE_MANAGERS,
     ]);
@@ -145,7 +439,6 @@ describe("run", () => {
     await run();
 
     expect(setFailedSpy).toHaveBeenCalledWith("oidc fail");
-    // No state should be saved when authentication fails
     expect(saveStateSpy).not.toHaveBeenCalled();
   });
 
@@ -159,7 +452,6 @@ describe("run", () => {
     });
     execSpy.mockImplementation(
       async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
-        // check ignore env var passed
         const env = options?.env;
         expect(env?.FLY_IGNORE_PACKAGE_MANAGERS).toBe("docker");
         return 0;
@@ -173,14 +465,13 @@ describe("run", () => {
 
   it("handles non-Error exceptions with unknown error message", async () => {
     getInputSpy.mockImplementation(() => "u");
-    // reject with non-Error
     (authenticateOidc as jest.Mock).mockRejectedValue("failString");
 
     await run();
     expect(setFailedSpy).toHaveBeenCalledWith("An unknown error occurred");
   });
 
-  it("passes all package managers (supported + detected containers) to fly CLI", async () => {
+  it("passes all package managers to fly CLI", async () => {
     getInputSpy.mockImplementation((name: string) =>
       name === "url" ? "https://test.com" : "",
     );
@@ -188,7 +479,6 @@ describe("run", () => {
       user: "user",
       accessToken: "token",
     });
-    // Simulate detected container managers added to supported managers
     (getAllPackageManagers as jest.Mock).mockResolvedValue([
       ...SUPPORTED_PACKAGE_MANAGERS,
       "docker",
@@ -198,9 +488,8 @@ describe("run", () => {
 
     await run();
 
-    // Should call exec with all package managers as arguments
     expect(execSpy).toHaveBeenCalledWith(
-      "/fake/bin",
+      "/cached/fly-client/fly",
       ["setup", ...SUPPORTED_PACKAGE_MANAGERS, "docker", "helm"],
       expect.objectContaining({
         env: expect.objectContaining({
@@ -212,108 +501,23 @@ describe("run", () => {
     expect(setFailedSpy).not.toHaveBeenCalled();
   });
 
-  it("passes only supported managers when no containers detected", async () => {
+  it("handles download failure gracefully", async () => {
     getInputSpy.mockImplementation((name: string) =>
-      name === "url" ? "https://test.com" : "",
+      name === "url" ? "https://url" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
       accessToken: "token",
     });
-    (getAllPackageManagers as jest.Mock).mockResolvedValue([
-      ...SUPPORTED_PACKAGE_MANAGERS,
-    ]);
-    execSpy.mockResolvedValue(0);
+    (tc.find as jest.Mock).mockReturnValue("");
+    (tc.downloadTool as jest.Mock).mockRejectedValue(
+      new Error("Network error"),
+    );
 
     await run();
 
-    // Should call exec with all supported package managers
-    expect(execSpy).toHaveBeenCalledWith(
-      "/fake/bin",
-      ["setup", ...SUPPORTED_PACKAGE_MANAGERS],
-      expect.objectContaining({
-        env: expect.objectContaining({
-          FLY_URL: "https://test.com",
-          FLY_ACCESS_TOKEN: "token",
-        }),
-      }),
-    );
-    expect(setFailedSpy).not.toHaveBeenCalled();
-  });
-
-  it("includes podman when dockerfile is detected", async () => {
-    getInputSpy.mockImplementation((name: string) =>
-      name === "url" ? "https://test.com" : "",
-    );
-    (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
-      accessToken: "token",
-    });
-    // Dockerfile triggers both docker and podman
-    (getAllPackageManagers as jest.Mock).mockResolvedValue([
-      ...SUPPORTED_PACKAGE_MANAGERS,
-      "docker",
-      "podman",
-    ]);
-    execSpy.mockResolvedValue(0);
-
-    await run();
-
-    // Should include both docker and podman
-    expect(execSpy).toHaveBeenCalledWith(
-      "/fake/bin",
-      ["setup", ...SUPPORTED_PACKAGE_MANAGERS, "docker", "podman"],
-      expect.objectContaining({
-        env: expect.objectContaining({
-          FLY_URL: "https://test.com",
-          FLY_ACCESS_TOKEN: "token",
-        }),
-      }),
-    );
-    expect(setFailedSpy).not.toHaveBeenCalled();
-  });
-});
-
-describe("run exec and binary error branches", () => {
-  const getInputSpy = jest.spyOn(core, "getInput");
-  const setFailedSpy = jest.spyOn(core, "setFailed");
-  const execSpy = jest.spyOn(exec, "exec");
-
-  beforeEach(() => {
-    jest.resetAllMocks();
-    // default auth ok
-    getInputSpy.mockImplementation((name: string) =>
-      name === "url" ? "url" : "",
-    );
-    (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "u",
-      accessToken: "t",
-    });
-    // Default: return all supported package managers
-    (getAllPackageManagers as jest.Mock).mockResolvedValue([
-      ...SUPPORTED_PACKAGE_MANAGERS,
-    ]);
-  });
-
-  it("calls setFailed when exec throws error", async () => {
-    // stub binary present
-    (fs.existsSync as jest.Mock).mockReturnValue(true);
-    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
-    execSpy.mockRejectedValue(new Error("exec error"));
-
-    await run();
-    expect(setFailedSpy).toHaveBeenCalledWith("exec error");
-  });
-
-  it("calls setFailed when binary is missing", async () => {
-    // stub no binary
-    (fs.existsSync as jest.Mock).mockReturnValue(false);
-    (path.resolve as jest.Mock).mockReturnValue("/test/path/fly-darwin-arm64"); // Mock path.resolve to provide a concrete path for the error message
-    getInputSpy.mockImplementation(() => "");
-
-    await run();
     expect(setFailedSpy).toHaveBeenCalledWith(
-      `Fly CLI binary not found at /test/path/fly-darwin-arm64 for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
+      expect.stringContaining("Failed to download from"),
     );
   });
 });
