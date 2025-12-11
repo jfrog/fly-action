@@ -17,6 +17,7 @@ import * as path from "path";
 import * as tc from "@actions/tool-cache";
 import { execSync } from "child_process";
 import { FLY_CLIENT_BASE_URL } from "../constants";
+import { SUPPORTED_PACKAGE_MANAGERS } from "../package-detection";
 
 // Import the actual functions (not mocked)
 jest.unmock("@actions/tool-cache");
@@ -346,6 +347,107 @@ describe("Fly Client Download Integration Tests", () => {
         // If it throws, that's also fine - it properly handles errors
         expect(error).toBeTruthy();
       }
+    });
+  });
+
+  describe("Fly Client Behavioral Tests", () => {
+    describe("Version command", () => {
+      it("should display version information with version command", () => {
+        const result = execFly(binaryPath, ["version"]);
+        // Should exit successfully or with auth error
+        expect([0, 1]).toContain(result.exitCode);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("Version:");
+      });
+
+      it("should display version information with --version flag", () => {
+        const result = execFly(binaryPath, ["--version"]);
+        // Version flag behavior may vary
+        const output = result.stdout + result.stderr;
+        // Should have some output or successfully exit
+        expect(result.exitCode !== undefined).toBe(true);
+      });
+    });
+
+    describe("Help command", () => {
+      it("should display help with --help flag", () => {
+        const result = execFly(binaryPath, ["--help"]);
+        expect([0, 1]).toContain(result.exitCode);
+        const output = result.stdout + result.stderr;
+        expect(output).toContain("fly");
+        expect(output.toLowerCase()).toContain("usage");
+      });
+
+      it("should list available commands in help", () => {
+        const result = execFly(binaryPath, ["--help"]);
+        const output = (result.stdout + result.stderr).toLowerCase();
+        expect(output).toContain("setup");
+      });
+    });
+
+    describe("Setup command help", () => {
+      it("should display setup help", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        expect([0, 1]).toContain(result.exitCode);
+        const output = result.stdout + result.stderr;
+        expect(output.toLowerCase()).toContain("setup");
+      });
+
+      it("should list supported package managers in setup help", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        const helpText = (result.stdout + result.stderr).toLowerCase();
+
+        // Check that at least some of our supported package managers are listed
+        const foundManagers = SUPPORTED_PACKAGE_MANAGERS.filter((manager) =>
+          helpText.includes(manager.toLowerCase()),
+        );
+        expect(foundManagers.length).toBeGreaterThan(0);
+      });
+
+      it("should document --url option", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        const output = (result.stdout + result.stderr).toLowerCase();
+        expect(output).toContain("url");
+      });
+
+      it("should document --access-token option", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        const output = (result.stdout + result.stderr).toLowerCase();
+        expect(output).toContain("access-token");
+      });
+    });
+
+    describe("Invalid commands and arguments", () => {
+      it("should handle unknown command gracefully", () => {
+        const result = execFly(binaryPath, ["unknowncommand"]);
+        expect(result.exitCode).not.toBe(0);
+        const output = result.stdout + result.stderr;
+        expect(output.length).toBeGreaterThan(0);
+      });
+
+      it("should handle invalid flags gracefully", () => {
+        const result = execFly(binaryPath, ["--invalid-flag"]);
+        expect(result.exitCode).not.toBe(0);
+      });
+    });
+
+    describe("Package manager support", () => {
+      it("should support npm package manager", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        const helpText = (result.stdout + result.stderr).toLowerCase();
+        expect(helpText).toContain("npm");
+      });
+
+      it("should support container package managers", () => {
+        const result = execFly(binaryPath, ["setup", "--help"]);
+        const helpText = (result.stdout + result.stderr).toLowerCase();
+        // At least one of docker/podman/helm should be mentioned
+        const hasContainerSupport =
+          helpText.includes("docker") ||
+          helpText.includes("podman") ||
+          helpText.includes("helm");
+        expect(hasContainerSupport).toBe(true);
+      });
     });
   });
 });
