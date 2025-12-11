@@ -190,6 +190,19 @@ describe("Fly Client Integration Tests", () => {
 
     // Download and cache the binary once for all tests
     binPath = await downloadAndCacheFlyClient();
+
+    // Wait a moment to ensure file system operations complete
+    // This prevents "Text file busy" errors in CI
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify the binary is accessible and set permissions if needed
+    if (fs.existsSync(binPath) && process.platform !== "win32") {
+      try {
+        fs.chmodSync(binPath, 0o755);
+      } catch (e) {
+        // Ignore errors - file might already have correct permissions
+      }
+    }
   });
 
   describe("Fly client existence and permissions", () => {
