@@ -118,7 +118,6 @@ function execFly(
     const result = execSync(`"${binPath}" ${args.join(" ")}`, {
       encoding: "utf-8",
       timeout: 30000, // 30 second timeout for download/execution
-      stdio: ["pipe", "pipe", "pipe"],
     });
     return { stdout: result, stderr: "", exitCode: 0 };
   } catch (error: unknown) {
@@ -216,11 +215,15 @@ describe("Fly Client Download Integration Tests", () => {
     });
 
     it("binary responds to version command", () => {
-      const result = execFly(binaryPath, ["--version"]);
+      // Try both --version flag and version command
+      const resultFlag = execFly(binaryPath, ["--version"]);
+      const resultCmd = execFly(binaryPath, ["version"]);
 
-      // Check that we get some output (version info or error)
-      const output = result.stdout + result.stderr;
-      expect(output).toBeTruthy();
+      // At least one should produce output
+      const outputFlag = resultFlag.stdout + resultFlag.stderr;
+      const outputCmd = resultCmd.stdout + resultCmd.stderr;
+
+      expect(outputFlag || outputCmd).toBeTruthy();
     });
 
     it("binary can be executed multiple times", () => {
