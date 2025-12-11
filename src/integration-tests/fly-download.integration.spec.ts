@@ -96,15 +96,37 @@ async function downloadAndCacheFlyClient(): Promise<string> {
     fs.chmodSync(binaryPath, 0o755);
   }
 
-  // Cache it
-  const finalCachedPath = await tc.cacheDir(
-    tempDir,
-    FLY_TOOL_NAME,
-    FLY_CACHE_VERSION,
-    `${os}-${arch}`,
-  );
-
-  return path.join(finalCachedPath, binaryName);
+  // Try to cache it
+  try {
+    const finalCachedPath = await tc.cacheDir(
+      tempDir,
+      FLY_TOOL_NAME,
+      FLY_CACHE_VERSION,
+      `${os}-${arch}`,
+    );
+    return path.join(finalCachedPath, binaryName);
+  } catch (error) {
+    // If caching fails (e.g., already cached by another test), check cache again
+    const existingCachedPath = tc.find(
+      FLY_TOOL_NAME,
+      FLY_CACHE_VERSION,
+      `${os}-${arch}`,
+    );
+    if (existingCachedPath) {
+      const existingBinPath = path.join(existingCachedPath, binaryName);
+      if (fs.existsSync(existingBinPath)) {
+        // Clean up temp directory since we found existing cache
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        return existingBinPath;
+      }
+    }
+    // If we still can't find it, return the temp path
+    return binaryPath;
+  }
 }
 
 /**
