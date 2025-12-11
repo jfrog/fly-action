@@ -105,7 +105,7 @@ async function downloadAndCacheFlyClient(): Promise<string> {
       `${os}-${arch}`,
     );
     return path.join(finalCachedPath, binaryName);
-  } catch (error) {
+  } catch {
     // If caching fails (e.g., already cached by another test), check cache again
     const existingCachedPath = tc.find(
       FLY_TOOL_NAME,
@@ -118,7 +118,7 @@ async function downloadAndCacheFlyClient(): Promise<string> {
         // Clean up temp directory since we found existing cache
         try {
           fs.rmSync(tempDir, { recursive: true, force: true });
-        } catch (e) {
+        } catch {
           // Ignore cleanup errors
         }
         return existingBinPath;
@@ -183,7 +183,7 @@ describe("Fly Client Download Integration Tests", () => {
 
     // Wait a moment to ensure file system operations complete
     // This prevents "Text file busy" errors in CI
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => global.setTimeout(resolve, 100));
 
     // Verify the binary is accessible
     expect(fs.existsSync(binaryPath)).toBe(true);
@@ -214,9 +214,9 @@ describe("Fly Client Download Integration Tests", () => {
     });
 
     it("binary path includes correct platform and arch in cache key", () => {
-      const { os, arch } = getPlatformInfo();
+      // Verify the binary path includes the tool name
       expect(binaryPath).toContain(FLY_TOOL_NAME);
-      // The path should contain the cache structure
+      // The path should be valid
       expect(binaryPath).toBeTruthy();
     });
 
