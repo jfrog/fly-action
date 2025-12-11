@@ -362,9 +362,7 @@ describe("Fly Client Download Integration Tests", () => {
 
       it("should display version information with --version flag", () => {
         const result = execFly(binaryPath, ["--version"]);
-        // Version flag behavior may vary
-        const output = result.stdout + result.stderr;
-        // Should have some output or successfully exit
+        // Version flag behavior may vary - just verify it executes
         expect(result.exitCode !== undefined).toBe(true);
       });
     });
