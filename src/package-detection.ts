@@ -227,7 +227,7 @@ export function detectPackageManagers(repoPath: string): string[] {
  */
 export function getAllPackageManagers(repoPath: string): string[] {
   const detected = detectPackageManagers(repoPath);
-  
+
   // Filter to only container managers from detected
   const detectedContainers = detected.filter((pm) =>
     ["docker", "podman", "helm"].includes(pm),
@@ -239,7 +239,9 @@ export function getAllPackageManagers(repoPath: string): string[] {
     ...detectedContainers,
   ].sort();
 
-  core.info(`All package managers for fly-client setup: ${allManagers.join(", ")}`);
+  core.info(
+    `All package managers for fly-client setup: ${allManagers.join(", ")}`,
+  );
 
   return allManagers;
 }

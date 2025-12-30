@@ -128,37 +128,49 @@ describe("detectPackageManagers", () => {
 
   describe("Package manager detection", () => {
     test("should detect npm from package.json", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("package.json", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("package.json", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("npm");
     });
 
     test("should detect docker from Dockerfile", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("Dockerfile", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("Dockerfile", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("docker");
     });
 
     test("should detect helm from Chart.yaml", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("Chart.yaml", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("Chart.yaml", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("helm");
     });
 
     test("should detect pip from requirements.txt", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("requirements.txt", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("requirements.txt", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("pip");
     });
 
     test("should detect maven from pom.xml", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("pom.xml", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("pom.xml", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("maven");
     });
 
     test("should detect go from go.mod", () => {
-      mockedFs.readdirSync.mockReturnValue([createDirent("go.mod", false)] as any);
+      mockedFs.readdirSync.mockReturnValue([
+        createDirent("go.mod", false),
+      ] as any);
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("go");
     });
@@ -207,16 +219,18 @@ describe("detectPackageManagers", () => {
         }
         return [] as any;
       });
-      
+
       mockedFs.statSync.mockImplementation((itemPath) => {
         const pathStr = itemPath.toString();
-        const isDirectory = pathStr === repoPath || pathStr === path.join(repoPath, "node_modules");
+        const isDirectory =
+          pathStr === repoPath ||
+          pathStr === path.join(repoPath, "node_modules");
         return {
           isFile: () => !isDirectory,
           isDirectory: () => isDirectory,
         } as fs.Stats;
       });
-      
+
       const result = detectPackageManagers(repoPath);
       expect(result).toContain("npm");
       // Should skip node_modules
@@ -250,29 +264,41 @@ describe("getAllPackageManagers", () => {
   });
 
   test("should return all supported package managers when no containers detected", () => {
-    mockedFs.readdirSync.mockReturnValue([createDirent("package.json", false)] as any);
-    
+    mockedFs.readdirSync.mockReturnValue([
+      createDirent("package.json", false),
+    ] as any);
+
     const result = getAllPackageManagers(repoPath);
-    expect(result).toEqual(expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]));
+    expect(result).toEqual(
+      expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]),
+    );
     expect(result).not.toContain("docker");
     expect(result).not.toContain("helm");
     expect(result).not.toContain("podman");
   });
 
   test("should include docker when Dockerfile is detected", () => {
-    mockedFs.readdirSync.mockReturnValue([createDirent("Dockerfile", false)] as any);
+    mockedFs.readdirSync.mockReturnValue([
+      createDirent("Dockerfile", false),
+    ] as any);
 
     const result = getAllPackageManagers(repoPath);
     expect(result).toContain("docker");
-    expect(result).toEqual(expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]));
+    expect(result).toEqual(
+      expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]),
+    );
   });
 
   test("should include helm when Chart.yaml is detected", () => {
-    mockedFs.readdirSync.mockReturnValue([createDirent("Chart.yaml", false)] as any);
+    mockedFs.readdirSync.mockReturnValue([
+      createDirent("Chart.yaml", false),
+    ] as any);
 
     const result = getAllPackageManagers(repoPath);
     expect(result).toContain("helm");
-    expect(result).toEqual(expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]));
+    expect(result).toEqual(
+      expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]),
+    );
   });
 
   test("should include all containers when detected", () => {
@@ -284,6 +310,8 @@ describe("getAllPackageManagers", () => {
     const result = getAllPackageManagers(repoPath);
     expect(result).toContain("docker");
     expect(result).toContain("helm");
-    expect(result).toEqual(expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]));
+    expect(result).toEqual(
+      expect.arrayContaining([...SUPPORTED_PACKAGE_MANAGERS]),
+    );
   });
 });

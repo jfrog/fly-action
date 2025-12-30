@@ -30,10 +30,8 @@ export async function createJobSummary(): Promise<void> {
     );
     const template = fs.readFileSync(templatePath, "utf8");
 
-    // Replace template variables - no artifacts table until we have real data
-    const markdownContent = template
-      .replace("{{ARTIFACTS_SECTION}}", "") // Remove artifacts section
-      .replace("{{RELEASE_URL}}", releaseUrl);
+    // Replace template variables
+    const markdownContent = template.replace("{{RELEASE_URL}}", releaseUrl);
 
     // Create summary from markdown
     const summary = core.summary.addRaw(markdownContent);
