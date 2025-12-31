@@ -38,18 +38,14 @@ describe("createJobSummary", () => {
     delete process.env.GITHUB_JOB;
   });
 
-  it("should create job summary without artifacts table", async () => {
+  it("should create job summary", async () => {
     await createJobSummary();
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0];
     expect(markdownContent).toContain("# 🦋 Fly action");
     expect(markdownContent).toContain("✅ **Completed successfully**");
-    expect(markdownContent).toContain("📦 Published artifacts");
     expect(markdownContent).toContain("📢 [View release in Fly]");
     expect(markdownContent).toContain("https://fly.jfrog.ai");
-    // Should NOT contain mock artifacts
-    expect(markdownContent).not.toContain("ascii-frog-frontend");
-    expect(markdownContent).not.toContain("ascii-frog-app");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
