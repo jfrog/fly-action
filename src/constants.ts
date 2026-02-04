@@ -2,6 +2,7 @@
 
 export const INPUT_URL = "url";
 export const INPUT_IGNORE_PACKAGE_MANAGERS = "ignore";
+export const INPUT_GITHUB_TOKEN = "github_token";
 
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";

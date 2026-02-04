@@ -4,7 +4,27 @@ import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
 
-// Define constants at the module level for clarity and potential reuse.
+/**
+ * Supported standard package managers - always configured by fly-client.
+ * These are sent to fly-client setup without detection.
+ */
+export const SUPPORTED_PACKAGE_MANAGERS = [
+  "npm",
+  "pnpm",
+  "pip",
+  "pipenv",
+  "twine",
+  "maven",
+  "gradle",
+  "dotnet",
+  "nuget",
+  "go",
+] as const;
+
+/**
+ * All package managers that can be detected from files in the repository.
+ * This is used for detection and reporting to EndCI.
+ */
 const PACKAGE_MANAGER_FILE_IDENTIFIERS = [
   // Node.js ecosystem - specific lock files first, then package.json for npm
   { file: "pnpm-lock.yaml", manager: "pnpm" },
@@ -163,9 +183,9 @@ function findFilesRecursive(
 }
 
 /**
- * Detects package managers used in the repository.
+ * Detects package managers used in the repository by scanning for characteristic files.
  * @param repoPath The root path of the repository.
- * @returns An array of detected package manager names.
+ * @returns An array of detected package manager names (for reporting to EndCI).
  */
 export function detectPackageManagers(repoPath: string): string[] {
   const detected: Set<string> = new Set();
@@ -196,4 +216,32 @@ export function detectPackageManagers(repoPath: string): string[] {
     core.info("Detected package managers: none");
   }
   return result;
+}
+
+/**
+ * Gets all package managers to configure in fly-client setup.
+ * Always returns all supported standard package managers plus detected containers.
+ *
+ * @param repoPath - The root path of the repository to scan
+ * @returns Array of all package manager names to configure
+ */
+export function getAllPackageManagers(repoPath: string): string[] {
+  const detected = detectPackageManagers(repoPath);
+
+  // Filter to only container managers from detected
+  const detectedContainers = detected.filter((pm) =>
+    ["docker", "podman", "helm"].includes(pm),
+  );
+
+  // Combine all standard managers with detected containers
+  const allManagers = [
+    ...SUPPORTED_PACKAGE_MANAGERS,
+    ...detectedContainers,
+  ].sort();
+
+  core.info(
+    `All package managers for fly-client setup: ${allManagers.join(", ")}`,
+  );
+
+  return allManagers;
 }

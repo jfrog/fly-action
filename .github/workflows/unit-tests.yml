@@ -23,8 +23,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      - name: Run unit tests
+        run: npm test -- --testPathIgnorePatterns=integration-tests --testPathIgnorePatterns=dist --testPathIgnorePatterns=lib
 
       - name: Build
         run: npm run build
+
+      # The GitHub Action runs from lib/ (compiled files), not src/.
+      # If lib/ is not rebuilt after src/ changes, the action will run stale code.
+      - name: Verify lib/ is compiled and up to date
+        run: |
+          if [[ -n "$(git status lib/ --porcelain)" ]]; then
+            echo "::error::lib/ is out of sync with src/. Run 'npm run build' and commit the changes."
+            git diff lib/ --stat
+            exit 1
+          fi

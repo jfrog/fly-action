@@ -10,9 +10,11 @@ import {
   GITHUB_STATUS_FAILURE,
   GITHUB_STATUS_CANCELLED,
   GITHUB_STATUS_TIMED_OUT,
+  INPUT_GITHUB_TOKEN,
 } from "./constants";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { EndCiRequest } from "./types";
+import { createHttpClient } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 // Retry configuration
@@ -94,13 +96,14 @@ interface GitHubEnv {
 function getGitHubEnvironment(): GitHubEnv | null {
   const runId = process.env.GITHUB_RUN_ID;
   const repository = process.env.GITHUB_REPOSITORY;
-  const token = core.getInput("token") || process.env.GITHUB_TOKEN;
+  const githubToken =
+    core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
   core.info(`📋 Current job: ${jobName}`);
 
-  if (!runId || !repository || !token) {
+  if (!runId || !repository || !githubToken) {
     core.warning(
       "Missing GitHub environment variables, assuming job succeeded since post action is running",
     );
@@ -110,7 +113,7 @@ function getGitHubEnvironment(): GitHubEnv | null {
   return {
     runId: runId!,
     repository: repository!,
-    token: token!,
+    token: githubToken!,
     jobName: jobName!,
   };
 }
@@ -283,9 +286,7 @@ export async function runPost(): Promise<void> {
   core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-  const httpClient = new HttpClient("fly-action", undefined, {
-    socketTimeout: REQUEST_TIMEOUT_MS,
-  });
+  const httpClient = createHttpClient("fly-action", REQUEST_TIMEOUT_MS);
   core.info(
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
@@ -310,7 +311,7 @@ export async function runPost(): Promise<void> {
       // Only create job summary if the job succeeded
       if (determinedStatus === GITHUB_STATUS_SUCCESS) {
         core.info("📋 Creating job summary for successful job...");
-        await createJobSummary(packageManagers);
+        await createJobSummary();
       } else {
         core.info("⚠️ Skipping job summary creation - job did not succeed");
       }

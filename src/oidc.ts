@@ -4,6 +4,7 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
+import { createHttpClient } from "./utils";
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -34,7 +35,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   // Mask the raw ID token in logs
   core.setSecret(idToken);
 
-  const client = new http.HttpClient("fly-action");
+  const client = createHttpClient();
   const oidcUrl = `${url}/fly/api/v1/ci/start-oidc`;
   core.debug(`Authenticating with Fly OIDC at ${oidcUrl}`);
 
