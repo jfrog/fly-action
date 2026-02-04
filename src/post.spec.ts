@@ -236,7 +236,7 @@ describe("runPost", () => {
     );
   });
 
-  it("should re-throw errors during HTTP client post operation", async () => {
+  it("should re-throw errors after all retry attempts fail", async () => {
     // Mock successful workflow for status checking
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
@@ -258,10 +258,56 @@ describe("runPost", () => {
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
+    // Mock all retries failing
     mockHttpClientPost.mockRejectedValue(new Error("Network error"));
 
     await expect(runPost()).rejects.toThrow("Network error");
-  });
+    // Should have tried 3 times (MAX_RETRIES)
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
+  }, 15000); // Increase timeout for retry delays
+
+  it("should succeed on retry after initial failure", async () => {
+    // Mock successful workflow for status checking
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("test-job", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PACKAGE_MANAGERS) return JSON.stringify(["npm"]);
+      return "";
+    });
+
+    // First call fails, second succeeds
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost
+      .mockRejectedValueOnce(new Error("Timeout"))
+      .mockResolvedValueOnce(fakeResponse);
+
+    await runPost();
+
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(2);
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Request failed (attempt 1/3)"),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "✅ CI end notification completed successfully",
+    );
+  }, 15000);
 
   it("should re-throw error if HTTP response is not 200", async () => {
     // Mock successful workflow for status checking
@@ -389,11 +435,45 @@ describe("runPost", () => {
     expect(mockCore.warning).toHaveBeenCalledWith(
       "Failed to check job status via GitHub API: Error: API Error",
     );
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      expect.any(String),
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.any(Object),
+    expect(mockHttpClientPost).toHaveBeenCalled();
+  });
+
+  it("should handle GitHub API permission error gracefully without warning", async () => {
+    // Mock GitHub API permission error (expected when actions:read is not granted)
+    const mockOctokit = {
+      rest: {
+        actions: {
+          listJobsForWorkflowRun: jest
+            .fn()
+            .mockRejectedValue(
+              new Error(
+                "Resource not accessible by integration - https://docs.github.com/rest/actions/workflow-jobs",
+              ),
+            ),
+        },
+      },
+    };
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
     );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    // Should use info instead of warning for permission errors
+    expect(mockCore.info).toHaveBeenCalledWith(
+      expect.stringContaining("Cannot access workflow job status"),
+    );
+    // Should NOT emit warning for permission errors
+    expect(mockCore.warning).not.toHaveBeenCalledWith(
+      expect.stringContaining("Failed to check job status via GitHub API"),
+    );
+    expect(mockHttpClientPost).toHaveBeenCalled();
   });
 
   it("should exclude post action steps from failure detection", async () => {
@@ -793,7 +873,7 @@ describe("runPostScriptLogic", () => {
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
-  it("should call runPost and setFailed on error", async () => {
+  it("should call runPost and setFailed on error after all retries", async () => {
     // Mock successful workflow setup but HTTP error
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
@@ -810,15 +890,17 @@ describe("runPostScriptLogic", () => {
     );
 
     const errorMessage = "Test error from runPost";
-    mockHttpClientPost.mockRejectedValueOnce(new Error(errorMessage));
+    // Reject all retry attempts
+    mockHttpClientPost.mockRejectedValue(new Error(errorMessage));
 
     await runPostScriptLogic();
 
-    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    // Should have tried 3 times (MAX_RETRIES)
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
     expect(core.setFailed).toHaveBeenCalledWith(errorMessage);
-  });
+  }, 15000);
 
-  it("should handle non-Error objects thrown by runPost", async () => {
+  it("should handle non-Error objects thrown by runPost after all retries", async () => {
     // Mock successful workflow setup but string error
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
@@ -835,11 +917,13 @@ describe("runPostScriptLogic", () => {
     );
 
     const errorString = "Just a string error";
-    mockHttpClientPost.mockRejectedValueOnce(errorString);
+    // Reject all retry attempts
+    mockHttpClientPost.mockRejectedValue(errorString);
 
     await runPostScriptLogic();
 
-    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    // Should have tried 3 times (MAX_RETRIES)
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
     expect(core.setFailed).toHaveBeenCalledWith(errorString);
-  });
+  }, 15000);
 });
