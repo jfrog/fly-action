@@ -11,9 +11,63 @@ import {
   GITHUB_STATUS_CANCELLED,
   GITHUB_STATUS_TIMED_OUT,
 } from "./constants";
-import { HttpClient } from "@actions/http-client";
+import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { EndCiRequest } from "./types";
 import { createJobSummary } from "./job-summary";
+
+// Retry configuration
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000; // 1 second
+const REQUEST_TIMEOUT_MS = 60000; // 60 seconds (Wingman AI calls can take 30+ seconds)
+
+/**
+ * Sleep for a given number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute an HTTP POST request with retry logic and exponential backoff
+ */
+async function postWithRetry(
+  httpClient: HttpClient,
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+): Promise<HttpClientResponse> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      core.info(
+        `[${new Date().toISOString()}] Attempt ${attempt}/${MAX_RETRIES} - Sending request to ${url}`,
+      );
+
+      const response = await httpClient.post(url, body, headers);
+
+      // If we get a response (even an error response), return it
+      // The caller will handle non-200 status codes
+      return response;
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      if (attempt < MAX_RETRIES) {
+        const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+        core.warning(
+          `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError.message}. Retrying in ${delayMs}ms...`,
+        );
+        await sleep(delayMs);
+      } else {
+        core.error(
+          `Request failed after ${MAX_RETRIES} attempts: ${lastError.message}`,
+        );
+      }
+    }
+  }
+
+  throw lastError || new Error("Request failed after retries");
+}
 
 interface GitHubStep {
   name?: string;
@@ -164,10 +218,21 @@ async function determineJobStatus(): Promise<string> {
       );
       return GITHUB_STATUS_SUCCESS;
     } catch (apiError) {
-      core.warning(`Failed to check job status via GitHub API: ${apiError}`);
-      core.warning(
-        "Falling back to assuming job succeeded since post action is running",
-      );
+      // Check if this is a permission error (expected when actions:read is not granted)
+      const errorMessage = String(apiError);
+      const isPermissionError =
+        errorMessage.includes("Resource not accessible by integration") ||
+        errorMessage.includes("403");
+
+      if (isPermissionError) {
+        core.info(
+          "ℹ️ Cannot access workflow job status (requires 'actions: read' permission). " +
+            "Assuming job succeeded since post action is running.",
+        );
+      } else {
+        core.warning(`Failed to check job status via GitHub API: ${apiError}`);
+        core.info("Assuming job succeeded since post action is running.");
+      }
       return GITHUB_STATUS_SUCCESS;
     }
   } catch (error) {
@@ -218,13 +283,16 @@ export async function runPost(): Promise<void> {
   core.info(`Fly API URL: ${flyUrl}/fly/api/v1/ci/end`); // Changed from debug to info
   core.info(`Request payload: ${JSON.stringify(payload)}`);
 
-  const httpClient = new HttpClient("fly-action");
+  const httpClient = new HttpClient("fly-action", undefined, {
+    socketTimeout: REQUEST_TIMEOUT_MS,
+  });
   core.info(
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
 
   try {
-    const response = await httpClient.post(
+    const response = await postWithRetry(
+      httpClient,
       `${flyUrl}/fly/api/v1/ci/end`,
       JSON.stringify(payload),
       {

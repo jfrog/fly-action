@@ -15,6 +15,7 @@ This GitHub Action downloads the Fly CLI and configures package managers to use 
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
+- ✅ Retry mechanism with exponential backoff for CI notifications
 
 ## Usage
 
@@ -43,7 +44,10 @@ This action only supports OIDC authentication for enhanced security. You must se
 ```yaml
 permissions:
   id-token: write # Required for OIDC authentication
+  actions: read   # Optional: enables accurate job status detection
 ```
+
+> **Note**: The `actions: read` permission is optional but recommended. Without it, the action cannot accurately detect whether the job succeeded or failed, and will assume success. With this permission, the action can check the status of individual workflow steps to report accurate job status to the Fly server.
 
 #### Required Inputs
 
