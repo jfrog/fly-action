@@ -246,19 +246,19 @@ async function determineJobStatus(): Promise<string> {
 }
 
 export async function runPost(): Promise<void> {
-  core.info("🏁 Notifying Fly that CI job has ended...");
-
-  const flyUrl = core.getState(STATE_FLY_URL); // Corrected constant
-  const accessToken = core.getState(STATE_FLY_ACCESS_TOKEN); // Corrected constant
+  const flyUrl = core.getState(STATE_FLY_URL);
+  const accessToken = core.getState(STATE_FLY_ACCESS_TOKEN);
 
   if (!flyUrl) {
-    core.info("No Fly URL found in state, skipping CI end notification"); // Changed from debug to info
+    core.info("No Fly URL found in state, skipping CI end notification");
     return;
   }
   if (!accessToken) {
-    core.info("No access token found in state, skipping CI end notification"); // Changed from debug to info
+    core.info("No access token found in state, skipping CI end notification");
     return;
   }
+
+  core.info("🏁 Notifying Fly that CI job has ended...");
 
   const packageManagersState = core.getState(STATE_FLY_PACKAGE_MANAGERS);
   let packageManagers: string[] = [];

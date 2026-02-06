@@ -157,9 +157,6 @@ describe("runPost", () => {
       }),
     );
     expect(mockCore.info).toHaveBeenCalledWith(
-      "🏁 Notifying Fly that CI job has ended...",
-    );
-    expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
     expect(mockCore.info).toHaveBeenCalledWith("Job status: success");

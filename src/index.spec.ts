@@ -21,7 +21,11 @@ import {
   getAllPackageManagers,
   SUPPORTED_PACKAGE_MANAGERS,
 } from "./package-detection";
-import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
+import {
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  ENV_FLY_ACTION_CONFIGURED,
+} from "./constants";
 
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
@@ -295,5 +299,88 @@ describe("run exec and binary error branches", () => {
     expect(setFailedSpy).toHaveBeenCalledWith(
       `Fly CLI binary not found at /test/path/fly-darwin-arm64 for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
     );
+  });
+});
+
+describe("run idempotency", () => {
+  const getInputSpy = jest.spyOn(core, "getInput");
+  const setFailedSpy = jest.spyOn(core, "setFailed");
+  const saveStateSpy = jest.spyOn(core, "saveState");
+  const exportVariableSpy = jest.spyOn(core, "exportVariable");
+  const infoSpy = jest.spyOn(core, "info");
+  const execSpy = jest.spyOn(exec, "exec");
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // Remove the env var before each test
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
+    // Stub file system to simulate binary present
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
+    (detectPackageManagers as jest.Mock).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    // Clean up env var after tests
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
+  });
+
+  it("skips execution when FLY_ACTION_CONFIGURED is already set", async () => {
+    // Set the env var to simulate action already ran
+    process.env[ENV_FLY_ACTION_CONFIGURED] = "true";
+
+    await run();
+
+    // Should log skip message
+    expect(infoSpy).toHaveBeenCalledWith(
+      "Fly action has already been configured in this job, skipping duplicate run.",
+    );
+    // Should NOT call authentication or exec
+    expect(authenticateOidc).not.toHaveBeenCalled();
+    expect(execSpy).not.toHaveBeenCalled();
+    // Should NOT save state
+    expect(saveStateSpy).not.toHaveBeenCalled();
+    // Should NOT set failed
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("exports FLY_ACTION_CONFIGURED after successful run", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    execSpy.mockResolvedValue(0);
+
+    await run();
+
+    // Should export the env var
+    expect(exportVariableSpy).toHaveBeenCalledWith(
+      ENV_FLY_ACTION_CONFIGURED,
+      "true",
+    );
+    expect(setFailedSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not export FLY_ACTION_CONFIGURED when setup fails", async () => {
+    getInputSpy.mockImplementation((name: string) =>
+      name === "url" ? "https://test.com" : "",
+    );
+    (authenticateOidc as jest.Mock).mockResolvedValue({
+      user: "user",
+      accessToken: "token",
+    });
+    execSpy.mockResolvedValue(1); // Non-zero exit code
+
+    await run();
+
+    // Should NOT export the env var on failure
+    expect(exportVariableSpy).not.toHaveBeenCalledWith(
+      ENV_FLY_ACTION_CONFIGURED,
+      "true",
+    );
+    expect(setFailedSpy).toHaveBeenCalled();
   });
 });
