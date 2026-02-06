@@ -17,9 +17,14 @@ jobs:
   frogbot-scan:
     runs-on: ubuntu-latest
 
-    # A pull request needs to be approved before Frogbot scans it. Any GitHub user who is associated with the
-    # "frogbot" GitHub environment can approve the pull request to be scanned.
-    environment: frogbot
+    # External PRs (forks or different repo) require approval via "frogbot" environment.
+    # Internal PRs from same repo run automatically without approval.
+    environment: >-
+      ${{
+        (github.event.pull_request.head.repo.fork == true ||
+         github.event.pull_request.head.repo.full_name != github.repository)
+        && 'frogbot' || ''
+      }}
 
     steps:
       - uses: jfrog/frogbot@v2
