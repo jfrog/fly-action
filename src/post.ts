@@ -80,6 +80,7 @@ interface GitHubJob {
   name: string;
   status: string;
   conclusion?: string | null;
+  runner_name?: string | null;
   steps?: GitHubStep[];
 }
 
@@ -88,6 +89,7 @@ interface GitHubEnv {
   repository: string;
   token: string;
   jobName: string;
+  runnerName: string;
 }
 
 /**
@@ -99,9 +101,10 @@ function getGitHubEnvironment(): GitHubEnv | null {
   const githubToken =
     core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
+  const runnerName = process.env.RUNNER_NAME || "";
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
-  core.info(`📋 Current job: ${jobName}`);
+  core.info(`📋 Current job: ${jobName} (runner: ${runnerName})`);
 
   if (!runId || !repository || !githubToken) {
     core.warning(
@@ -115,6 +118,7 @@ function getGitHubEnvironment(): GitHubEnv | null {
     repository: repository!,
     token: githubToken!,
     jobName: jobName!,
+    runnerName,
   };
 }
 
@@ -177,22 +181,42 @@ async function determineJobStatus(): Promise<string> {
       core.info(`📊 Found ${jobs.jobs.length} job(s) in workflow run`);
       jobs.jobs.forEach((job: GitHubJob) => {
         core.info(
-          `  - Job: ${job.name}, Status: ${job.status}, Conclusion: ${job.conclusion}, Steps: ${job.steps?.length || 0}`,
+          `  - Job: ${job.name}, Runner: ${job.runner_name || "N/A"}, Status: ${job.status}, Conclusion: ${job.conclusion}, Steps: ${job.steps?.length || 0}`,
         );
       });
 
-      // Find the current job (case-insensitive comparison)
-      const currentJob = jobs.jobs.find(
-        (job: GitHubJob) =>
-          job.name.toLowerCase() === env.jobName.toLowerCase(),
-      );
+      // Find the current job:
+      // 1. Primary: match by runner name (RUNNER_NAME env var vs API runner_name).
+      //    This is the most reliable method because GITHUB_JOB gives the YAML key
+      //    (e.g., "scan-with-xray") while the API returns the display name
+      //    (e.g., "Scan Image with Xray") — these are completely different fields
+      //    when a job has a custom `name:` attribute.
+      // 2. Fallback: match by job name (for cases where runner_name is unavailable).
+      let currentJob: GitHubJob | undefined;
+
+      if (env.runnerName) {
+        currentJob = jobs.jobs.find(
+          (job: GitHubJob) => job.runner_name === env.runnerName,
+        );
+        if (currentJob) {
+          core.info(`✓ Found current job by runner name: ${currentJob.name} (runner: ${env.runnerName})`);
+        }
+      }
+
+      if (!currentJob) {
+        currentJob = jobs.jobs.find(
+          (job: GitHubJob) =>
+            job.name.toLowerCase() === env.jobName.toLowerCase(),
+        );
+        if (currentJob) {
+          core.info(`✓ Found current job by name: ${currentJob.name}`);
+        }
+      }
 
       if (currentJob) {
-        core.info(`✓ Found current job: ${currentJob.name}`);
         core.info(
-          `  Status: ${currentJob.status}, Conclusion: ${currentJob.conclusion || "null"}`,
+          `  Status: ${currentJob.status}, Conclusion: ${currentJob.conclusion || "null"}, Steps: ${currentJob.steps?.length || 0}`,
         );
-        core.info(`  Steps count: ${currentJob.steps?.length || 0}`);
 
         // Check individual step statuses
         if (currentJob.steps && currentJob.steps.length > 0) {
