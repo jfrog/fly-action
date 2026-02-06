@@ -59,15 +59,13 @@ const createMockWorkflowRun = (status = "in_progress", conclusion = null) => ({
 const createMockJob = (
   name: string,
   status = "in_progress",
-  conclusion = null,
+  conclusion: string | null = null,
   steps: Array<{ name: string; conclusion: string | null }> = [],
-  runner_name?: string,
 ) => ({
   name,
   status,
   conclusion,
   steps,
-  runner_name,
 });
 
 // Helper function to create mock step
@@ -87,7 +85,6 @@ describe("runPost", () => {
       GITHUB_REPOSITORY: "owner/repo",
       GITHUB_TOKEN: "fake-token",
       GITHUB_JOB: "test-job",
-      RUNNER_NAME: "test-runner-1",
     };
 
     // Mock the summary object with chainable methods
@@ -134,7 +131,7 @@ describe("runPost", () => {
           createMockStep("Checkout", "success"),
           createMockStep("Build", "success"),
           createMockStep("Test", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -175,7 +172,7 @@ describe("runPost", () => {
           createMockStep("Checkout", "success"),
           createMockStep("Build", "failure"),
           createMockStep("Test", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -243,7 +240,7 @@ describe("runPost", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -273,7 +270,7 @@ describe("runPost", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -316,7 +313,7 @@ describe("runPost", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -349,7 +346,7 @@ describe("runPost", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -485,7 +482,7 @@ describe("runPost", () => {
           createMockStep("Checkout", "success"),
           createMockStep("Build", "success"),
           createMockStep("Post Setup Fly Registry", "failure"), // This should be ignored
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -522,7 +519,7 @@ describe("runPost", () => {
           createMockStep("Checkout", "success"),
           createMockStep("Build", "cancelled"),
           createMockStep("Test", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -557,7 +554,7 @@ describe("runPost", () => {
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
       jobs: [
-        createMockJob("test-job", "in_progress", null, [], "test-runner-1"), // Empty steps array
+        createMockJob("test-job", "in_progress", null, []), // Empty steps array
       ],
     };
 
@@ -594,7 +591,6 @@ describe("runPost", () => {
           status: "in_progress",
           conclusion: null,
           steps: undefined, // Explicitly undefined
-          runner_name: "test-runner-1",
         },
       ],
     };
@@ -622,64 +618,22 @@ describe("runPost", () => {
     );
   });
 
-  it("should find job by runner name when display name differs from GITHUB_JOB", async () => {
-    // This is the core bug fix test: GITHUB_JOB="scan-with-xray" but
-    // the API returns name="Scan Image with Xray" (custom display name).
-    // Runner name matching bridges the gap.
+  it("should find job by in_progress status when display name differs from GITHUB_JOB", async () => {
+    // Core bug fix test: GITHUB_JOB="scan-with-xray" but the API returns
+    // name="Scan Image with Xray" (custom display name). Name match fails,
+    // so we fall back to finding the single in_progress job.
     process.env.GITHUB_JOB = "scan-with-xray";
-    process.env.RUNNER_NAME = "my-runner-42";
 
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
       jobs: [
         createMockJob("Build Image", "completed", null, [
           createMockStep("Checkout", "success"),
-        ], "other-runner-1"),
+        ]),
         createMockJob("Scan Image with Xray", "in_progress", null, [
           createMockStep("Setup Fly Registry", "success"),
           createMockStep("Pull Fly image", "success"),
           createMockStep("Scan Image with Xray", "failure"),
-        ], "my-runner-42"),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    // Should detect failure because runner_name matched the correct job
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      expect.stringContaining("Found current job by runner name"),
-    );
-  });
-
-  it("should fall back to name matching when runner name is not available", async () => {
-    // When RUNNER_NAME is not set, fall back to matching by job name
-    delete process.env.RUNNER_NAME;
-
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "success"),
         ]),
       ],
     };
@@ -697,28 +651,70 @@ describe("runPost", () => {
 
     await runPost();
 
+    // Should detect failure because in_progress fallback found the correct job
     expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
         "content-type": "application/json",
       }),
     );
     expect(mockCore.info).toHaveBeenCalledWith(
-      expect.stringContaining("Found current job by name"),
+      expect.stringContaining("Found current job by in_progress status"),
     );
   });
 
-  it("should handle job not found in API response", async () => {
-    // Mock workflow where neither runner name nor job name matches
-    process.env.RUNNER_NAME = "unknown-runner";
+  it("should analyze all jobs when multiple are in_progress and name match fails", async () => {
+    // When multiple jobs are in_progress, check all of them for failures
+    process.env.GITHUB_JOB = "scan-with-xray";
+
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
       jobs: [
-        createMockJob("different-job", "in_progress", null, [
+        createMockJob("Scan Image with Xray", "in_progress", null, [
+          createMockStep("Setup Fly Registry", "success"),
+          createMockStep("Scan", "failure"),
+        ]),
+        createMockJob("Deploy to Staging", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "other-runner"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    // Should detect failure because one of the in_progress jobs has a failed step
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      "https://fly.example.com/fly/api/v1/ci/end",
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
+      expect.objectContaining({
+        Authorization: "Bearer test-access-token",
+        "content-type": "application/json",
+      }),
+    );
+  });
+
+  it("should handle job not found — no name match and no in_progress jobs", async () => {
+    // All jobs are completed and none match by name
+    process.env.GITHUB_JOB = "unknown-job";
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("different-job", "completed", "success", [
+          createMockStep("Checkout", "success"),
+        ]),
       ],
     };
 
@@ -736,7 +732,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockCore.warning).toHaveBeenCalledWith(
-      "Could not determine job status precisely, assuming success since post action is executing",
+      expect.stringContaining("Could not find current job with name"),
     );
     expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://fly.example.com/fly/api/v1/ci/end",
@@ -912,7 +908,6 @@ describe("runPostScriptLogic", () => {
       GITHUB_REPOSITORY: "owner/repo",
       GITHUB_TOKEN: "fake-token",
       GITHUB_JOB: "test-job",
-      RUNNER_NAME: "test-runner-1",
     };
 
     // Mock core.getState for mainRunner tests as well, if runPost is called internally
@@ -943,7 +938,7 @@ describe("runPostScriptLogic", () => {
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
           createMockStep("Build", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -971,7 +966,7 @@ describe("runPostScriptLogic", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 
@@ -998,7 +993,7 @@ describe("runPostScriptLogic", () => {
       jobs: [
         createMockJob("test-job", "in_progress", null, [
           createMockStep("Checkout", "success"),
-        ], "test-runner-1"),
+        ]),
       ],
     };
 

@@ -80,7 +80,6 @@ interface GitHubJob {
   name: string;
   status: string;
   conclusion?: string | null;
-  runner_name?: string | null;
   steps?: GitHubStep[];
 }
 
@@ -89,7 +88,6 @@ interface GitHubEnv {
   repository: string;
   token: string;
   jobName: string;
-  runnerName: string;
 }
 
 /**
@@ -101,10 +99,9 @@ function getGitHubEnvironment(): GitHubEnv | null {
   const githubToken =
     core.getInput(INPUT_GITHUB_TOKEN) || process.env.GITHUB_TOKEN;
   const jobName = process.env.GITHUB_JOB;
-  const runnerName = process.env.RUNNER_NAME || "";
 
   core.info(`🔍 Checking job status for run ${runId} in repo ${repository}`);
-  core.info(`📋 Current job: ${jobName} (runner: ${runnerName})`);
+  core.info(`📋 Current job: ${jobName}`);
 
   if (!runId || !repository || !githubToken) {
     core.warning(
@@ -118,7 +115,6 @@ function getGitHubEnvironment(): GitHubEnv | null {
     repository: repository!,
     token: githubToken!,
     jobName: jobName!,
-    runnerName,
   };
 }
 
@@ -156,9 +152,16 @@ export function analyzeJobSteps(steps: GitHubStep[]): string {
 }
 
 /**
- * Determines workflow status by checking if any main steps failed
+ * Determines job status by checking if any main steps failed.
  * When post actions run, all main steps have completed but post steps are still pending.
- * We only examine main steps to determine if the workflow succeeded up to this point.
+ * We only examine main steps to determine if the job succeeded up to this point.
+ *
+ * Job identification strategy:
+ * 1. Match GITHUB_JOB against the API job name (works when no custom name: attribute).
+ * 2. Fallback: find the single in_progress job (our job is always in_progress while
+ *    its post steps run; completed jobs have finished all post steps).
+ * 3. If multiple jobs are in_progress (parallel execution), we check ALL of them
+ *    for failures — conservative approach when we can't pinpoint our exact job.
  */
 async function determineJobStatus(): Promise<string> {
   try {
@@ -181,35 +184,54 @@ async function determineJobStatus(): Promise<string> {
       core.info(`📊 Found ${jobs.jobs.length} job(s) in workflow run`);
       jobs.jobs.forEach((job: GitHubJob) => {
         core.info(
-          `  - Job: ${job.name}, Runner: ${job.runner_name || "N/A"}, Status: ${job.status}, Conclusion: ${job.conclusion}, Steps: ${job.steps?.length || 0}`,
+          `  - Job: ${job.name}, Status: ${job.status}, Conclusion: ${job.conclusion}, Steps: ${job.steps?.length || 0}`,
         );
       });
 
       // Find the current job:
-      // 1. Primary: match by runner name (RUNNER_NAME env var vs API runner_name).
-      //    This is the most reliable method because GITHUB_JOB gives the YAML key
-      //    (e.g., "scan-with-xray") while the API returns the display name
-      //    (e.g., "Scan Image with Xray") — these are completely different fields
-      //    when a job has a custom `name:` attribute.
-      // 2. Fallback: match by job name (for cases where runner_name is unavailable).
+      // 1. Primary: match GITHUB_JOB (yaml key) against job name.
+      //    Works when the job has no custom `name:` attribute.
+      // 2. Fallback: find the job that is still in_progress.
+      //    When our post step runs, our job is always in_progress (post steps
+      //    are part of the job). Completed jobs have already finished all their
+      //    post steps. This handles the case where a custom `name:` attribute
+      //    makes GITHUB_JOB (yaml key) differ from the API name (display name).
       let currentJob: GitHubJob | undefined;
 
-      if (env.runnerName) {
-        currentJob = jobs.jobs.find(
-          (job: GitHubJob) => job.runner_name === env.runnerName,
-        );
-        if (currentJob) {
-          core.info(`✓ Found current job by runner name: ${currentJob.name} (runner: ${env.runnerName})`);
-        }
+      // Try name match first (works when no custom name: attribute)
+      currentJob = jobs.jobs.find(
+        (job: GitHubJob) =>
+          job.name.toLowerCase() === env.jobName.toLowerCase(),
+      );
+      if (currentJob) {
+        core.info(`✓ Found current job by name: ${currentJob.name}`);
       }
 
+      // Fallback: match by in_progress status
       if (!currentJob) {
-        currentJob = jobs.jobs.find(
-          (job: GitHubJob) =>
-            job.name.toLowerCase() === env.jobName.toLowerCase(),
+        const inProgressJobs = jobs.jobs.filter(
+          (job: GitHubJob) => job.status === "in_progress",
         );
-        if (currentJob) {
-          core.info(`✓ Found current job by name: ${currentJob.name}`);
+
+        if (inProgressJobs.length === 1) {
+          currentJob = inProgressJobs[0];
+          core.info(
+            `✓ Found current job by in_progress status: ${currentJob.name}`,
+          );
+        } else if (inProgressJobs.length > 1) {
+          // Multiple jobs running concurrently — check all for failures
+          core.info(
+            `Found ${inProgressJobs.length} in_progress jobs, analyzing all for failures`,
+          );
+          for (const job of inProgressJobs) {
+            if (job.steps && job.steps.length > 0) {
+              const result = analyzeJobSteps(job.steps);
+              if (result === GITHUB_STATUS_FAILURE) {
+                return GITHUB_STATUS_FAILURE;
+              }
+            }
+          }
+          return GITHUB_STATUS_SUCCESS;
         }
       }
 
