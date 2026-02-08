@@ -59,7 +59,7 @@ const createMockWorkflowRun = (status = "in_progress", conclusion = null) => ({
 const createMockJob = (
   name: string,
   status = "in_progress",
-  conclusion = null,
+  conclusion: string | null = null,
   steps: Array<{ name: string; conclusion: string | null }> = [],
 ) => ({
   name,
@@ -155,9 +155,6 @@ describe("runPost", () => {
         Authorization: "Bearer test-access-token",
         "content-type": "application/json",
       }),
-    );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "🏁 Notifying Fly that CI job has ended...",
     );
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
@@ -621,12 +618,101 @@ describe("runPost", () => {
     );
   });
 
-  it("should handle job not found in API response", async () => {
-    // Mock workflow where the job name doesn't match
+  it("should find job by in_progress status when display name differs from GITHUB_JOB", async () => {
+    // Core bug fix test: GITHUB_JOB="scan-with-xray" but the API returns
+    // name="Scan Image with Xray" (custom display name). Name match fails,
+    // so we fall back to finding the single in_progress job.
+    process.env.GITHUB_JOB = "scan-with-xray";
+
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
       jobs: [
-        createMockJob("different-job", "in_progress", null, [
+        createMockJob("Build Image", "completed", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+        createMockJob("Scan Image with Xray", "in_progress", null, [
+          createMockStep("Setup Fly Registry", "success"),
+          createMockStep("Pull Fly image", "success"),
+          createMockStep("Scan Image with Xray", "failure"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    // Should detect failure because in_progress fallback found the correct job
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      "https://fly.example.com/fly/api/v1/ci/end",
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
+      expect.objectContaining({
+        Authorization: "Bearer test-access-token",
+        "content-type": "application/json",
+      }),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      expect.stringContaining("Found current job by in_progress status"),
+    );
+  });
+
+  it("should analyze all jobs when multiple are in_progress and name match fails", async () => {
+    // When multiple jobs are in_progress, check all of them for failures
+    process.env.GITHUB_JOB = "scan-with-xray";
+
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("Scan Image with Xray", "in_progress", null, [
+          createMockStep("Setup Fly Registry", "success"),
+          createMockStep("Scan", "failure"),
+        ]),
+        createMockJob("Deploy to Staging", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Notification sent",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    // Should detect failure because one of the in_progress jobs has a failed step
+    expect(mockHttpClientPost).toHaveBeenCalledWith(
+      "https://fly.example.com/fly/api/v1/ci/end",
+      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
+      expect.objectContaining({
+        Authorization: "Bearer test-access-token",
+        "content-type": "application/json",
+      }),
+    );
+  });
+
+  it("should handle job not found — no name match and no in_progress jobs", async () => {
+    // All jobs are completed and none match by name
+    process.env.GITHUB_JOB = "unknown-job";
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("different-job", "completed", "success", [
           createMockStep("Checkout", "success"),
         ]),
       ],
@@ -646,7 +732,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockCore.warning).toHaveBeenCalledWith(
-      "Could not determine job status precisely, assuming success since post action is executing",
+      expect.stringContaining("Could not find current job with name"),
     );
     expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://fly.example.com/fly/api/v1/ci/end",

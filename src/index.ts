@@ -12,6 +12,7 @@ import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
+  ENV_FLY_ACTION_CONFIGURED,
 } from "./constants";
 
 /**
@@ -31,6 +32,15 @@ export function resolveFlyCLIBinaryPath(): string {
 
 export async function run(): Promise<void> {
   core.info("Main run() function started.");
+
+  // Idempotency check: skip if action has already run in this job
+  if (process.env[ENV_FLY_ACTION_CONFIGURED] === "true") {
+    core.info(
+      "Fly action has already been configured in this job, skipping duplicate run.",
+    );
+    return;
+  }
+
   try {
     const url = core.getInput(INPUT_URL, { required: true });
     core.info(`URL: ${url}`);
@@ -80,6 +90,10 @@ export async function run(): Promise<void> {
       throw new Error("Fly setup command failed");
     }
     core.info("Fly CLI setup command completed successfully.");
+
+    // Mark action as configured to prevent duplicate runs in same job
+    core.exportVariable(ENV_FLY_ACTION_CONFIGURED, "true");
+    core.info("Marked Fly action as configured for this job.");
   } catch (error) {
     core.error("Error occurred during execution.");
 
