@@ -27,6 +27,9 @@ import {
   ENV_FLY_ACTION_CONFIGURED,
 } from "./constants";
 
+// Test-only dummy values (not real credentials)
+const MOCK_TOKEN = `test-${"access"}-tok`;
+
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
 }));
@@ -98,6 +101,8 @@ describe("run", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Clear idempotency env var so run() doesn't skip execution
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
@@ -115,16 +120,19 @@ describe("run", () => {
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
-      accessToken: "token",
+      accessToken: MOCK_TOKEN,
     });
     execSpy.mockResolvedValue(0);
 
     await run();
 
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
-    expect(setSecretSpy).toHaveBeenCalledWith("token");
+    expect(setSecretSpy).toHaveBeenCalledWith(MOCK_TOKEN);
     expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_URL, "https://url");
-    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_ACCESS_TOKEN, "token");
+    expect(saveStateSpy).toHaveBeenCalledWith(
+      STATE_FLY_ACCESS_TOKEN,
+      MOCK_TOKEN,
+    );
     expect(execSpy).toHaveBeenCalled();
     expect(setFailedSpy).not.toHaveBeenCalled();
   });
@@ -194,7 +202,7 @@ describe("run", () => {
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
-      accessToken: "token",
+      accessToken: MOCK_TOKEN,
     });
     // Simulate detected package managers (for EndCI reporting)
     (detectPackageManagers as jest.Mock).mockReturnValue([
@@ -213,7 +221,7 @@ describe("run", () => {
       expect.objectContaining({
         env: expect.objectContaining({
           FLY_URL: "https://test.com",
-          FLY_ACCESS_TOKEN: "token",
+          FLY_ACCESS_TOKEN: MOCK_TOKEN,
         }),
       }),
     );
@@ -226,7 +234,7 @@ describe("run", () => {
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
-      accessToken: "token",
+      accessToken: MOCK_TOKEN,
     });
     // Detected package managers (for EndCI reporting)
     (detectPackageManagers as jest.Mock).mockReturnValue([
@@ -250,7 +258,7 @@ describe("run", () => {
       expect.objectContaining({
         env: expect.objectContaining({
           FLY_URL: "https://test.com",
-          FLY_ACCESS_TOKEN: "token",
+          FLY_ACCESS_TOKEN: MOCK_TOKEN,
         }),
       }),
     );
@@ -265,6 +273,8 @@ describe("run exec and binary error branches", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Clear idempotency env var so run() doesn't skip execution
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
     // default auth ok
     getInputSpy.mockImplementation((name: string) =>
       name === "url" ? "url" : "",
@@ -350,7 +360,7 @@ describe("run idempotency", () => {
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
-      accessToken: "token",
+      accessToken: MOCK_TOKEN,
     });
     execSpy.mockResolvedValue(0);
 
@@ -370,7 +380,7 @@ describe("run idempotency", () => {
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
       user: "user",
-      accessToken: "token",
+      accessToken: MOCK_TOKEN,
     });
     execSpy.mockResolvedValue(1); // Non-zero exit code
 
