@@ -30,7 +30,7 @@ jobs:
           url: https://flyjfrog.jfrog.io
 
       - name: Install dependencies
-        run: npm ci
+        run: npm i
 
       - name: Run fly-client integration tests
         run: npx jest src/integration-tests/
