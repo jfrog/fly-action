@@ -98,6 +98,8 @@ describe("run", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Clear idempotency env var so run() doesn't skip execution
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
@@ -265,6 +267,8 @@ describe("run exec and binary error branches", () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    // Clear idempotency env var so run() doesn't skip execution
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
     // default auth ok
     getInputSpy.mockImplementation((name: string) =>
       name === "url" ? "url" : "",
