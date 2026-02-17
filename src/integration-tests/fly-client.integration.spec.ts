@@ -489,6 +489,8 @@ describe("Fly client cross-platform check", () => {
       "fly-darwin-x64",
       "fly-linux-arm64",
       "fly-linux-x64",
+      "fly-win32-arm64.exe",
+      "fly-win32-x64.exe",
     ];
 
     expectedBinaries.forEach((binName) => {
