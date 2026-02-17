@@ -19,7 +19,8 @@ import {
  * Resolves the platform-specific Fly binary path and ensures it is executable
  */
 export function resolveFlyCLIBinaryPath(): string {
-  const binName = `fly-${process.platform}-${process.arch}`;
+  const ext = process.platform === "win32" ? ".exe" : "";
+  const binName = `fly-${process.platform}-${process.arch}${ext}`;
   const binPath = path.resolve(__dirname, "..", "bin", binName);
   if (!fs.existsSync(binPath)) {
     throw new Error(
