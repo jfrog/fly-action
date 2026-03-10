@@ -13,6 +13,7 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
+  DEFAULT_FLY_URL,
 } from "./constants";
 
 /**
@@ -43,18 +44,28 @@ export async function run(): Promise<void> {
   }
 
   try {
-    const url = core.getInput(INPUT_URL, { required: true });
-    core.info(`URL: ${url}`);
+    const inputUrl = core.getInput(INPUT_URL);
+    const oidcUrl = inputUrl || DEFAULT_FLY_URL;
+    core.info(
+      `URL for OIDC: ${oidcUrl}${inputUrl ? "" : " (default — tenant will be resolved from OIDC)"}`,
+    );
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
     core.info("Attempting OIDC authentication...");
-    const { accessToken } = await authenticateOidc(url);
+    const { accessToken, flyUrl } = await authenticateOidc(oidcUrl);
     core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
-    // Save URL and access token to state for post-job CI end notification
-    core.saveState(STATE_FLY_URL, url);
+    // Prefer server-returned fly_url (tenant-specific) over input url.
+    // When the server resolves tenant from OIDC claims, it returns the
+    // tenant-specific URL that EndCi and fly-client need.
+    const resolvedUrl = flyUrl || inputUrl || oidcUrl;
+    if (flyUrl) {
+      core.info(`Using server-resolved Fly URL: ${flyUrl}`);
+    }
+
+    core.saveState(STATE_FLY_URL, resolvedUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
@@ -72,7 +83,7 @@ export async function run(): Promise<void> {
     const binPath = resolveFlyCLIBinaryPath();
     core.info(`CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
-      FLY_URL: url,
+      FLY_URL: resolvedUrl,
       FLY_ACCESS_TOKEN: accessToken,
       FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };

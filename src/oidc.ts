@@ -94,5 +94,5 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     );
   }
   const accessToken = parsed.access_token;
-  return { accessToken };
+  return { accessToken, flyUrl: parsed.fly_url };
 }
