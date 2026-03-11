@@ -13,6 +13,7 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
+  DEFAULT_FLY_URL,
 } from "./constants";
 
 /**
@@ -43,18 +44,26 @@ export async function run(): Promise<void> {
   }
 
   try {
-    const url = core.getInput(INPUT_URL, { required: true });
-    core.info(`URL: ${url}`);
+    const inputUrl = core.getInput(INPUT_URL);
+    const oidcUrl = inputUrl || DEFAULT_FLY_URL;
+    if (inputUrl) {
+      core.warning(
+        `The 'url' input is deprecated and will be removed in a future version. ` +
+          `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
+      );
+    }
+    core.info(`URL for OIDC: ${oidcUrl}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
     core.info("Attempting OIDC authentication...");
-    const { accessToken } = await authenticateOidc(url);
+    const { accessToken, flyTenantUrl } = await authenticateOidc(oidcUrl);
     core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
-    // Save URL and access token to state for post-job CI end notification
-    core.saveState(STATE_FLY_URL, url);
+    core.info(`Fly tenant URL: ${flyTenantUrl}`);
+
+    core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
@@ -72,7 +81,7 @@ export async function run(): Promise<void> {
     const binPath = resolveFlyCLIBinaryPath();
     core.info(`CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
-      FLY_URL: url,
+      FLY_URL: flyTenantUrl,
       FLY_ACCESS_TOKEN: accessToken,
       FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };

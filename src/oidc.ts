@@ -87,12 +87,19 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     );
     throw new Error(`OIDC failed ${rawResponse.message.statusCode}: ${body}`);
   }
-  const parsed = parsedJson as FlyOidcResponse;
+  const parsed = parsedJson as Partial<FlyOidcResponse>;
   if (!parsed || !parsed.access_token) {
     throw new Error(
       `OIDC response did not contain an access token, body: ${body}`,
     );
   }
-  const accessToken = parsed.access_token;
-  return { accessToken };
+  if (!parsed.fly_tenant_url) {
+    throw new Error(
+      `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${body}`,
+    );
+  }
+  return {
+    accessToken: parsed.access_token,
+    flyTenantUrl: parsed.fly_tenant_url,
+  };
 }

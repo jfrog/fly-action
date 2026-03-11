@@ -13,6 +13,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 
 ## Features
 
+- ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
 - ✅ OIDC authentication only
@@ -36,12 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # Setup Fly registry with OIDC
+      # Setup Fly registry — tenant is resolved automatically from OIDC
       - name: Setup Fly Registry
         uses: jfrog/fly-action@v1
-        with:
-          url: https://<your-fly-subdomain>.jfrog.io
-          # ignore: docker,pip (optional)
 ```
 
 ### OIDC Authentication (Required)
@@ -57,10 +55,6 @@ permissions:
 
 > **Note**: The `actions: read` permission is optional but recommended. Without it, the action cannot accurately detect whether the job succeeded or failed, and will assume success. With this permission, the action can check the status of individual workflow steps to report accurate job status to the Fly server.
 
-#### Required Inputs
-
-- `url`: Fly URL
-
 #### Optional Inputs
 
 - `ignore`: Comma-separated list of package managers to ignore (e.g., docker,pip)
@@ -69,7 +63,6 @@ permissions:
 
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
-| `url` | Fly URL | Yes | N/A |
 | `ignore` | Comma-separated list of package managers to ignore | No | None |
 
 ## OIDC Authentication
@@ -79,6 +72,7 @@ When using OIDC authentication:
 1. You need to set `permissions: id-token: write` in your workflow file
 2. The action will:
    - Request an OIDC token from GitHub Actions
+   - Resolve the Fly tenant automatically from the OIDC token's `repository_owner_id` claim
    - Exchange it for a Fly access token
    - Use the resulting token to authenticate with Fly
    - Automatically notify the Fly server when the CI session ends (using GitHub Actions post-job mechanism)

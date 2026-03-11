@@ -4,6 +4,10 @@ export const INPUT_URL = "url";
 export const INPUT_IGNORE_PACKAGE_MANAGERS = "ignore";
 export const INPUT_GITHUB_TOKEN = "github_token";
 
+// Central Fly endpoint used when no tenant-specific URL is provided.
+// Tenant is resolved server-side from OIDC claims.
+export const DEFAULT_FLY_URL = "https://fly.jfrog.ai";
+
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";
 export const STATE_FLY_PACKAGE_MANAGERS = "fly-package-managers";
