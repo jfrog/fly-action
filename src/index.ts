@@ -49,7 +49,7 @@ export async function run(): Promise<void> {
     if (inputUrl) {
       core.warning(
         `The 'url' input is deprecated and will be removed in a future version. ` +
-        `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
+          `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
       );
     }
     core.info(`URL for OIDC: ${oidcUrl}`);

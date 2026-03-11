@@ -35,12 +35,18 @@ describe("authenticateOidc", () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () =>
-        JSON.stringify({ access_token: "tokval", fly_tenant_url: "https://tenant.jfrog.io" }),
+        JSON.stringify({
+          access_token: "tokval",
+          fly_tenant_url: "https://tenant.jfrog.io",
+        }),
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://fly");
-    expect(result).toEqual({ accessToken: "tokval", flyTenantUrl: "https://tenant.jfrog.io" });
+    expect(result).toEqual({
+      accessToken: "tokval",
+      flyTenantUrl: "https://tenant.jfrog.io",
+    });
   });
 
   it("should succeed with 201 Created status and return accessToken", async () => {
@@ -52,7 +58,10 @@ describe("authenticateOidc", () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 201, headers: {} as IncomingHttpHeaders },
       readBody: async () =>
-        JSON.stringify({ access_token: "fake-token", fly_tenant_url: "https://tenant.jfrog.io" }),
+        JSON.stringify({
+          access_token: "fake-token",
+          fly_tenant_url: "https://tenant.jfrog.io",
+        }),
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 

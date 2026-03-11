@@ -98,5 +98,8 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
       `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${body}`,
     );
   }
-  return { accessToken: parsed.access_token, flyTenantUrl: parsed.fly_tenant_url };
+  return {
+    accessToken: parsed.access_token,
+    flyTenantUrl: parsed.fly_tenant_url,
+  };
 }

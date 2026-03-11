@@ -128,7 +128,10 @@ describe("run", () => {
 
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
     expect(setSecretSpy).toHaveBeenCalledWith(MOCK_TOKEN);
-    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_URL, "https://resolved-tenant.jfrog.io");
+    expect(saveStateSpy).toHaveBeenCalledWith(
+      STATE_FLY_URL,
+      "https://resolved-tenant.jfrog.io",
+    );
     expect(saveStateSpy).toHaveBeenCalledWith(
       STATE_FLY_ACCESS_TOKEN,
       MOCK_TOKEN,
@@ -149,7 +152,10 @@ describe("run", () => {
 
     await run();
 
-    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "https://tenant.jfrog.io");
+    expect(saveStateSpy).toHaveBeenCalledWith(
+      "fly-url",
+      "https://tenant.jfrog.io",
+    );
     expect(saveStateSpy).toHaveBeenCalledWith("fly-access-token", "t");
     expect(setFailedSpy).toHaveBeenCalledWith("Fly setup command failed");
   });
@@ -182,7 +188,10 @@ describe("run", () => {
     );
 
     await run();
-    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "https://tenant.jfrog.io");
+    expect(saveStateSpy).toHaveBeenCalledWith(
+      "fly-url",
+      "https://tenant.jfrog.io",
+    );
     expect(saveStateSpy).toHaveBeenCalledWith("fly-access-token", "t");
   });
 
