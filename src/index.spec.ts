@@ -119,8 +119,8 @@ describe("run", () => {
       name === "url" ? "https://url" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
       accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
     execSpy.mockResolvedValue(0);
 
@@ -128,7 +128,7 @@ describe("run", () => {
 
     expect(authenticateOidc).toHaveBeenCalledWith("https://url");
     expect(setSecretSpy).toHaveBeenCalledWith(MOCK_TOKEN);
-    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_URL, "https://url");
+    expect(saveStateSpy).toHaveBeenCalledWith(STATE_FLY_URL, "https://resolved-tenant.jfrog.io");
     expect(saveStateSpy).toHaveBeenCalledWith(
       STATE_FLY_ACCESS_TOKEN,
       MOCK_TOKEN,
@@ -142,14 +142,14 @@ describe("run", () => {
       name === "url" ? "u" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "u",
       accessToken: "t",
+      flyTenantUrl: "https://tenant.jfrog.io",
     });
     execSpy.mockResolvedValue(1);
 
     await run();
 
-    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "u");
+    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "https://tenant.jfrog.io");
     expect(saveStateSpy).toHaveBeenCalledWith("fly-access-token", "t");
     expect(setFailedSpy).toHaveBeenCalledWith("Fly setup command failed");
   });
@@ -170,12 +170,11 @@ describe("run", () => {
       name === "url" ? "u" : "docker",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "u",
       accessToken: "t",
+      flyTenantUrl: "https://tenant.jfrog.io",
     });
     execSpy.mockImplementation(
       async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
-        // check ignore env var passed
         const env = options?.env;
         expect(env?.FLY_IGNORE_PACKAGE_MANAGERS).toBe("docker");
         return 0;
@@ -183,7 +182,7 @@ describe("run", () => {
     );
 
     await run();
-    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "u");
+    expect(saveStateSpy).toHaveBeenCalledWith("fly-url", "https://tenant.jfrog.io");
     expect(saveStateSpy).toHaveBeenCalledWith("fly-access-token", "t");
   });
 
@@ -201,10 +200,9 @@ describe("run", () => {
       name === "url" ? "https://test.com" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
       accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
-    // Simulate detected package managers (for EndCI reporting)
     (detectPackageManagers as jest.Mock).mockReturnValue([
       "npm",
       "docker",
@@ -214,13 +212,12 @@ describe("run", () => {
 
     await run();
 
-    // Should call exec with just "setup" (no package manager arguments)
     expect(execSpy).toHaveBeenCalledWith(
       "/fake/bin",
       ["setup"],
       expect.objectContaining({
         env: expect.objectContaining({
-          FLY_URL: "https://test.com",
+          FLY_URL: "https://resolved-tenant.jfrog.io",
           FLY_ACCESS_TOKEN: MOCK_TOKEN,
         }),
       }),
@@ -233,10 +230,9 @@ describe("run", () => {
       name === "url" ? "https://test.com" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
       accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
-    // Detected package managers (for EndCI reporting)
     (detectPackageManagers as jest.Mock).mockReturnValue([
       "npm",
       "docker",
@@ -246,18 +242,16 @@ describe("run", () => {
 
     await run();
 
-    // Should save detected package managers to state
     expect(saveStateSpy).toHaveBeenCalledWith(
       "fly-package-managers",
       JSON.stringify(["npm", "docker", "helm"]),
     );
-    // Should call exec with just "setup"
     expect(execSpy).toHaveBeenCalledWith(
       "/fake/bin",
       ["setup"],
       expect.objectContaining({
         env: expect.objectContaining({
-          FLY_URL: "https://test.com",
+          FLY_URL: "https://resolved-tenant.jfrog.io",
           FLY_ACCESS_TOKEN: MOCK_TOKEN,
         }),
       }),
@@ -275,15 +269,13 @@ describe("run exec and binary error branches", () => {
     jest.resetAllMocks();
     // Clear idempotency env var so run() doesn't skip execution
     delete process.env[ENV_FLY_ACTION_CONFIGURED];
-    // default auth ok
     getInputSpy.mockImplementation((name: string) =>
       name === "url" ? "url" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "u",
       accessToken: "t",
+      flyTenantUrl: "https://tenant.jfrog.io",
     });
-    // Default: return all supported package managers
     (getAllPackageManagers as jest.Mock).mockResolvedValue([
       ...SUPPORTED_PACKAGE_MANAGERS,
     ]);
@@ -359,8 +351,8 @@ describe("run idempotency", () => {
       name === "url" ? "https://test.com" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
       accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
     execSpy.mockResolvedValue(0);
 
@@ -379,8 +371,8 @@ describe("run idempotency", () => {
       name === "url" ? "https://test.com" : "",
     );
     (authenticateOidc as jest.Mock).mockResolvedValue({
-      user: "user",
       accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
     execSpy.mockResolvedValue(1); // Non-zero exit code
 

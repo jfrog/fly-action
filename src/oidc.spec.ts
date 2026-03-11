@@ -34,12 +34,13 @@ describe("authenticateOidc", () => {
     // Mock HttpClient.post
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => JSON.stringify({ access_token: "tokval" }),
+      readBody: async () =>
+        JSON.stringify({ access_token: "tokval", fly_tenant_url: "https://tenant.jfrog.io" }),
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://fly");
-    expect(result).toEqual({ accessToken: "tokval" }); // Updated expectation
+    expect(result).toEqual({ accessToken: "tokval", flyTenantUrl: "https://tenant.jfrog.io" });
   });
 
   it("should succeed with 201 Created status and return accessToken", async () => {
@@ -50,12 +51,14 @@ describe("authenticateOidc", () => {
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 201, headers: {} as IncomingHttpHeaders },
-      readBody: async () => JSON.stringify({ access_token: "fake-token" }), // Removed username from mock response
+      readBody: async () =>
+        JSON.stringify({ access_token: "fake-token", fly_tenant_url: "https://tenant.jfrog.io" }),
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://fly");
-    expect(result.accessToken).toBe("fake-token"); // Updated expectation
+    expect(result.accessToken).toBe("fake-token");
+    expect(result.flyTenantUrl).toBe("https://tenant.jfrog.io");
   });
 
   it("should throw if getIDToken fails", async () => {
@@ -79,6 +82,23 @@ describe("authenticateOidc", () => {
 
     await expect(authenticateOidc("https://fly")).rejects.toThrow(
       /OIDC failed 500: error body/, // Updated error message
+    );
+  });
+
+  it("should throw if OIDC response does not contain fly_tenant_url", async () => {
+    (core.getIDToken as jest.Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => JSON.stringify({ access_token: "tokval" }),
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    await expect(authenticateOidc("https://fly")).rejects.toThrow(
+      "OIDC response did not contain fly_tenant_url",
     );
   });
 
