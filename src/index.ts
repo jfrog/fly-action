@@ -46,9 +46,13 @@ export async function run(): Promise<void> {
   try {
     const inputUrl = core.getInput(INPUT_URL);
     const oidcUrl = inputUrl || DEFAULT_FLY_URL;
-    core.info(
-      `URL for OIDC: ${oidcUrl}${inputUrl ? "" : " (default — tenant will be resolved from OIDC)"}`,
-    );
+    if (inputUrl) {
+      core.warning(
+        `The 'url' input is deprecated and will be removed in a future version. ` +
+        `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
+      );
+    }
+    core.info(`URL for OIDC: ${oidcUrl}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
@@ -57,15 +61,9 @@ export async function run(): Promise<void> {
     core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
-    // Prefer server-returned fly_tenant_url (tenant subdomain) over input url.
-    // When the server resolves tenant from OIDC claims, it returns the
-    // tenant subdomain URL that EndCi and fly-client need for nginx routing.
-    const resolvedUrl = flyTenantUrl || inputUrl || oidcUrl;
-    if (flyTenantUrl) {
-      core.info(`Using server-resolved Fly tenant URL: ${flyTenantUrl}`);
-    }
+    core.info(`Fly tenant URL: ${flyTenantUrl}`);
 
-    core.saveState(STATE_FLY_URL, resolvedUrl);
+    core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
@@ -83,7 +81,7 @@ export async function run(): Promise<void> {
     const binPath = resolveFlyCLIBinaryPath();
     core.info(`CLI binary path: ${binPath}`);
     const envVars: Record<string, string> = {
-      FLY_URL: resolvedUrl,
+      FLY_URL: flyTenantUrl,
       FLY_ACCESS_TOKEN: accessToken,
       FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
     };
