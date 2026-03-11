@@ -53,16 +53,16 @@ export async function run(): Promise<void> {
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
     core.info("Attempting OIDC authentication...");
-    const { accessToken, flyUrl } = await authenticateOidc(oidcUrl);
+    const { accessToken, flyTenantUrl } = await authenticateOidc(oidcUrl);
     core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
-    // Prefer server-returned fly_url (tenant-specific) over input url.
+    // Prefer server-returned fly_tenant_url (tenant subdomain) over input url.
     // When the server resolves tenant from OIDC claims, it returns the
-    // tenant-specific URL that EndCi and fly-client need.
-    const resolvedUrl = flyUrl || inputUrl || oidcUrl;
-    if (flyUrl) {
-      core.info(`Using server-resolved Fly URL: ${flyUrl}`);
+    // tenant subdomain URL that EndCi and fly-client need for nginx routing.
+    const resolvedUrl = flyTenantUrl || inputUrl || oidcUrl;
+    if (flyTenantUrl) {
+      core.info(`Using server-resolved Fly tenant URL: ${flyTenantUrl}`);
     }
 
     core.saveState(STATE_FLY_URL, resolvedUrl);
