@@ -14,7 +14,7 @@ import * as core from "@actions/core";
 import * as exec from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
-import { resolveFlyCLIBinaryPath, run } from "./index";
+import { resolveFlyCLIBinaryPath, resolveOidcUrl, run } from "./index";
 import { authenticateOidc } from "./oidc";
 import {
   detectPackageManagers,
@@ -25,6 +25,8 @@ import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   ENV_FLY_ACTION_CONFIGURED,
+  ENV_FLY_URL,
+  DEFAULT_FLY_URL,
 } from "./constants";
 
 // Test-only dummy values (not real credentials)
@@ -89,6 +91,66 @@ describe("resolveFlyCLIBinaryPath Windows behavior", () => {
 
     // Restore platform
     Object.defineProperty(process, "platform", { value: origPlatform });
+  });
+});
+
+describe("resolveOidcUrl", () => {
+  const getInputSpy = jest.spyOn(core, "getInput");
+
+  afterEach(() => {
+    jest.resetAllMocks();
+    delete process.env[ENV_FLY_URL];
+    delete process.env.GITHUB_SERVER_URL;
+  });
+
+  it("returns explicit url input when provided (deprecated path)", () => {
+    getInputSpy.mockReturnValue("https://explicit.jfrog.io");
+    const result = resolveOidcUrl();
+    expect(result).toBe("https://explicit.jfrog.io");
+  });
+
+  it("returns FLY_URL env var when set and no input", () => {
+    getInputSpy.mockReturnValue("");
+    process.env[ENV_FLY_URL] = "https://fly.jfrog.info";
+    const result = resolveOidcUrl();
+    expect(result).toBe("https://fly.jfrog.info");
+  });
+
+  it("returns default fly.jfrog.ai on github.com", () => {
+    getInputSpy.mockReturnValue("");
+    process.env.GITHUB_SERVER_URL = "https://github.com";
+    const result = resolveOidcUrl();
+    expect(result).toBe(DEFAULT_FLY_URL);
+  });
+
+  it("returns default fly.jfrog.ai when GITHUB_SERVER_URL is not set", () => {
+    getInputSpy.mockReturnValue("");
+    delete process.env.GITHUB_SERVER_URL;
+    const result = resolveOidcUrl();
+    expect(result).toBe(DEFAULT_FLY_URL);
+  });
+
+  it("throws on GHES when FLY_URL is not set", () => {
+    getInputSpy.mockReturnValue("");
+    process.env.GITHUB_SERVER_URL = "https://github.jfrog.info";
+    expect(() => resolveOidcUrl()).toThrow(
+      "GitHub Enterprise Server detected (https://github.jfrog.info)",
+    );
+  });
+
+  it("uses FLY_URL on GHES when set", () => {
+    getInputSpy.mockReturnValue("");
+    process.env.GITHUB_SERVER_URL = "https://github.jfrog.info";
+    process.env[ENV_FLY_URL] = "https://fly.jfrog.info";
+    const result = resolveOidcUrl();
+    expect(result).toBe("https://fly.jfrog.info");
+  });
+
+  it("prefers explicit url input over FLY_URL env var", () => {
+    getInputSpy.mockReturnValue("https://explicit.jfrog.io");
+    process.env[ENV_FLY_URL] = "https://fly.jfrog.info";
+    const result = resolveOidcUrl();
+    expect(result).toBe("https://explicit.jfrog.io");
   });
 });
 

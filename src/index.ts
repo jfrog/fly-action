@@ -14,6 +14,7 @@ import {
   STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
   DEFAULT_FLY_URL,
+  ENV_FLY_URL,
 } from "./constants";
 
 /**
@@ -32,6 +33,45 @@ export function resolveFlyCLIBinaryPath(): string {
   return binPath;
 }
 
+/**
+ * Determines the Fly OIDC endpoint URL. Resolution order:
+ * 1. Explicit `url` action input (deprecated but still supported)
+ * 2. `FLY_URL` environment variable (org-level, required for GHES)
+ * 3. Default `fly.jfrog.ai` — only valid for github.com runners
+ *
+ * On GitHub Enterprise Server, the default endpoint cannot resolve tenants
+ * because GHES installations live in a separate Fly environment. The action
+ * fails fast with a clear message when neither `url` nor `FLY_URL` is set.
+ */
+export function resolveOidcUrl(): string {
+  const inputUrl = core.getInput(INPUT_URL);
+  if (inputUrl) {
+    core.warning(
+      `The 'url' input is deprecated and will be removed in a future version. ` +
+        `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
+    );
+    return inputUrl;
+  }
+
+  const envUrl = process.env[ENV_FLY_URL];
+  if (envUrl) {
+    core.info(`Using Fly URL from ${ENV_FLY_URL} environment variable.`);
+    return envUrl;
+  }
+
+  const githubServerUrl = process.env.GITHUB_SERVER_URL || "https://github.com";
+  if (githubServerUrl !== "https://github.com") {
+    throw new Error(
+      `GitHub Enterprise Server detected (${githubServerUrl}). ` +
+        `Set the ${ENV_FLY_URL} organization variable to your Fly environment URL ` +
+        `(e.g., "https://fly.jfrog.info" for staging). ` +
+        `The default ${DEFAULT_FLY_URL} only resolves tenants for github.com.`,
+    );
+  }
+
+  return DEFAULT_FLY_URL;
+}
+
 export async function run(): Promise<void> {
   core.info("Main run() function started.");
 
@@ -44,14 +84,7 @@ export async function run(): Promise<void> {
   }
 
   try {
-    const inputUrl = core.getInput(INPUT_URL);
-    const oidcUrl = inputUrl || DEFAULT_FLY_URL;
-    if (inputUrl) {
-      core.warning(
-        `The 'url' input is deprecated and will be removed in a future version. ` +
-          `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
-      );
-    }
+    const oidcUrl = resolveOidcUrl();
     core.info(`URL for OIDC: ${oidcUrl}`);
     const ignorePackageManagers = core.getInput(INPUT_IGNORE_PACKAGE_MANAGERS);
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);

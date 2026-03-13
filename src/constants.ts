@@ -4,9 +4,14 @@ export const INPUT_URL = "url";
 export const INPUT_IGNORE_PACKAGE_MANAGERS = "ignore";
 export const INPUT_GITHUB_TOKEN = "github_token";
 
-// Central Fly endpoint used when no tenant-specific URL is provided.
+// Central Fly endpoint for github.com runners.
 // Tenant is resolved server-side from OIDC claims.
 export const DEFAULT_FLY_URL = "https://fly.jfrog.ai";
+
+// Environment variable that GHES organizations can set to specify their Fly endpoint.
+// When running on GitHub Enterprise Server, the action reads this env var to determine
+// where to send the OIDC token exchange request (e.g., "https://fly.jfrog.info").
+export const ENV_FLY_URL = "FLY_URL";
 
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";
