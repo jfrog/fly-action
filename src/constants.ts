@@ -11,7 +11,9 @@ export const DEFAULT_FLY_URL = "https://fly.jfrog.ai";
 // Environment variable that GHES organizations can set to specify their Fly endpoint.
 // When running on GitHub Enterprise Server, the action reads this env var to determine
 // where to send the OIDC token exchange request (e.g., "https://fly.jfrog.info").
-export const ENV_FLY_URL = "FLY_URL";
+// Named CUSTOM_FLY_URL to avoid collision with FLY_URL which the action sets
+// internally for the fly CLI binary (resolved tenant URL).
+export const ENV_FLY_URL = "CUSTOM_FLY_URL";
 
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";

@@ -36,12 +36,12 @@ export function resolveFlyCLIBinaryPath(): string {
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
  * 1. Explicit `url` action input (deprecated but still supported)
- * 2. `FLY_URL` environment variable (org-level, required for GHES)
+ * 2. `CUSTOM_FLY_URL` environment variable (org-level, required for GHES)
  * 3. Default `fly.jfrog.ai` — only valid for github.com runners
  *
  * On GitHub Enterprise Server, the default endpoint cannot resolve tenants
  * because GHES installations live in a separate Fly environment. The action
- * fails fast with a clear message when neither `url` nor `FLY_URL` is set.
+ * fails fast with a clear message when neither `url` nor `CUSTOM_FLY_URL` is set.
  */
 export function resolveOidcUrl(): string {
   const inputUrl = core.getInput(INPUT_URL);
