@@ -20,6 +20,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
 - ✅ Retry mechanism with exponential backoff for CI notifications
+- ✅ Exports tenant URL as `FLY_URL` environment variable for subsequent steps
 
 ## Usage
 
@@ -40,6 +41,12 @@ jobs:
       # Setup Fly registry — tenant is resolved automatically from OIDC
       - name: Setup Fly Registry
         uses: jfrog/fly-action@v1
+
+      # FLY_URL is now available for Docker, Helm, or any registry operation
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ env.FLY_URL }}/docker/my-app:${{ github.sha }} .
+          docker push ${{ env.FLY_URL }}/docker/my-app:${{ github.sha }}
 ```
 
 ### OIDC Authentication (Required)
@@ -64,6 +71,33 @@ permissions:
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `ignore` | Comma-separated list of package managers to ignore | No | None |
+
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `fly_url` | The resolved Fly tenant URL (e.g., `https://acmecorp.jfrog.io`) |
+
+The tenant URL is also exported as the **`FLY_URL`** environment variable, making it available in all subsequent steps without needing a step `id`:
+
+```yaml
+- name: Push Docker image
+  run: docker push ${{ env.FLY_URL }}/docker/my-app:latest
+
+- name: Push Helm chart
+  run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_URL }}/helmoci
+```
+
+If you prefer explicit step output references (e.g., for `if:` conditions), add an `id` to the step:
+
+```yaml
+- name: Setup Fly Registry
+  id: fly
+  uses: jfrog/fly-action@v1
+
+- name: Show tenant URL
+  run: echo "Tenant URL is ${{ steps.fly.outputs.fly_url }}"
+```
 
 ## OIDC Authentication
 

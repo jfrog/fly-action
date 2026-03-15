@@ -13,6 +13,8 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
+  ENV_FLY_TENANT_URL,
+  OUTPUT_FLY_URL,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
 } from "./constants";
@@ -95,6 +97,9 @@ export async function run(): Promise<void> {
     core.setSecret(accessToken);
 
     core.info(`Fly tenant URL: ${flyTenantUrl}`);
+
+    core.setOutput(OUTPUT_FLY_URL, flyTenantUrl);
+    core.exportVariable(ENV_FLY_TENANT_URL, flyTenantUrl);
 
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);

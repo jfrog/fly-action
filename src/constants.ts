@@ -22,6 +22,12 @@ export const STATE_FLY_PACKAGE_MANAGERS = "fly-package-managers";
 // Environment variable to track if action has already run in this job
 export const ENV_FLY_ACTION_CONFIGURED = "FLY_ACTION_CONFIGURED";
 
+// Exported to GITHUB_ENV so subsequent steps can use ${{ env.FLY_URL }}
+export const ENV_FLY_TENANT_URL = "FLY_URL";
+
+// Action output name for the resolved tenant URL
+export const OUTPUT_FLY_URL = "fly_url";
+
 // GitHub step/job conclusion statuses
 export const GITHUB_STATUS_SUCCESS = "success";
 export const GITHUB_STATUS_FAILURE = "failure";
