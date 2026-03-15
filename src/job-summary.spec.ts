@@ -19,51 +19,73 @@ const mockCore = {
 jest.mock("@actions/core", () => mockCore);
 
 import { createJobSummary } from "./job-summary";
+import { CollectedArtifact } from "./types";
 
 describe("createJobSummary", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSummary.write.mockResolvedValue(undefined);
 
-    // Mock environment variables
     process.env.GITHUB_REPOSITORY = "owner/test-repo";
     process.env.GITHUB_REPOSITORY_OWNER = "owner";
     process.env.GITHUB_JOB = "test-job";
   });
 
   afterEach(() => {
-    // Clean up environment variables
     delete process.env.GITHUB_REPOSITORY;
     delete process.env.GITHUB_REPOSITORY_OWNER;
     delete process.env.GITHUB_JOB;
   });
 
-  it("should create job summary", async () => {
+  it("should create job summary with no artifacts", async () => {
     await createJobSummary();
 
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
     expect(markdownContent).toContain("# 🦋 Fly action");
     expect(markdownContent).toContain("✅ **Completed successfully**");
     expect(markdownContent).toContain("📢 [View release in Fly]");
     expect(markdownContent).toContain("https://fly.jfrog.ai");
+    expect(markdownContent).not.toContain("Collected Artifacts");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
-  it("should create job summary with any package manager type", async () => {
-    await createJobSummary();
+  it("should render artifacts table when artifacts are provided", async () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "my-lib",
+        type: "npm",
+        repo_key: "npm-local",
+        path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
+      },
+      { name: "my-app", type: "docker", repo_key: "docker-local" },
+    ];
 
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("# 🦋 Fly action");
-    expect(markdownContent).toContain("https://fly.jfrog.ai");
+    await createJobSummary(artifacts);
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("### Collected Artifacts");
+    expect(markdownContent).toContain("| Artifact | Type | Repository |");
+    expect(markdownContent).toContain("| my-lib | npm | npm-local |");
+    expect(markdownContent).toContain("| my-app | docker | docker-local |");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
-  it("should create job summary even with empty package managers array", async () => {
-    await createJobSummary();
+  it("should show dash for missing repo_key", async () => {
+    const artifacts: CollectedArtifact[] = [
+      { name: "orphan-artifact", type: "generic" },
+    ];
 
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
-    expect(markdownContent).toContain("# 🦋 Fly action");
-    expect(mockSummary.write).toHaveBeenCalled();
+    await createJobSummary(artifacts);
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("| orphan-artifact | generic | — |");
+  });
+
+  it("should not render artifacts table for empty array", async () => {
+    await createJobSummary([]);
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).not.toContain("Collected Artifacts");
   });
 
   it("should handle missing environment variables gracefully", async () => {
@@ -71,7 +93,7 @@ describe("createJobSummary", () => {
 
     await createJobSummary();
 
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0];
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
     expect(markdownContent).toContain("https://fly.jfrog.ai");
     expect(mockSummary.write).toHaveBeenCalled();
   });

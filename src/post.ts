@@ -13,14 +13,14 @@ import {
   INPUT_GITHUB_TOKEN,
 } from "./constants";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
-import { EndCiRequest } from "./types";
+import { EndCiRequest, EndCiResponse, CollectedArtifact } from "./types";
 import { createHttpClient } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 // Retry configuration
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000; // 1 second
-const REQUEST_TIMEOUT_MS = 60000; // 60 seconds (Wingman AI calls can take 30+ seconds)
+const REQUEST_TIMEOUT_MS = 10000; // 10 seconds (ci/end is a fast Redis lookup)
 
 /**
  * Sleep for a given number of milliseconds
@@ -362,10 +362,23 @@ export async function runPost(): Promise<void> {
     if (response.message.statusCode === 200) {
       core.info("✅ CI end notification completed successfully");
 
-      // Only create job summary if the job succeeded
+      let artifacts: CollectedArtifact[] = [];
+      try {
+        const body = await response.readBody();
+        const parsed: EndCiResponse = JSON.parse(body);
+        artifacts = parsed.artifacts || [];
+        if (artifacts.length > 0) {
+          core.info(
+            `Collected ${artifacts.length} artifact(s) from CI workflow`,
+          );
+        }
+      } catch {
+        core.info("No artifacts in ci/end response");
+      }
+
       if (determinedStatus === GITHUB_STATUS_SUCCESS) {
         core.info("📋 Creating job summary for successful job...");
-        await createJobSummary();
+        await createJobSummary(artifacts);
       } else {
         core.info("⚠️ Skipping job summary creation - job did not succeed");
       }

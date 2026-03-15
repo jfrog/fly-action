@@ -74,6 +74,21 @@ const createMockStep = (name: string, conclusion: string | null = null) => ({
   conclusion,
 });
 
+// Standard ci/end response with artifacts
+const END_CI_RESPONSE_WITH_ARTIFACTS = JSON.stringify({
+  artifacts: [
+    {
+      name: "my-lib",
+      type: "npm",
+      repo_key: "npm-local",
+      path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
+    },
+    { name: "my-app", type: "docker", repo_key: "docker-local" },
+  ],
+});
+
+const END_CI_RESPONSE_EMPTY = JSON.stringify({ artifacts: [] });
+
 describe("runPost", () => {
   const originalEnv = process.env;
 
@@ -142,7 +157,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_WITH_ARTIFACTS,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -159,8 +174,74 @@ describe("runPost", () => {
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "Collected 2 artifact(s) from CI workflow",
+    );
     expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
     expect(mockCore.info).toHaveBeenCalledWith("✅ All main steps succeeded");
+  });
+
+  it("should parse artifacts from ci/end response and pass to job summary", async () => {
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("test-job", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+          createMockStep("Build", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => END_CI_RESPONSE_WITH_ARTIFACTS,
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "Collected 2 artifact(s) from CI workflow",
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "📋 Creating job summary for successful job...",
+    );
+  });
+
+  it("should gracefully handle non-JSON ci/end response", async () => {
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("test-job", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "EndCi flow completed successfully",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "No artifacts in ci/end response",
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "📋 Creating job summary for successful job...",
+    );
   });
 
   it("should call notifyCiEnd with status 'failure' when a step failed", async () => {
@@ -183,7 +264,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -289,7 +370,7 @@ describe("runPost", () => {
     // First call fails, second succeeds
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost
       .mockRejectedValueOnce(new Error("Timeout"))
@@ -448,7 +529,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -474,7 +555,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -507,7 +588,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -540,7 +621,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -577,7 +658,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -614,7 +695,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -649,7 +730,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -686,7 +767,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -729,7 +810,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -773,7 +854,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -809,7 +890,7 @@ describe("runPost", () => {
 
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -1034,7 +1115,7 @@ describe("runPostScriptLogic", () => {
     // Mock successful HTTP response
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 

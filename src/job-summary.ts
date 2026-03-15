@@ -3,10 +3,24 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
+import { CollectedArtifact } from "./types";
 
-export async function createJobSummary(): Promise<void> {
+function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
+  if (artifacts.length === 0) {
+    return "";
+  }
+
+  const header = "| Artifact | Type | Repository |\n| --- | --- | --- |";
+  const rows = artifacts.map(
+    (a) => `| ${a.name} | ${a.type} | ${a.repo_key || "—"} |`,
+  );
+  return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+}
+
+export async function createJobSummary(
+  artifacts: CollectedArtifact[] = [],
+): Promise<void> {
   try {
-    // Build release URL
     const fullRepo = process.env.GITHUB_REPOSITORY;
     const owner = process.env.GITHUB_REPOSITORY_OWNER;
     const workflowName = process.env.GITHUB_WORKFLOW;
@@ -21,7 +35,6 @@ export async function createJobSummary(): Promise<void> {
       releaseUrl = `${baseUrl}/dashboard/registry/git-repositories/${owner}/${repoName}/releases/${encodedWorkflowName}/${runNumber}/artifacts`;
     }
 
-    // Read markdown template
     const templatePath = path.join(
       __dirname,
       "..",
@@ -30,10 +43,14 @@ export async function createJobSummary(): Promise<void> {
     );
     const template = fs.readFileSync(templatePath, "utf8");
 
-    // Replace template variables
-    const markdownContent = template.replace("{{RELEASE_URL}}", releaseUrl);
+    let markdownContent = template.replace("{{RELEASE_URL}}", releaseUrl);
 
-    // Create summary from markdown
+    const artifactsTable = buildArtifactsTable(artifacts);
+    markdownContent = markdownContent.replace(
+      "{{ARTIFACTS_TABLE}}",
+      artifactsTable,
+    );
+
     const summary = core.summary.addRaw(markdownContent);
 
     await summary.write();

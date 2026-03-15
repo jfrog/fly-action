@@ -19,8 +19,27 @@ export interface FlyOidcResponse {
   fly_tenant_url: string;
 }
 
-/** Payload for the CI End notification */
+/**
+ * Payload for the CI End notification.
+ *
+ * TODO: status and package_managers are ignored by the server since PR #624
+ * (multi-job CI release support). Remove these fields and the package manager
+ * detection in ci/start once all servers are upgraded.
+ */
 export interface EndCiRequest {
   package_managers?: string[];
   status: string;
+}
+
+/** A single artifact collected during the CI workflow */
+export interface CollectedArtifact {
+  name: string;
+  type: string;
+  repo_key?: string;
+  path?: string;
+}
+
+/** Response from the CI End endpoint */
+export interface EndCiResponse {
+  artifacts: CollectedArtifact[];
 }
