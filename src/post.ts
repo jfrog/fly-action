@@ -376,12 +376,8 @@ export async function runPost(): Promise<void> {
         core.info("No artifacts in ci/end response");
       }
 
-      if (determinedStatus === GITHUB_STATUS_SUCCESS) {
-        core.info("📋 Creating job summary for successful job...");
-        await createJobSummary(artifacts);
-      } else {
-        core.info("⚠️ Skipping job summary creation - job did not succeed");
-      }
+      core.info("📋 Creating job summary...");
+      await createJobSummary(artifacts);
     } else {
       const body = await response.readBody();
       core.error(

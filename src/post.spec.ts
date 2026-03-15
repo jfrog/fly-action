@@ -208,9 +208,7 @@ describe("runPost", () => {
     expect(mockCore.info).toHaveBeenCalledWith(
       "Collected 2 artifact(s) from CI workflow",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "📋 Creating job summary for successful job...",
-    );
+    expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
   });
 
   it("should gracefully handle non-JSON ci/end response", async () => {
@@ -239,9 +237,7 @@ describe("runPost", () => {
     expect(mockCore.info).toHaveBeenCalledWith(
       "No artifacts in ci/end response",
     );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "📋 Creating job summary for successful job...",
-    );
+    expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
   });
 
   it("should call notifyCiEnd with status 'failure' when a step failed", async () => {
