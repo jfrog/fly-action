@@ -5,13 +5,11 @@ import * as exec from "@actions/exec";
 import * as fs from "fs";
 import * as path from "path";
 import { authenticateOidc } from "./oidc";
-import { detectPackageManagers } from "./package-detection";
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
-  STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
   DEFAULT_FLY_URL,
@@ -107,17 +105,6 @@ export async function run(): Promise<void> {
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
-
-    // Detect package managers for EndCI reporting
-    const workspacePath = process.env.GITHUB_WORKSPACE || "";
-    const detectedPackageManagers = detectPackageManagers(workspacePath);
-    core.saveState(
-      STATE_FLY_PACKAGE_MANAGERS,
-      JSON.stringify(detectedPackageManagers),
-    );
-    core.info(
-      `Detected package managers for EndCI: ${JSON.stringify(detectedPackageManagers)}`,
-    );
 
     const binPath = resolveFlyCLIBinaryPath();
     core.info(`CLI binary path: ${binPath}`);

@@ -17,11 +17,6 @@ import * as path from "path";
 import { resolveFlyCLIBinaryPath, resolveOidcUrl, run } from "./index";
 import { authenticateOidc } from "./oidc";
 import {
-  detectPackageManagers,
-  getAllPackageManagers,
-  SUPPORTED_PACKAGE_MANAGERS,
-} from "./package-detection";
-import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   ENV_FLY_ACTION_CONFIGURED,
@@ -35,23 +30,6 @@ const MOCK_TOKEN = `test-${"access"}-tok`;
 
 jest.mock("./oidc", () => ({
   authenticateOidc: jest.fn(),
-}));
-
-jest.mock("./package-detection", () => ({
-  detectPackageManagers: jest.fn(),
-  getAllPackageManagers: jest.fn(),
-  SUPPORTED_PACKAGE_MANAGERS: [
-    "npm",
-    "pnpm",
-    "pip",
-    "pipenv",
-    "twine",
-    "maven",
-    "gradle",
-    "dotnet",
-    "nuget",
-    "go",
-  ],
 }));
 
 describe("resolveFlyCLIBinaryPath", () => {
@@ -169,12 +147,6 @@ describe("run", () => {
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
-    // Default: detectPackageManagers returns empty (no package managers detected)
-    (detectPackageManagers as jest.Mock).mockReturnValue([]);
-    // Default: getAllPackageManagers returns all supported (no container managers detected)
-    (getAllPackageManagers as jest.Mock).mockReturnValue([
-      ...SUPPORTED_PACKAGE_MANAGERS,
-    ]);
   });
 
   it("runs successfully when exec returns 0", async () => {
@@ -294,49 +266,10 @@ describe("run", () => {
       accessToken: MOCK_TOKEN,
       flyTenantUrl: "https://resolved-tenant.jfrog.io",
     });
-    (detectPackageManagers as jest.Mock).mockReturnValue([
-      "npm",
-      "docker",
-      "go",
-    ]);
     execSpy.mockResolvedValue(0);
 
     await run();
 
-    expect(execSpy).toHaveBeenCalledWith(
-      "/fake/bin",
-      ["setup"],
-      expect.objectContaining({
-        env: expect.objectContaining({
-          FLY_URL: "https://resolved-tenant.jfrog.io",
-          FLY_ACCESS_TOKEN: MOCK_TOKEN,
-        }),
-      }),
-    );
-    expect(setFailedSpy).not.toHaveBeenCalled();
-  });
-
-  it("saves detected package managers to state for EndCI reporting", async () => {
-    getInputSpy.mockImplementation((name: string) =>
-      name === "url" ? "https://test.com" : "",
-    );
-    (authenticateOidc as jest.Mock).mockResolvedValue({
-      accessToken: MOCK_TOKEN,
-      flyTenantUrl: "https://resolved-tenant.jfrog.io",
-    });
-    (detectPackageManagers as jest.Mock).mockReturnValue([
-      "npm",
-      "docker",
-      "helm",
-    ]);
-    execSpy.mockResolvedValue(0);
-
-    await run();
-
-    expect(saveStateSpy).toHaveBeenCalledWith(
-      "fly-package-managers",
-      JSON.stringify(["npm", "docker", "helm"]),
-    );
     expect(execSpy).toHaveBeenCalledWith(
       "/fake/bin",
       ["setup"],
@@ -367,9 +300,6 @@ describe("run exec and binary error branches", () => {
       accessToken: "t",
       flyTenantUrl: "https://tenant.jfrog.io",
     });
-    (getAllPackageManagers as jest.Mock).mockResolvedValue([
-      ...SUPPORTED_PACKAGE_MANAGERS,
-    ]);
   });
 
   it("calls setFailed when exec throws error", async () => {
@@ -410,7 +340,6 @@ describe("run idempotency", () => {
     // Stub file system to simulate binary present
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (path.resolve as jest.Mock).mockReturnValue("/fake/bin");
-    (detectPackageManagers as jest.Mock).mockReturnValue([]);
   });
 
   afterEach(() => {

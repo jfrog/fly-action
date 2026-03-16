@@ -19,8 +19,15 @@ export interface FlyOidcResponse {
   fly_tenant_url: string;
 }
 
-/** Payload for the CI End notification */
-export interface EndCiRequest {
-  package_managers?: string[];
-  status: string;
+/** A single artifact collected during the CI workflow */
+export interface CollectedArtifact {
+  name: string;
+  type: string;
+  repo_key?: string;
+  path?: string;
+}
+
+/** Response from the CI End endpoint */
+export interface EndCiResponse {
+  artifacts: CollectedArtifact[];
 }

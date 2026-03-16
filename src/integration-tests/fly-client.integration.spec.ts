@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { execSync, spawn, SpawnOptions } from "child_process";
-import { SUPPORTED_PACKAGE_MANAGERS } from "../package-detection";
+import { SUPPORTED_PACKAGE_MANAGERS } from "../constants";
 
 // Determine the correct binary for the current platform
 const getBinaryPath = (): string => {

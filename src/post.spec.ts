@@ -3,29 +3,15 @@
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
-import * as github from "@actions/github";
-import {
-  STATE_FLY_URL,
-  STATE_FLY_ACCESS_TOKEN,
-  STATE_FLY_PACKAGE_MANAGERS,
-} from "./constants";
-import {
-  runPost,
-  runPostScriptLogic,
-  filterMainSteps,
-  analyzeJobSteps,
-} from "./post";
+import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
+import { runPost, runPostScriptLogic } from "./post";
 
 // Mock @actions/core
 jest.mock("@actions/core");
 jest.mock("@actions/http-client");
-jest.mock("@actions/github", () => ({
-  getOctokit: jest.fn(),
-}));
 
 const mockCore = core as jest.Mocked<typeof core>;
-const mockHttpClientPost = jest.fn(); // Renamed for clarity
-const mockGithub = github as jest.Mocked<typeof github>;
+const mockHttpClientPost = jest.fn();
 
 interface MockSummary {
   addHeading: jest.Mock;
@@ -39,53 +25,24 @@ interface MockSummary {
 
 let mockSummary: MockSummary;
 
-// Helper function to create mock GitHub API responses
-const createMockOctokit = (workflowRun: unknown, jobs: unknown) => ({
-  rest: {
-    actions: {
-      getWorkflowRun: jest.fn().mockResolvedValue({ data: workflowRun }),
-      listJobsForWorkflowRun: jest.fn().mockResolvedValue({ data: jobs }),
+// Standard ci/end response with artifacts
+const END_CI_RESPONSE_WITH_ARTIFACTS = JSON.stringify({
+  artifacts: [
+    {
+      name: "my-lib",
+      type: "npm",
+      repo_key: "npm-local",
+      path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
     },
-  },
+    { name: "my-app", type: "docker", repo_key: "docker-local" },
+  ],
 });
 
-// Helper function to create mock workflow run
-const createMockWorkflowRun = (status = "in_progress", conclusion = null) => ({
-  status,
-  conclusion,
-});
-
-// Helper function to create mock job with steps
-const createMockJob = (
-  name: string,
-  status = "in_progress",
-  conclusion: string | null = null,
-  steps: Array<{ name: string; conclusion: string | null }> = [],
-) => ({
-  name,
-  status,
-  conclusion,
-  steps,
-});
-
-// Helper function to create mock step
-const createMockStep = (name: string, conclusion: string | null = null) => ({
-  name,
-  conclusion,
-});
+const END_CI_RESPONSE_EMPTY = JSON.stringify({ artifacts: [] });
 
 describe("runPost", () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env = {
-      ...originalEnv,
-      GITHUB_RUN_ID: "123456789",
-      GITHUB_REPOSITORY: "owner/repo",
-      GITHUB_TOKEN: "fake-token",
-      GITHUB_JOB: "test-job",
-    };
 
     // Mock the summary object with chainable methods
     mockSummary = {
@@ -102,8 +59,8 @@ describe("runPost", () => {
 
     (HttpClient as jest.Mock).mockImplementation(() => {
       return {
-        post: mockHttpClientPost, // Use renamed mock
-        dispose: jest.fn(), // Add dispose method to mock
+        post: mockHttpClientPost,
+        dispose: jest.fn(),
       };
     });
 
@@ -111,38 +68,18 @@ describe("runPost", () => {
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLY_PACKAGE_MANAGERS)
-        return JSON.stringify(["npm", "maven"]);
       return "";
     });
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
-    process.env = originalEnv;
   });
 
-  it("should call notifyCiEnd with status 'success' when all steps succeeded", async () => {
-    // Mock successful workflow with successful steps
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "success"),
-          createMockStep("Test", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
+  it("should send CI end notification with empty payload", async () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_WITH_ARTIFACTS,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
@@ -150,7 +87,7 @@ describe("runPost", () => {
 
     expect(mockHttpClientPost).toHaveBeenCalledWith(
       "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
+      "{}",
       expect.objectContaining({
         Authorization: "Bearer test-access-token",
         "content-type": "application/json",
@@ -159,48 +96,39 @@ describe("runPost", () => {
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
     );
-    expect(mockCore.info).toHaveBeenCalledWith("Job status: success");
-    expect(mockCore.info).toHaveBeenCalledWith("✅ All main steps succeeded");
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "Collected 2 artifact(s) from CI workflow",
+    );
   });
 
-  it("should call notifyCiEnd with status 'failure' when a step failed", async () => {
-    // Mock workflow with one failed step
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "failure"),
-          createMockStep("Test", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
+  it("should parse artifacts from ci/end response and pass to job summary", async () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_WITH_ARTIFACTS,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
     await runPost();
 
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-    expect(mockCore.info).toHaveBeenCalledWith("Job status: failure");
     expect(mockCore.info).toHaveBeenCalledWith(
-      "❌ At least one main step failed",
+      "Collected 2 artifact(s) from CI workflow",
     );
+    expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
+  });
+
+  it("should gracefully handle non-JSON ci/end response", async () => {
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "EndCi flow completed successfully",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    await runPost();
+
+    expect(mockCore.info).toHaveBeenCalledWith(
+      expect.stringContaining("No artifacts in ci/end response"),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
   });
 
   it("should skip notification if URL is not available", async () => {
@@ -234,62 +162,18 @@ describe("runPost", () => {
   });
 
   it("should re-throw errors after all retry attempts fail", async () => {
-    // Mock successful workflow for status checking
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    // Standard mock for getState, ensuring URL and token are present
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      return "";
-    });
-    // Mock all retries failing
     mockHttpClientPost.mockRejectedValue(new Error("Network error"));
 
     await expect(runPost()).rejects.toThrow("Network error");
     // Should have tried 3 times (MAX_RETRIES)
     expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
-  }, 15000); // Increase timeout for retry delays
+  }, 15000);
 
   it("should succeed on retry after initial failure", async () => {
-    // Mock successful workflow for status checking
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLY_PACKAGE_MANAGERS) return JSON.stringify(["npm"]);
-      return "";
-    });
-
     // First call fails, second succeeds
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost
       .mockRejectedValueOnce(new Error("Timeout"))
@@ -307,26 +191,6 @@ describe("runPost", () => {
   }, 15000);
 
   it("should retry on 5xx server errors and re-throw after all attempts fail", async () => {
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      return "";
-    });
-
     const fakeErrorResponse: HttpClientResponse = {
       message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
       readBody: async () => "Server error",
@@ -346,34 +210,13 @@ describe("runPost", () => {
   }, 15000);
 
   it("should succeed on retry after 5xx followed by 200", async () => {
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLY_PACKAGE_MANAGERS) return JSON.stringify(["npm"]);
-      return "";
-    });
-
     const fake502Response: HttpClientResponse = {
       message: { statusCode: 502, headers: {} as IncomingHttpHeaders },
       readBody: async () => "Bad Gateway",
     } as unknown as HttpClientResponse;
     const fakeOkResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "OK",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost
       .mockResolvedValueOnce(fake502Response)
@@ -391,26 +234,6 @@ describe("runPost", () => {
   }, 15000);
 
   it("should not retry on 4xx client errors", async () => {
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      return "";
-    });
-
     const fake400Response: HttpClientResponse = {
       message: { statusCode: 400, headers: {} as IncomingHttpHeaders },
       readBody: async () => "Bad Request",
@@ -423,582 +246,28 @@ describe("runPost", () => {
     expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
   });
 
-  it("should warn if package managers string is invalid JSON and send request without them", async () => {
-    // Mock successful workflow for status checking
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    mockCore.getState.mockImplementation((name: string) => {
-      if (name === STATE_FLY_URL) return "https://fly.example.com";
-      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLY_PACKAGE_MANAGERS) return "invalid-json";
-      return "";
-    });
-
+  it("should create job summary even with empty artifacts", async () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
 
     await runPost();
 
-    expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining(
-        "Failed to parse package managers from state: invalid-json. Error: Unexpected token",
-      ),
-    );
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      expect.any(String),
-      JSON.stringify({ status: "success" }), // Should send with status: "success" only
-      expect.any(Object),
-    );
-  });
-
-  it("should fallback to success when GitHub environment variables are missing", async () => {
-    // Remove GitHub environment variables
-    process.env.GITHUB_RUN_ID = "";
-    process.env.GITHUB_REPOSITORY = "";
-    process.env.GITHUB_TOKEN = "";
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      expect.any(String),
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.any(Object),
-    );
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      "Missing GitHub environment variables, assuming job succeeded since post action is running",
-    );
-  });
-
-  it("should handle GitHub API errors gracefully", async () => {
-    // Mock GitHub API error
-    const mockOctokit = {
-      rest: {
-        actions: {
-          listJobsForWorkflowRun: jest
-            .fn()
-            .mockRejectedValue(new Error("API Error")),
-        },
-      },
-    };
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      "Failed to check job status via GitHub API: Error: API Error",
-    );
-    expect(mockHttpClientPost).toHaveBeenCalled();
-  });
-
-  it("should handle GitHub API permission error gracefully without warning", async () => {
-    // Mock GitHub API permission error (expected when actions:read is not granted)
-    const mockOctokit = {
-      rest: {
-        actions: {
-          listJobsForWorkflowRun: jest
-            .fn()
-            .mockRejectedValue(
-              new Error(
-                "Resource not accessible by integration - https://docs.github.com/rest/actions/workflow-jobs",
-              ),
-            ),
-        },
-      },
-    };
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    // Should use info instead of warning for permission errors
-    expect(mockCore.info).toHaveBeenCalledWith(
-      expect.stringContaining("Cannot access workflow job status"),
-    );
-    // Should NOT emit warning for permission errors
-    expect(mockCore.warning).not.toHaveBeenCalledWith(
-      expect.stringContaining("Failed to check job status via GitHub API"),
-    );
-    expect(mockHttpClientPost).toHaveBeenCalled();
-  });
-
-  it("should exclude post action steps from failure detection", async () => {
-    // Mock workflow with post action steps that should be ignored
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "success"),
-          createMockStep("Post Setup Fly Registry", "failure"), // This should be ignored
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    // Should be success because we ignore post action failures
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-  });
-
-  it("should handle cancelled steps as failures", async () => {
-    // Mock workflow with cancelled step
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "cancelled"),
-          createMockStep("Test", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      "❌ At least one main step failed",
-    );
-  });
-
-  it("should handle job with no steps array", async () => {
-    // Mock workflow with job that has no steps
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, []), // Empty steps array
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-  });
-
-  it("should handle job with undefined steps property", async () => {
-    // Mock workflow where currentJob.steps is undefined
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        {
-          name: "test-job",
-          status: "in_progress",
-          conclusion: null,
-          steps: undefined, // Explicitly undefined
-        },
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-  });
-
-  it("should find job by in_progress status when display name differs from GITHUB_JOB", async () => {
-    // Core bug fix test: GITHUB_JOB="scan-with-xray" but the API returns
-    // name="Scan Image with Xray" (custom display name). Name match fails,
-    // so we fall back to finding the single in_progress job.
-    process.env.GITHUB_JOB = "scan-with-xray";
-
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("Build Image", "completed", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-        createMockJob("Scan Image with Xray", "in_progress", null, [
-          createMockStep("Setup Fly Registry", "success"),
-          createMockStep("Pull Fly image", "success"),
-          createMockStep("Scan Image with Xray", "failure"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    // Should detect failure because in_progress fallback found the correct job
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-    expect(mockCore.info).toHaveBeenCalledWith(
-      expect.stringContaining("Found current job by in_progress status"),
-    );
-  });
-
-  it("should analyze all jobs when multiple are in_progress and name match fails", async () => {
-    // When multiple jobs are in_progress, check all of them for failures
-    process.env.GITHUB_JOB = "scan-with-xray";
-
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("Scan Image with Xray", "in_progress", null, [
-          createMockStep("Setup Fly Registry", "success"),
-          createMockStep("Scan", "failure"),
-        ]),
-        createMockJob("Deploy to Staging", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    // Should detect failure because one of the in_progress jobs has a failed step
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "failure", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-  });
-
-  it("should handle job not found — no name match and no in_progress jobs", async () => {
-    // All jobs are completed and none match by name
-    process.env.GITHUB_JOB = "unknown-job";
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("different-job", "completed", "success", [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
-    } as unknown as HttpClientResponse;
-    mockHttpClientPost.mockResolvedValue(fakeResponse);
-
-    await runPost();
-
-    expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining("Could not find current job with name"),
-    );
-    expect(mockHttpClientPost).toHaveBeenCalledWith(
-      "https://fly.example.com/fly/api/v1/ci/end",
-      JSON.stringify({ status: "success", package_managers: ["npm", "maven"] }),
-      expect.objectContaining({
-        Authorization: "Bearer test-access-token",
-        "content-type": "application/json",
-      }),
-    );
-  });
-});
-
-// Unit tests for helper functions
-describe("filterMainSteps", () => {
-  it("should return empty array for empty input", () => {
-    const result = filterMainSteps([]);
-    expect(result).toEqual([]);
-  });
-
-  it("should filter out post steps", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "success" },
-      { name: "Post Setup", conclusion: "success" },
-      { name: "POST Another Action", conclusion: "failure" },
-    ];
-    const result = filterMainSteps(steps);
-    expect(result).toEqual([
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "success" },
-    ]);
-  });
-
-  it("should handle steps with undefined names", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: undefined, conclusion: "success" },
-      { name: undefined, conclusion: "success" },
-    ];
-    const result = filterMainSteps(steps);
-    expect(result).toEqual([
-      { name: "Checkout", conclusion: "success" },
-      { name: undefined, conclusion: "success" },
-      { name: undefined, conclusion: "success" },
-    ]);
-  });
-
-  it("should be case insensitive for post step detection", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "post setup", conclusion: "success" },
-      { name: "POST teardown", conclusion: "success" },
-      { name: "Post Cleanup", conclusion: "success" },
-    ];
-    const result = filterMainSteps(steps);
-    expect(result).toEqual([{ name: "Checkout", conclusion: "success" }]);
-  });
-
-  it("should return all steps when no post steps exist", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "failure" },
-      { name: "Test", conclusion: "success" },
-    ];
-    const result = filterMainSteps(steps);
-    expect(result).toEqual(steps);
-  });
-
-  it("should return empty array when all steps are post steps", () => {
-    const steps = [
-      { name: "Post Setup", conclusion: "success" },
-      { name: "Post Cleanup", conclusion: "failure" },
-    ];
-    const result = filterMainSteps(steps);
-    expect(result).toEqual([]);
-  });
-});
-
-describe("analyzeJobSteps", () => {
-  const mockCoreInfo = jest.spyOn(core, "info");
-
-  beforeEach(() => {
-    mockCoreInfo.mockClear();
-  });
-
-  it("should return success for empty steps array", () => {
-    const result = analyzeJobSteps([]);
-    expect(result).toBe("success");
-    expect(mockCoreInfo).toHaveBeenCalledWith("✅ All main steps succeeded");
-  });
-
-  it("should return success when all main steps succeeded", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "success" },
-      { name: "Post Cleanup", conclusion: "failure" }, // Should be ignored
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("success");
-    expect(mockCoreInfo).toHaveBeenCalledWith("✅ All main steps succeeded");
-  });
-
-  it("should return failure when any main step failed", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "failure" },
-      { name: "Test", conclusion: "success" },
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("failure");
-    expect(mockCoreInfo).toHaveBeenCalledWith(
-      "❌ At least one main step failed",
-    );
-  });
-
-  it("should return failure when any main step was cancelled", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "cancelled" },
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("failure");
-    expect(mockCoreInfo).toHaveBeenCalledWith(
-      "❌ At least one main step failed",
-    );
-  });
-
-  it("should return success when only post steps failed", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "success" },
-      { name: "Post Setup", conclusion: "failure" },
-      { name: "Post Cleanup", conclusion: "cancelled" },
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("success");
-    expect(mockCoreInfo).toHaveBeenCalledWith("✅ All main steps succeeded");
-  });
-
-  it("should handle steps with null conclusions as non-failures", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: null },
-      { name: "Test", conclusion: "in_progress" },
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("success");
-    expect(mockCoreInfo).toHaveBeenCalledWith("✅ All main steps succeeded");
-  });
-
-  it("should handle mixed success and skipped steps", () => {
-    const steps = [
-      { name: "Checkout", conclusion: "success" },
-      { name: "Build", conclusion: "success" },
-      { name: "Test", conclusion: "skipped" }, // Not failure/cancelled
-      { name: "Deploy", conclusion: "neutral" }, // Not failure/cancelled
-    ];
-    const result = analyzeJobSteps(steps);
-    expect(result).toBe("success");
-    expect(mockCoreInfo).toHaveBeenCalledWith("✅ All main steps succeeded");
+    expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
   });
 });
 
 // Test suite for the mainRunner (now runPostScriptLogic)
 describe("runPostScriptLogic", () => {
-  const originalEnv = process.env;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env = {
-      ...originalEnv,
-      GITHUB_RUN_ID: "123456789",
-      GITHUB_REPOSITORY: "owner/repo",
-      GITHUB_TOKEN: "fake-token",
-      GITHUB_JOB: "test-job",
-    };
 
-    // Mock core.getState for mainRunner tests as well, if runPost is called internally
+    // Mock core.getState for mainRunner tests
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
-      if (name === STATE_FLY_PACKAGE_MANAGERS) return JSON.stringify(["npm"]);
       return "";
     });
     // Mock HttpClient for mainRunner tests
@@ -1010,33 +279,23 @@ describe("runPostScriptLogic", () => {
     });
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
   it("should call runPost and not setFailed on success", async () => {
-    // Mock successful workflow
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-          createMockStep("Build", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
-    // Mock successful HTTP response
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "Notification sent",
+      readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeResponse);
+
+    // Mock summary for job summary creation
+    mockCore.summary = {
+      addHeading: jest.fn().mockReturnThis(),
+      addRaw: jest.fn().mockReturnThis(),
+      addBreak: jest.fn().mockReturnThis(),
+      addQuote: jest.fn().mockReturnThis(),
+      addTable: jest.fn().mockReturnThis(),
+      addLink: jest.fn().mockReturnThis(),
+      write: jest.fn().mockResolvedValue(undefined),
+    } as unknown as typeof mockCore.summary;
 
     await runPostScriptLogic();
     expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
@@ -1044,21 +303,6 @@ describe("runPostScriptLogic", () => {
   });
 
   it("should call runPost and setFailed on error after all retries", async () => {
-    // Mock successful workflow setup but HTTP error
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
     const errorMessage = "Test error from runPost";
     // Reject all retry attempts
     mockHttpClientPost.mockRejectedValue(new Error(errorMessage));
@@ -1071,21 +315,6 @@ describe("runPostScriptLogic", () => {
   }, 15000);
 
   it("should handle non-Error objects thrown by runPost after all retries", async () => {
-    // Mock successful workflow setup but string error
-    const workflowRun = createMockWorkflowRun("in_progress", null);
-    const jobs = {
-      jobs: [
-        createMockJob("test-job", "in_progress", null, [
-          createMockStep("Checkout", "success"),
-        ]),
-      ],
-    };
-
-    const mockOctokit = createMockOctokit(workflowRun, jobs);
-    mockGithub.getOctokit.mockReturnValue(
-      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
-    );
-
     const errorString = "Just a string error";
     // Reject all retry attempts
     mockHttpClientPost.mockRejectedValue(errorString);
