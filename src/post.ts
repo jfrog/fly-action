@@ -38,7 +38,7 @@ async function postWithRetry(
   body: string,
   headers: Record<string, string>,
 ): Promise<HttpClientResponse> {
-  let lastError: Error | undefined;
+  let lastError: Error = new Error("Request failed after retries");
   let lastResponse: HttpClientResponse | undefined;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -55,8 +55,7 @@ async function postWithRetry(
       }
 
       lastResponse = response;
-      const responseBody = await response.readBody();
-      lastError = new Error(`Server error ${statusCode}: ${responseBody}`);
+      lastError = new Error(`Server error ${statusCode}`);
     } catch (error: unknown) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
@@ -64,12 +63,12 @@ async function postWithRetry(
     if (attempt < MAX_RETRIES) {
       const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
       core.warning(
-        `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError!.message}. Retrying in ${delayMs}ms...`,
+        `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError.message}. Retrying in ${delayMs}ms...`,
       );
       await sleep(delayMs);
     } else {
       core.error(
-        `Request failed after ${MAX_RETRIES} attempts: ${lastError!.message}`,
+        `Request failed after ${MAX_RETRIES} attempts: ${lastError.message}`,
       );
     }
   }
@@ -77,7 +76,7 @@ async function postWithRetry(
   if (lastResponse) {
     return lastResponse;
   }
-  throw lastError || new Error("Request failed after retries");
+  throw lastError;
 }
 
 interface GitHubStep {

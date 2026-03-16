@@ -306,8 +306,7 @@ describe("runPost", () => {
     );
   }, 15000);
 
-  it("should re-throw error if HTTP response is not 200", async () => {
-    // Mock successful workflow for status checking
+  it("should retry on 5xx server errors and re-throw after all attempts fail", async () => {
     const workflowRun = createMockWorkflowRun("in_progress", null);
     const jobs = {
       jobs: [
@@ -337,6 +336,91 @@ describe("runPost", () => {
     await expect(runPost()).rejects.toThrow(
       "Failed to send CI end notification. Status: 500. Body: Server error",
     );
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Request failed (attempt 1/3)"),
+    );
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Request failed (attempt 2/3)"),
+    );
+  }, 15000);
+
+  it("should succeed on retry after 5xx followed by 200", async () => {
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("test-job", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PACKAGE_MANAGERS) return JSON.stringify(["npm"]);
+      return "";
+    });
+
+    const fake502Response: HttpClientResponse = {
+      message: { statusCode: 502, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Bad Gateway",
+    } as unknown as HttpClientResponse;
+    const fakeOkResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "OK",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost
+      .mockResolvedValueOnce(fake502Response)
+      .mockResolvedValueOnce(fakeOkResponse);
+
+    await runPost();
+
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(2);
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Request failed (attempt 1/3)"),
+    );
+    expect(mockCore.info).toHaveBeenCalledWith(
+      "✅ CI end notification completed successfully",
+    );
+  }, 15000);
+
+  it("should not retry on 4xx client errors", async () => {
+    const workflowRun = createMockWorkflowRun("in_progress", null);
+    const jobs = {
+      jobs: [
+        createMockJob("test-job", "in_progress", null, [
+          createMockStep("Checkout", "success"),
+        ]),
+      ],
+    };
+
+    const mockOctokit = createMockOctokit(workflowRun, jobs);
+    mockGithub.getOctokit.mockReturnValue(
+      mockOctokit as unknown as ReturnType<typeof mockGithub.getOctokit>,
+    );
+
+    mockCore.getState.mockImplementation((name: string) => {
+      if (name === STATE_FLY_URL) return "https://fly.example.com";
+      if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      return "";
+    });
+
+    const fake400Response: HttpClientResponse = {
+      message: { statusCode: 400, headers: {} as IncomingHttpHeaders },
+      readBody: async () => "Bad Request",
+    } as unknown as HttpClientResponse;
+    mockHttpClientPost.mockResolvedValue(fake400Response);
+
+    await expect(runPost()).rejects.toThrow(
+      "Failed to send CI end notification. Status: 400. Body: Bad Request",
+    );
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
   });
 
   it("should warn if package managers string is invalid JSON and send request without them", async () => {
