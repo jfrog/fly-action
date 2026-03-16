@@ -39,6 +39,7 @@ async function postWithRetry(
   headers: Record<string, string>,
 ): Promise<HttpClientResponse> {
   let lastError: Error | undefined;
+  let lastResponse: HttpClientResponse | undefined;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -47,27 +48,37 @@ async function postWithRetry(
       );
 
       const response = await httpClient.post(url, body, headers);
+      const statusCode = response.message.statusCode ?? 0;
 
-      // If we get a response (even an error response), return it
-      // The caller will handle non-200 status codes
-      return response;
+      if (statusCode < 500) {
+        return response;
+      }
+
+      lastResponse = response;
+      const responseBody = await response.readBody();
+      lastError = new Error(
+        `Server error ${statusCode}: ${responseBody}`,
+      );
     } catch (error: unknown) {
       lastError = error instanceof Error ? error : new Error(String(error));
+    }
 
-      if (attempt < MAX_RETRIES) {
-        const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-        core.warning(
-          `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError.message}. Retrying in ${delayMs}ms...`,
-        );
-        await sleep(delayMs);
-      } else {
-        core.error(
-          `Request failed after ${MAX_RETRIES} attempts: ${lastError.message}`,
-        );
-      }
+    if (attempt < MAX_RETRIES) {
+      const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+      core.warning(
+        `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError!.message}. Retrying in ${delayMs}ms...`,
+      );
+      await sleep(delayMs);
+    } else {
+      core.error(
+        `Request failed after ${MAX_RETRIES} attempts: ${lastError!.message}`,
+      );
     }
   }
 
+  if (lastResponse) {
+    return lastResponse;
+  }
   throw lastError || new Error("Request failed after retries");
 }
 
