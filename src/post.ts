@@ -56,9 +56,7 @@ async function postWithRetry(
 
       lastResponse = response;
       const responseBody = await response.readBody();
-      lastError = new Error(
-        `Server error ${statusCode}: ${responseBody}`,
-      );
+      lastError = new Error(`Server error ${statusCode}: ${responseBody}`);
     } catch (error: unknown) {
       lastError = error instanceof Error ? error : new Error(String(error));
     }
