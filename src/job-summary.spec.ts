@@ -81,6 +81,19 @@ describe("createJobSummary", () => {
     expect(markdownContent).toContain("| orphan-artifact | generic | — |");
   });
 
+  it("should escape pipe characters in artifact data", async () => {
+    const artifacts: CollectedArtifact[] = [
+      { name: "my|lib", type: "npm|pnpm", repo_key: "local|remote" },
+    ];
+
+    await createJobSummary(artifacts);
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain(
+      "| my\\|lib | npm\\|pnpm | local\\|remote |",
+    );
+  });
+
   it("should not render artifacts table for empty array", async () => {
     await createJobSummary([]);
 

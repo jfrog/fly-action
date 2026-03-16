@@ -22,3 +22,19 @@ export const ENV_FLY_ACTION_CONFIGURED = "FLY_ACTION_CONFIGURED";
 
 // Exported to GITHUB_ENV so subsequent steps can use ${{ env.FLY_REGISTRY_SUBDOMAIN }}
 export const ENV_FLY_REGISTRY_SUBDOMAIN = "FLY_REGISTRY_SUBDOMAIN";
+
+/**
+ * Supported standard package managers - always configured by fly-client.
+ */
+export const SUPPORTED_PACKAGE_MANAGERS = [
+  "npm",
+  "pnpm",
+  "pip",
+  "pipenv",
+  "twine",
+  "maven",
+  "gradle",
+  "dotnet",
+  "nuget",
+  "go",
+] as const;

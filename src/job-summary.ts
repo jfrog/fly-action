@@ -10,9 +10,10 @@ function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
     return "";
   }
 
+  const esc = (s: string) => s.replace(/\|/g, "\\|");
   const header = "| Artifact | Type | Repository |\n| --- | --- | --- |";
   const rows = artifacts.map(
-    (a) => `| ${a.name} | ${a.type} | ${a.repo_key || "—"} |`,
+    (a) => `| ${esc(a.name)} | ${esc(a.type)} | ${esc(a.repo_key || "—")} |`,
   );
   return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
 }

@@ -1,6 +1,6 @@
 // Copyright (c) JFrog Ltd. (2025)
 
-import { SUPPORTED_PACKAGE_MANAGERS } from "./package-detection";
+import { SUPPORTED_PACKAGE_MANAGERS } from "./constants";
 
 describe("SUPPORTED_PACKAGE_MANAGERS", () => {
   it("should contain all expected standard package managers", () => {

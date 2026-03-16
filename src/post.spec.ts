@@ -126,7 +126,7 @@ describe("runPost", () => {
     await runPost();
 
     expect(mockCore.info).toHaveBeenCalledWith(
-      "No artifacts in ci/end response",
+      expect.stringContaining("No artifacts in ci/end response"),
     );
     expect(mockCore.info).toHaveBeenCalledWith("📋 Creating job summary...");
   });

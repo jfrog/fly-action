@@ -118,8 +118,10 @@ export async function runPost(): Promise<void> {
             `Collected ${artifacts.length} artifact(s) from CI workflow`,
           );
         }
-      } catch {
-        core.info("No artifacts in ci/end response");
+      } catch (e) {
+        core.info(
+          `No artifacts in ci/end response (${e instanceof Error ? e.message : String(e)})`,
+        );
       }
 
       core.info("📋 Creating job summary...");
