@@ -2,7 +2,6 @@
 
 export const INPUT_URL = "url";
 export const INPUT_IGNORE_PACKAGE_MANAGERS = "ignore";
-export const INPUT_GITHUB_TOKEN = "github_token";
 
 // Central Fly endpoint for github.com runners.
 // Tenant is resolved server-side from OIDC claims.
@@ -17,16 +16,9 @@ export const ENV_FLY_URL = "CUSTOM_FLY_URL";
 
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";
-export const STATE_FLY_PACKAGE_MANAGERS = "fly-package-managers";
 
 // Environment variable to track if action has already run in this job
 export const ENV_FLY_ACTION_CONFIGURED = "FLY_ACTION_CONFIGURED";
 
 // Exported to GITHUB_ENV so subsequent steps can use ${{ env.FLY_REGISTRY_SUBDOMAIN }}
 export const ENV_FLY_REGISTRY_SUBDOMAIN = "FLY_REGISTRY_SUBDOMAIN";
-
-// GitHub step/job conclusion statuses
-export const GITHUB_STATUS_SUCCESS = "success";
-export const GITHUB_STATUS_FAILURE = "failure";
-export const GITHUB_STATUS_CANCELLED = "cancelled";
-export const GITHUB_STATUS_TIMED_OUT = "timed_out";

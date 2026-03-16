@@ -57,10 +57,7 @@ This action requires OIDC authentication. The OIDC token is used to track upload
 permissions:
   contents: read
   id-token: write # Required for OIDC authentication
-  actions: read   # Optional: enables accurate job status detection
 ```
-
-> **Note**: The `actions: read` permission is optional but recommended. Without it, the action cannot accurately detect whether the job succeeded or failed, and will assume success. With this permission, the action can check the status of individual workflow steps to report accurate job status to the Fly server.
 
 #### Optional Inputs
 
