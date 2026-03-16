@@ -218,7 +218,7 @@ describe("run", () => {
 
     expect(exportVariableSpy).toHaveBeenCalledWith(
       ENV_FLY_REGISTRY_SUBDOMAIN,
-      "https://resolved-tenant.jfrog.io",
+      "resolved-tenant.jfrog.io",
     );
   });
 

@@ -20,7 +20,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
 - ✅ Retry mechanism with exponential backoff for CI notifications
-- ✅ Exports tenant registry URL as `FLY_REGISTRY_SUBDOMAIN` environment variable for subsequent steps
+- ✅ Exports tenant registry hostname as `FLY_REGISTRY_SUBDOMAIN` environment variable for subsequent steps
 
 ## Usage
 
@@ -74,7 +74,7 @@ permissions:
 
 ## Environment Variable
 
-After the action runs, the **`FLY_REGISTRY_SUBDOMAIN`** environment variable is automatically available in all subsequent steps. It contains the resolved tenant registry URL (e.g., `https://acmecorp.jfrog.io`):
+After the action runs, the **`FLY_REGISTRY_SUBDOMAIN`** environment variable is automatically available in all subsequent steps. It contains the resolved tenant registry hostname (e.g., `acmecorp.jfrog.io`):
 
 ```yaml
 - name: Push Docker image
