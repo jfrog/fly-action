@@ -25,8 +25,7 @@ import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
   ENV_FLY_ACTION_CONFIGURED,
-  ENV_FLY_TENANT_URL,
-  OUTPUT_FLY_URL,
+  ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL,
   DEFAULT_FLY_URL,
 } from "./constants";
@@ -204,8 +203,7 @@ describe("run", () => {
     expect(setFailedSpy).not.toHaveBeenCalled();
   });
 
-  it("exports fly_url output and FLY_URL env var on success", async () => {
-    const setOutputSpy = jest.spyOn(core, "setOutput");
+  it("exports FLY_REGISTRY_SUBDOMAIN env var on success", async () => {
     const exportVariableSpy = jest.spyOn(core, "exportVariable");
     getInputSpy.mockImplementation((name: string) =>
       name === "url" ? "https://url" : "",
@@ -218,12 +216,8 @@ describe("run", () => {
 
     await run();
 
-    expect(setOutputSpy).toHaveBeenCalledWith(
-      OUTPUT_FLY_URL,
-      "https://resolved-tenant.jfrog.io",
-    );
     expect(exportVariableSpy).toHaveBeenCalledWith(
-      ENV_FLY_TENANT_URL,
+      ENV_FLY_REGISTRY_SUBDOMAIN,
       "https://resolved-tenant.jfrog.io",
     );
   });

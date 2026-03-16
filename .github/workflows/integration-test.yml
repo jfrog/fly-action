@@ -25,9 +25,17 @@ jobs:
           node-version: '24'
 
       - name: Setup JFrog Fly
-        uses: jfrog/fly-action@v1
+        uses: ./
         with:
           url: https://flyjfrog.jfrog.io
+
+      - name: Verify FLY_REGISTRY_SUBDOMAIN is exported
+        run: |
+          echo "FLY_REGISTRY_SUBDOMAIN=${{ env.FLY_REGISTRY_SUBDOMAIN }}"
+          if [ -z "$FLY_REGISTRY_SUBDOMAIN" ]; then
+            echo "::error::FLY_REGISTRY_SUBDOMAIN is not set"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm i
