@@ -26,8 +26,6 @@ jobs:
 
       - name: Setup JFrog Fly
         uses: ./
-        with:
-          url: https://flyjfrog.jfrog.io
 
       - name: Verify FLY_REGISTRY_SUBDOMAIN is exported
         run: |
@@ -42,3 +40,36 @@ jobs:
 
       - name: Run fly-client integration tests
         run: npx jest src/integration-tests/
+
+  docker-integration:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup JFrog Fly
+        uses: ./
+
+      - name: Verify FLY_REGISTRY_SUBDOMAIN is exported
+        run: |
+          if [ -z "$FLY_REGISTRY_SUBDOMAIN" ]; then
+            echo "::error::FLY_REGISTRY_SUBDOMAIN is not set"
+            exit 1
+          fi
+
+      - name: Build test image
+        run: |
+          echo "fly-action integration test" > /tmp/testfile
+          echo -e "FROM scratch\nCOPY testfile /" > /tmp/Dockerfile
+          docker build -t ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/fly-action-ci-test:${{ github.run_id }} -f /tmp/Dockerfile /tmp
+
+      - name: Push test image
+        run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/fly-action-ci-test:${{ github.run_id }}
+
+      - name: Remove local image
+        run: docker rmi ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/fly-action-ci-test:${{ github.run_id }}
+
+      - name: Pull test image
+        run: docker pull ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/fly-action-ci-test:${{ github.run_id }}
+
+      - name: Verify pulled image exists
+        run: docker image inspect ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/fly-action-ci-test:${{ github.run_id }}
