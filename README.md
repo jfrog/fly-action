@@ -20,6 +20,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
 - ✅ Retry mechanism with exponential backoff for CI notifications
+- ✅ Exports tenant registry hostname as `FLY_REGISTRY_SUBDOMAIN` environment variable for subsequent steps
 
 ## Usage
 
@@ -40,6 +41,12 @@ jobs:
       # Setup Fly registry — tenant is resolved automatically from OIDC
       - name: Setup Fly Registry
         uses: jfrog/fly-action@v1
+
+      # FLY_REGISTRY_SUBDOMAIN is now available for Docker, Helm, or any registry operation
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }} .
+          docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }}
 ```
 
 ### OIDC Authentication (Required)
@@ -64,6 +71,18 @@ permissions:
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `ignore` | Comma-separated list of package managers to ignore | No | None |
+
+## Environment Variable
+
+After the action runs, the **`FLY_REGISTRY_SUBDOMAIN`** environment variable is automatically available in all subsequent steps. It contains the resolved tenant registry hostname (e.g., `acmecorp.jfrog.io`):
+
+```yaml
+- name: Push Docker image
+  run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:latest
+
+- name: Push Helm chart
+  run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
+```
 
 ## OIDC Authentication
 

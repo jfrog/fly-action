@@ -13,6 +13,7 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PACKAGE_MANAGERS,
   ENV_FLY_ACTION_CONFIGURED,
+  ENV_FLY_REGISTRY_SUBDOMAIN,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
 } from "./constants";
@@ -95,6 +96,13 @@ export async function run(): Promise<void> {
     core.setSecret(accessToken);
 
     core.info(`Fly tenant URL: ${flyTenantUrl}`);
+
+    // Export the hostname without protocol so it's directly usable in Docker
+    // image names, Helm OCI refs, etc. Users add their own prefix as needed:
+    //   Docker: $FLY_REGISTRY_SUBDOMAIN/docker/my-app:tag
+    //   Helm:   oci://$FLY_REGISTRY_SUBDOMAIN/helmoci
+    const registryHost = flyTenantUrl.replace(/^https?:\/\//, "");
+    core.exportVariable(ENV_FLY_REGISTRY_SUBDOMAIN, registryHost);
 
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
