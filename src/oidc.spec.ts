@@ -1,32 +1,33 @@
 // Copyright (c) JFrog Ltd. (2025)
 
+import { vi, type Mock } from "vitest";
 import { authenticateOidc } from "./oidc";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
 
-jest.mock("@actions/core", () => ({
-  debug: jest.fn(),
-  warning: jest.fn(),
-  getIDToken: jest.fn(),
-  setSecret: jest.fn(),
-  info: jest.fn(),
-  notice: jest.fn(),
-  error: jest.fn(),
+vi.mock("@actions/core", () => ({
+  debug: vi.fn(),
+  warning: vi.fn(),
+  getIDToken: vi.fn(),
+  setSecret: vi.fn(),
+  info: vi.fn(),
+  notice: vi.fn(),
+  error: vi.fn(),
 }));
 
 describe("authenticateOidc", () => {
-  let mockPost: jest.Mock;
+  let mockPost: Mock;
   beforeEach(() => {
-    mockPost = jest.fn();
-    jest.spyOn(HttpClient.prototype, "post").mockImplementation(mockPost);
+    mockPost = vi.fn();
+    vi.spyOn(HttpClient.prototype, "post").mockImplementation(mockPost);
   });
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
   it("should authenticate and return accessToken", async () => {
     // Mock getIDToken
-    (core.getIDToken as jest.Mock).mockResolvedValue(
+    (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
@@ -50,7 +51,7 @@ describe("authenticateOidc", () => {
   });
 
   it("should succeed with 201 Created status and return accessToken", async () => {
-    (core.getIDToken as jest.Mock).mockResolvedValue(
+    (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
@@ -71,14 +72,14 @@ describe("authenticateOidc", () => {
   });
 
   it("should throw if getIDToken fails", async () => {
-    (core.getIDToken as jest.Mock).mockResolvedValue(undefined);
+    (core.getIDToken as Mock).mockResolvedValue(undefined);
     await expect(authenticateOidc("url")).rejects.toThrow(
       "Failed to obtain OIDC token",
     );
   });
 
   it("should throw if Fly OIDC returns non-200 status", async () => {
-    (core.getIDToken as jest.Mock).mockResolvedValue(
+    (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig", // Still need a valid-looking token for mocks even if not parsing user
@@ -95,7 +96,7 @@ describe("authenticateOidc", () => {
   });
 
   it("should throw if OIDC response does not contain fly_tenant_url", async () => {
-    (core.getIDToken as jest.Mock).mockResolvedValue(
+    (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig",
@@ -112,7 +113,7 @@ describe("authenticateOidc", () => {
   });
 
   it("should throw if OIDC response does not contain an access token", async () => {
-    (core.getIDToken as jest.Mock).mockResolvedValue(
+    (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
         ".sig", // Still need a valid-looking token for mocks

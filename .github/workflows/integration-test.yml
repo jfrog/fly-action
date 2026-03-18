@@ -39,7 +39,7 @@ jobs:
         run: npm i
 
       - name: Run fly-client integration tests
-        run: npx jest src/integration-tests/
+        run: npx vitest run src/integration-tests/
 
   docker-integration:
     runs-on: ubuntu-24.04-arm
