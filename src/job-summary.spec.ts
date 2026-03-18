@@ -1,29 +1,31 @@
 // Copyright (c) JFrog Ltd. (2025)
 
-import { jest } from "@jest/globals";
+import { vi } from "vitest";
 
-// Mock @actions/core
-const mockSummary = {
-  addRaw: jest.fn().mockReturnThis(),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  write: jest.fn() as any,
-};
+// vi.hoisted runs before vi.mock hoisting — safe to reference in factory
+const { mockSummary, mockCore } = vi.hoisted(() => {
+  const mockSummary = {
+    addRaw: vi.fn().mockReturnThis(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    write: vi.fn() as any,
+  };
+  const mockCore = {
+    summary: mockSummary,
+    warning: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  };
+  return { mockSummary, mockCore };
+});
 
-const mockCore = {
-  summary: mockSummary,
-  warning: jest.fn(),
-  error: jest.fn(),
-  info: jest.fn(),
-};
-
-jest.mock("@actions/core", () => mockCore);
+vi.mock("@actions/core", () => mockCore);
 
 import { createJobSummary } from "./job-summary";
 import { CollectedArtifact } from "./types";
 
 describe("createJobSummary", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockSummary.write.mockResolvedValue(undefined);
 
     process.env.GITHUB_REPOSITORY = "owner/test-repo";

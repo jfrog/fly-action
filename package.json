@@ -5,39 +5,32 @@
   "main": "lib/index.js",
   "post": "lib/post.js",
   "scripts": {
-    "build": "npm run format && tsc && ncc build dist/index.js -o lib && mkdir -p lib/post_temp && ncc build dist/post.js -o lib/post_temp && mv lib/post_temp/index.js lib/post.js && rm -rf lib/post_temp",
-    "test": "jest",
+    "build": "npm run format && tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node24 --format=cjs --outfile=lib/index.js && esbuild src/post.ts --bundle --platform=node --target=node24 --format=cjs --outfile=lib/post.js",
+    "test": "vitest run --exclude 'src/integration-tests/**'",
     "lint": "eslint src/**/*.ts",
     "prepare": "npm run build",
     "format": "prettier --write \"src/**/*.ts\"",
     "postinstall": "npm run format"
   },
   "dependencies": {
-    "@actions/core": "^1.10.0",
-    "@actions/exec": "^1.1.1",
-    "@actions/http-client": "^2.1.0"
+    "@actions/core": "^3.0.0",
+    "@actions/exec": "^3.0.0",
+    "@actions/http-client": "^4.0.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.35.0",
-    "@types/jest": "^29.5.5",
-    "@types/node": "^20.8.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
     "@typescript-eslint/eslint-plugin": "^8.57.1",
     "@typescript-eslint/parser": "^8.57.1",
-    "@vercel/ncc": "^0.38.4",
-    "eslint": "^9.35.0",
-    "husky": "^8.0.0",
-    "jest": "^30.3.0",
+    "esbuild": "^0.27.4",
+    "eslint": "^10.0.3",
+    "husky": "^9.1.7",
     "prettier": "^3.8.1",
-    "test-exclude": "^7.0.1",
-    "ts-jest": "^29.4.6",
-    "typescript": "^5.9.3"
-  },
-  "overrides": {
-    "test-exclude": "^7.0.1",
-    "glob": "^10.0.0"
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.1"
   },
   "engines": {
-    "node": ">=16.x"
+    "node": ">=24.x"
   },
   "repository": {
     "type": "git",

@@ -1,5 +1,6 @@
 // Copyright (c) JFrog Ltd. (2025)
 
+import { vi, type Mock, type Mocked } from "vitest";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
@@ -7,20 +8,20 @@ import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
 import { runPost, runPostScriptLogic } from "./post";
 
 // Mock @actions/core
-jest.mock("@actions/core");
-jest.mock("@actions/http-client");
+vi.mock("@actions/core");
+vi.mock("@actions/http-client");
 
-const mockCore = core as jest.Mocked<typeof core>;
-const mockHttpClientPost = jest.fn();
+const mockCore = core as Mocked<typeof core>;
+const mockHttpClientPost = vi.fn();
 
 interface MockSummary {
-  addHeading: jest.Mock;
-  addRaw: jest.Mock;
-  addBreak: jest.Mock;
-  addQuote: jest.Mock;
-  addTable: jest.Mock;
-  addLink: jest.Mock;
-  write: jest.Mock;
+  addHeading: Mock;
+  addRaw: Mock;
+  addBreak: Mock;
+  addQuote: Mock;
+  addTable: Mock;
+  addLink: Mock;
+  write: Mock;
 }
 
 let mockSummary: MockSummary;
@@ -42,25 +43,25 @@ const END_CI_RESPONSE_EMPTY = JSON.stringify({ artifacts: [] });
 
 describe("runPost", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Mock the summary object with chainable methods
     mockSummary = {
-      addHeading: jest.fn().mockReturnThis(),
-      addRaw: jest.fn().mockReturnThis(),
-      addBreak: jest.fn().mockReturnThis(),
-      addQuote: jest.fn().mockReturnThis(),
-      addTable: jest.fn().mockReturnThis(),
-      addLink: jest.fn().mockReturnThis(),
-      write: jest.fn().mockResolvedValue(undefined),
+      addHeading: vi.fn().mockReturnThis(),
+      addRaw: vi.fn().mockReturnThis(),
+      addBreak: vi.fn().mockReturnThis(),
+      addQuote: vi.fn().mockReturnThis(),
+      addTable: vi.fn().mockReturnThis(),
+      addLink: vi.fn().mockReturnThis(),
+      write: vi.fn().mockResolvedValue(undefined),
     };
 
     mockCore.summary = mockSummary as unknown as typeof mockCore.summary;
 
-    (HttpClient as jest.Mock).mockImplementation(() => {
+    (HttpClient as unknown as Mock).mockImplementation(() => {
       return {
         post: mockHttpClientPost,
-        dispose: jest.fn(),
+        dispose: vi.fn(),
       };
     });
 
@@ -73,7 +74,7 @@ describe("runPost", () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("should send CI end notification with empty payload", async () => {
@@ -262,7 +263,7 @@ describe("runPost", () => {
 // Test suite for the mainRunner (now runPostScriptLogic)
 describe("runPostScriptLogic", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Mock core.getState for mainRunner tests
     mockCore.getState.mockImplementation((name: string) => {
@@ -271,10 +272,10 @@ describe("runPostScriptLogic", () => {
       return "";
     });
     // Mock HttpClient for mainRunner tests
-    (HttpClient as jest.Mock).mockImplementation(() => {
+    (HttpClient as unknown as Mock).mockImplementation(() => {
       return {
         post: mockHttpClientPost,
-        dispose: jest.fn(),
+        dispose: vi.fn(),
       };
     });
   });
@@ -288,13 +289,13 @@ describe("runPostScriptLogic", () => {
 
     // Mock summary for job summary creation
     mockCore.summary = {
-      addHeading: jest.fn().mockReturnThis(),
-      addRaw: jest.fn().mockReturnThis(),
-      addBreak: jest.fn().mockReturnThis(),
-      addQuote: jest.fn().mockReturnThis(),
-      addTable: jest.fn().mockReturnThis(),
-      addLink: jest.fn().mockReturnThis(),
-      write: jest.fn().mockResolvedValue(undefined),
+      addHeading: vi.fn().mockReturnThis(),
+      addRaw: vi.fn().mockReturnThis(),
+      addBreak: vi.fn().mockReturnThis(),
+      addQuote: vi.fn().mockReturnThis(),
+      addTable: vi.fn().mockReturnThis(),
+      addLink: vi.fn().mockReturnThis(),
+      write: vi.fn().mockResolvedValue(undefined),
     } as unknown as typeof mockCore.summary;
 
     await runPostScriptLogic();
