@@ -1,0 +1,38 @@
+- params:
+    git:
+      repoName: fly-action
+      branches:
+        - main
+      branchNameTemplate: "FROGBOT/${IMPACTED_PACKAGE}-${BRANCH_NAME_HASH}"
+      commitMessageTemplate: "FROGBOT-1 - Upgrade ${IMPACTED_PACKAGE} to ${FIX_VERSION}"
+      pullRequestTitleTemplate: "FROGBOT-1 - Upgrade ${IMPACTED_PACKAGE} to ${FIX_VERSION}"
+
+    scan:
+      # Report all vulnerabilities, not just new ones introduced in the PR.
+      # Skips downloading and scanning the target branch — single scan instead of two.
+      includeAllVulnerabilities: true
+      minSeverity: "Medium"
+      fixableOnly: true
+
+      # Exclude generated, test, and non-application files from SAST analysis.
+      # IMPORTANT: Use simple globs like "*spec*", NOT full paths like "**/*.spec.ts".
+      # Frogbot automatically wraps each pattern with **/ and /**, so "*spec*"
+      # becomes "**/*spec*/**".
+      pathExclusions:
+        # Test files — contain dummy credentials that trigger false-positive secrets/SAST
+        - "*spec*"
+        - "*test*"
+        # Bundled output — deps covered by SCA, not SAST
+        - "lib/"
+        # Vendored dependencies
+        - "*node_modules*"
+        # CI/CD workflows
+        - "*.github*"
+        # Build artifacts
+        - "*dist*"
+        # Dev tooling
+        - "*.cursor*"
+
+      projects:
+        - workingDirs:
+            - "."

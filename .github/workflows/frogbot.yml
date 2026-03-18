@@ -1,14 +1,21 @@
 name: "Frogbot Security Scan"
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize]
+    paths-ignore:
+      - '.cursor/**'
+      - '**/*.md'
   push:
     branches:
       - main
+    paths-ignore:
+      - '.cursor/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
+  id-token: write
   pull-requests: write
   contents: write
   security-events: write
@@ -17,26 +24,12 @@ jobs:
   frogbot-scan:
     runs-on: ubuntu-latest
 
-    # External PRs (forks or different repo) require approval via "frogbot" environment.
-    # Internal PRs from same repo run automatically without approval.
-    environment: >-
-      ${{
-        (github.event.pull_request.head.repo.fork == true ||
-         github.event.pull_request.head.repo.full_name != github.repository)
-        && 'frogbot' || ''
-      }}
-
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - uses: jfrog/frogbot@v2
         env:
-          # [Mandatory]
-          # JFrog platform URL (This functionality requires version 3.29.0 or above of Xray)
           JF_URL: ${{ secrets.FROGBOT_URL }}
-
-          # [Mandatory if JF_USER and JF_PASSWORD are not provided]
-          # JFrog access token with 'read' permissions on Xray service
           JF_ACCESS_TOKEN: ${{ secrets.FROGBOT_ACCESS_TOKEN }}
-
-          # [Mandatory]
-          # The GitHub token is automatically generated for the job
           JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}

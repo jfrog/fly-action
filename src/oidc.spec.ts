@@ -37,7 +37,7 @@ describe("authenticateOidc", () => {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () =>
         JSON.stringify({
-          access_token: "tokval",
+          access_token: "tokval", // jfrog-ignore — fake test credential
           fly_tenant_url: "https://tenant.jfrog.io",
         }),
     } as unknown as HttpClientResponse;
@@ -45,7 +45,7 @@ describe("authenticateOidc", () => {
 
     const result = await authenticateOidc("https://fly");
     expect(result).toEqual({
-      accessToken: "tokval",
+      accessToken: "tokval", // jfrog-ignore — fake test credential
       flyTenantUrl: "https://tenant.jfrog.io",
     });
   });
@@ -60,14 +60,14 @@ describe("authenticateOidc", () => {
       message: { statusCode: 201, headers: {} as IncomingHttpHeaders },
       readBody: async () =>
         JSON.stringify({
-          access_token: "fake-token",
+          access_token: "fake-token", // jfrog-ignore — fake test credential
           fly_tenant_url: "https://tenant.jfrog.io",
         }),
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     const result = await authenticateOidc("https://fly");
-    expect(result.accessToken).toBe("fake-token");
+    expect(result.accessToken).toBe("fake-token"); // jfrog-ignore — fake test credential
     expect(result.flyTenantUrl).toBe("https://tenant.jfrog.io");
   });
 
@@ -103,7 +103,7 @@ describe("authenticateOidc", () => {
     );
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
-      readBody: async () => JSON.stringify({ access_token: "tokval" }),
+      readBody: async () => JSON.stringify({ access_token: "tokval" }), // jfrog-ignore — fake test credential
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
