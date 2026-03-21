@@ -32,10 +32,9 @@ const END_CI_RESPONSE_WITH_ARTIFACTS = JSON.stringify({
     {
       name: "my-lib",
       type: "npm",
-      repo_key: "npm-local",
       path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
     },
-    { name: "my-app", type: "docker", repo_key: "docker-local" },
+    { name: "my-app", type: "docker" },
   ],
 });
 

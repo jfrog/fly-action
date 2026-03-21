@@ -23,7 +23,6 @@ export interface FlyOidcResponse {
 export interface CollectedArtifact {
   name: string;
   type: string;
-  repo_key?: string;
   path?: string;
 }
 
