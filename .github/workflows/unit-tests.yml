@@ -44,6 +44,6 @@ jobs:
         run: |
           if [[ -n "$(git status lib/ --porcelain)" ]]; then
             echo "::error::lib/ is out of sync with src/. Run 'npm run build' and commit the changes."
-            git diff lib/ --stat
+            git diff -- lib/
             exit 1
           fi
