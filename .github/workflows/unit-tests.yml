@@ -42,7 +42,12 @@ jobs:
       # If lib/ is not rebuilt after src/ changes, the action will run stale code.
       - name: Verify lib/ is compiled and up to date
         run: |
-          if [[ -n "$(git status lib/ --porcelain)" ]]; then
+          # -I ignores hunks where every changed line matches the pattern.
+          # Without a lockfile, npm may hoist transitive deps differently,
+          # causing only node_modules path comments/keys to differ in the bundle.
+          UNTRACKED=$(git ls-files --others --exclude-standard lib/)
+          MEANINGFUL_DIFF=$(git diff -I 'node_modules/' -- lib/)
+          if [[ -n "$UNTRACKED" || -n "$MEANINGFUL_DIFF" ]]; then
             echo "::error::lib/ is out of sync with src/. Run 'npm run build' and commit the changes."
             git diff -- lib/
             exit 1
