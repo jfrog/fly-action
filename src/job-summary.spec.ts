@@ -56,44 +56,30 @@ describe("createJobSummary", () => {
       {
         name: "my-lib",
         type: "npm",
-        repo_key: "npm-local",
         path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
       },
-      { name: "my-app", type: "docker", repo_key: "docker-local" },
+      { name: "my-app", type: "docker" },
     ];
 
     await createJobSummary(artifacts);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
     expect(markdownContent).toContain("### Collected Artifacts");
-    expect(markdownContent).toContain("| Artifact | Type | Repository |");
-    expect(markdownContent).toContain("| my-lib | npm | npm-local |");
-    expect(markdownContent).toContain("| my-app | docker | docker-local |");
+    expect(markdownContent).toContain("| Artifact | Type |");
+    expect(markdownContent).toContain("| my-lib | npm |");
+    expect(markdownContent).toContain("| my-app | docker |");
     expect(mockSummary.write).toHaveBeenCalled();
-  });
-
-  it("should show dash for missing repo_key", async () => {
-    const artifacts: CollectedArtifact[] = [
-      { name: "orphan-artifact", type: "generic" },
-    ];
-
-    await createJobSummary(artifacts);
-
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain("| orphan-artifact | generic | — |");
   });
 
   it("should escape pipe characters in artifact data", async () => {
     const artifacts: CollectedArtifact[] = [
-      { name: "my|lib", type: "npm|pnpm", repo_key: "local|remote" },
+      { name: "my|lib", type: "npm|pnpm" },
     ];
 
     await createJobSummary(artifacts);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain(
-      "| my\\|lib | npm\\|pnpm | local\\|remote |",
-    );
+    expect(markdownContent).toContain("| my\\|lib | npm\\|pnpm |");
   });
 
   it("should not render artifacts table for empty array", async () => {
