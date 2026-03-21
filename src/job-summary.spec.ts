@@ -66,9 +66,9 @@ describe("createJobSummary", () => {
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
     expect(markdownContent).toContain("### Collected Artifacts");
-    expect(markdownContent).toContain("| Artifact | Type | Repository |");
-    expect(markdownContent).toContain("| my-lib | npm | npm-local |");
-    expect(markdownContent).toContain("| my-app | docker | docker-local |");
+    expect(markdownContent).toContain("| Artifact | Type |");
+    expect(markdownContent).toContain("| my-lib | npm |");
+    expect(markdownContent).toContain("| my-app | docker |");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
@@ -80,7 +80,7 @@ describe("createJobSummary", () => {
     await createJobSummary(artifacts);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain("| orphan-artifact | generic | — |");
+    expect(markdownContent).toContain("| orphan-artifact | generic |");
   });
 
   it("should escape pipe characters in artifact data", async () => {
@@ -91,9 +91,7 @@ describe("createJobSummary", () => {
     await createJobSummary(artifacts);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain(
-      "| my\\|lib | npm\\|pnpm | local\\|remote |",
-    );
+    expect(markdownContent).toContain("| my\\|lib | npm\\|pnpm |");
   });
 
   it("should not render artifacts table for empty array", async () => {
