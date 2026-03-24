@@ -15,13 +15,8 @@ import {
   CLI_CMD_VERSION,
   MAX_VERSION_LENGTH,
   FALLBACK_VERSION,
-  ENV_FLY_TRANSFER_RESULTS,
 } from "./constants";
-import {
-  FlyClientResponse,
-  FlyClientResult,
-  TransferSummaryEntry,
-} from "./types";
+import { FlyClientResponse } from "./types";
 
 const WINDOWS_OS = "windows";
 const FLY_TOOL_NAME = "fly";
@@ -247,22 +242,4 @@ export function parseMultilineInput(input: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-}
-
-/**
- * Appends an upload/download result entry to the FLY_TRANSFER_RESULTS env var
- * as a JSON line. The post step reads all accumulated lines to render the
- * job summary. Each call adds one line for one sub-action invocation.
- */
-export function appendTransferResults(
-  type: "upload" | "download",
-  name: string,
-  version: string,
-  results: FlyClientResult[],
-): void {
-  const entry: TransferSummaryEntry = { type, name, version, results };
-  const existing = process.env[ENV_FLY_TRANSFER_RESULTS] || "";
-  const line = JSON.stringify(entry);
-  const updated = existing ? `${existing}\n${line}` : line;
-  core.exportVariable(ENV_FLY_TRANSFER_RESULTS, updated);
 }

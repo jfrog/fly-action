@@ -3,191 +3,50 @@
 import { vi, type Mock } from "vitest";
 
 vi.mock("@actions/core");
-vi.mock("./fly-cli", () => ({
-  execFlyCLI: vi.fn(),
-  getAuthEnv: vi.fn(),
-  parseMultilineInput: vi.fn(),
-  appendTransferResults: vi.fn(),
+vi.mock("./transfer", () => ({
+  runTransfer: vi.fn(),
 }));
 
 import * as core from "@actions/core";
-import {
-  execFlyCLI,
-  getAuthEnv,
-  parseMultilineInput,
-  appendTransferResults,
-} from "./fly-cli";
+import { runTransfer } from "./transfer";
 import { runDownload } from "./download";
 
 describe("runDownload", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    (getAuthEnv as Mock).mockReturnValue({
-      url: "https://tenant.jfrog.io",
-      token: "test-token",
-    });
   });
 
-  it("builds correct CLI args from inputs", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.0.0",
-        files: "installer.dmg\nreadme.txt",
-        "output-dir": "./release",
-        exclude: "*.sig",
-      };
-      return inputs[name] || "";
-    });
+  it("calls runTransfer with download config", async () => {
+    vi.mocked(core.getInput).mockReturnValue("");
 
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["installer.dmg", "readme.txt"])
-      .mockReturnValueOnce(["*.sig"]);
+    await runDownload();
 
-    (execFlyCLI as Mock).mockResolvedValue({
+    expect(runTransfer).toHaveBeenCalledWith({
+      type: "download",
       command: "download",
-      results: [
-        { name: "installer.dmg", status: "success" },
-        { name: "readme.txt", status: "success" },
-      ],
+      extraArgs: ["--output-dir", "."],
+      noFilesMessage: expect.stringContaining("remote filename"),
     });
-
-    await runDownload();
-
-    expect(execFlyCLI).toHaveBeenCalledWith(
-      [
-        "download",
-        "--name",
-        "my-app",
-        "--version",
-        "1.0.0",
-        "--output-dir",
-        "./release",
-        "--exclude",
-        "*.sig",
-        "installer.dmg",
-        "readme.txt",
-      ],
-      {
-        FLY_URL: "https://tenant.jfrog.io",
-        FLY_ACCESS_TOKEN: "test-token",
-      },
-    );
-    expect(core.setSecret).toHaveBeenCalledWith("test-token");
-    expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
-    expect(appendTransferResults).toHaveBeenCalledWith(
-      "download",
-      "my-app",
-      "1.0.0",
-      [
-        { name: "installer.dmg", status: "success" },
-        { name: "readme.txt", status: "success" },
-      ],
-    );
-    expect(core.setFailed).not.toHaveBeenCalled();
   });
 
-  it("uses default output-dir when not specified", async () => {
+  it("passes custom output-dir from input", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.0.0",
-        files: "file.zip",
-        "output-dir": "",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["file.zip"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [{ name: "file.zip", status: "success" }],
+      if (name === "output-dir") return "./release";
+      return "";
     });
 
     await runDownload();
 
-    expect(execFlyCLI).toHaveBeenCalledWith(
-      expect.arrayContaining(["--output-dir", "."]),
-      expect.objectContaining({
-        FLY_URL: "https://tenant.jfrog.io",
-        FLY_ACCESS_TOKEN: "test-token",
-      }),
-    );
+    const config = (runTransfer as Mock).mock.calls[0][0];
+    expect(config.extraArgs).toEqual(["--output-dir", "./release"]);
   });
 
-  it("calls setFailed when files have errors", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.0.0",
-        files: "missing.zip",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["missing.zip"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [
-        { name: "missing.zip", status: "error", message: "404 not found" },
-      ],
-    });
+  it("falls back to default output-dir when input is empty", async () => {
+    vi.mocked(core.getInput).mockReturnValue("");
 
     await runDownload();
 
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining("Download failed for 1 file(s)"),
-    );
-  });
-
-  it("calls setFailed when no files specified", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.0.0",
-        files: "",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce([])
-      .mockReturnValueOnce([]);
-
-    await runDownload();
-
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining("No files specified"),
-    );
-  });
-
-  it("calls setFailed when auth env is missing", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.0.0",
-        files: "file.zip",
-      };
-      return inputs[name] || "";
-    });
-
-    (getAuthEnv as Mock).mockImplementation(() => {
-      throw new Error("FLY_ACCESS_TOKEN environment variable is not set");
-    });
-
-    await runDownload();
-
-    expect(core.setFailed).toHaveBeenCalledWith(
-      "FLY_ACCESS_TOKEN environment variable is not set",
-    );
+    const config = (runTransfer as Mock).mock.calls[0][0];
+    expect(config.extraArgs).toEqual(["--output-dir", "."]);
   });
 });

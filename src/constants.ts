@@ -66,8 +66,6 @@ export const CLI_CMD_VERSION = "version";
 // Fly CLI flag names (mirrors Go client/internal/constants/constants.go)
 export const CLI_FLAG_NAME = "--name";
 export const CLI_FLAG_VERSION = "--version";
-export const CLI_FLAG_URL = "--url";
-export const CLI_FLAG_ACCESS_TOKEN = "--access-token";
 export const CLI_FLAG_EXCLUDE = "--exclude";
 export const CLI_FLAG_OUTPUT_DIR = "--output-dir";
 
