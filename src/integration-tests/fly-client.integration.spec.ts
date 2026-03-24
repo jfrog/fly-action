@@ -16,8 +16,10 @@ import {
   SUPPORTED_PACKAGE_MANAGERS,
   PLATFORM_MAP,
   ARCH_MAP,
-  FLY_CLI_DOWNLOAD_BASE,
 } from "../constants";
+
+const TEST_CLI_DOWNLOAD_BASE =
+  "https://releases.jfrog.io/artifactory/fly-client/v1/1.2.0";
 
 let binPath: string;
 
@@ -36,7 +38,7 @@ async function downloadBinary(): Promise<string> {
 
   const ext = process.platform === "win32" ? ".exe" : "";
   const binaryName = `fly${ext}`;
-  const url = `${FLY_CLI_DOWNLOAD_BASE}/${osMapped}-${archMapped}/${binaryName}`;
+  const url = `${TEST_CLI_DOWNLOAD_BASE}/${osMapped}-${archMapped}/${binaryName}`;
 
   const tmpDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "fly-integration-test-"),
@@ -167,8 +169,11 @@ describe("Fly Client Integration Tests", () => {
     it("should display version information with version command", () => {
       const result = execBinary(["version"]);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("Fly CLI");
-      expect(result.stdout).toContain("Version:");
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.command).toBe("version");
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0].name).toBe("fly");
+      expect(parsed.results[0].message).toMatch(/\d+\.\d+\.\d+/);
     });
   });
 
