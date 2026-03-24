@@ -49,3 +49,15 @@ export interface FlyClientResult {
   status: "success" | "error" | "configured" | "not_configured";
   message?: string;
 }
+
+/**
+ * One upload or download invocation's results, accumulated in
+ * ENV_FLY_TRANSFER_RESULTS as JSON-lines so the post step can
+ * render them in the job summary.
+ */
+export interface TransferSummaryEntry {
+  type: "upload" | "download";
+  name: string;
+  version: string;
+  results: FlyClientResult[];
+}

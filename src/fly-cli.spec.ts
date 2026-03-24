@@ -23,10 +23,12 @@ import {
   execFlyCLI,
   getAuthEnv,
   parseMultilineInput,
+  appendTransferResults,
 } from "./fly-cli";
 import {
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_TRANSFER_RESULTS,
   UNIX_EXECUTABLE_MODE,
 } from "./constants";
 
@@ -401,5 +403,71 @@ describe("parseMultilineInput", () => {
 
   it("handles single-line input", () => {
     expect(parseMultilineInput("file.zip")).toEqual(["file.zip"]);
+  });
+});
+
+describe("appendTransferResults", () => {
+  afterEach(() => {
+    delete process.env[ENV_FLY_TRANSFER_RESULTS];
+    vi.resetAllMocks();
+  });
+
+  it("creates a new JSON line when env var is empty", () => {
+    delete process.env[ENV_FLY_TRANSFER_RESULTS];
+
+    appendTransferResults("upload", "my-app", "1.0.0", [
+      { name: "file.zip", status: "success" },
+    ]);
+
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_TRANSFER_RESULTS,
+      expect.any(String),
+    );
+
+    const exported = (core.exportVariable as Mock).mock.calls[0][1] as string;
+    const parsed = JSON.parse(exported);
+    expect(parsed).toEqual({
+      type: "upload",
+      name: "my-app",
+      version: "1.0.0",
+      results: [{ name: "file.zip", status: "success" }],
+    });
+  });
+
+  it("appends to existing results with newline separator", () => {
+    const existing = JSON.stringify({
+      type: "upload",
+      name: "first",
+      version: "1.0.0",
+      results: [{ name: "a.zip", status: "success" }],
+    });
+    process.env[ENV_FLY_TRANSFER_RESULTS] = existing;
+
+    appendTransferResults("download", "second", "2.0.0", [
+      { name: "b.zip", status: "success" },
+    ]);
+
+    const exported = (core.exportVariable as Mock).mock.calls[0][1] as string;
+    const lines = exported.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(JSON.parse(lines[0])).toEqual(JSON.parse(existing));
+    expect(JSON.parse(lines[1])).toEqual({
+      type: "download",
+      name: "second",
+      version: "2.0.0",
+      results: [{ name: "b.zip", status: "success" }],
+    });
+  });
+
+  it("handles multiple results in a single entry", () => {
+    appendTransferResults("upload", "pkg", "3.0.0", [
+      { name: "a.zip", status: "success" },
+      { name: "b.zip", status: "error", message: "checksum mismatch" },
+    ]);
+
+    const exported = (core.exportVariable as Mock).mock.calls[0][1] as string;
+    const parsed = JSON.parse(exported);
+    expect(parsed.results).toHaveLength(2);
+    expect(parsed.results[1].status).toBe("error");
   });
 });

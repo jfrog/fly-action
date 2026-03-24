@@ -1,7 +1,12 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
-import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
+import {
+  execFlyCLI,
+  getAuthEnv,
+  parseMultilineInput,
+  appendTransferResults,
+} from "./fly-cli";
 import {
   INPUT_NAME,
   INPUT_VERSION,
@@ -61,6 +66,7 @@ export async function runDownload(): Promise<void> {
     });
 
     core.setOutput(OUTPUT_RESULTS, JSON.stringify(response.results));
+    appendTransferResults("download", name, version, response.results);
 
     const errors = response.results.filter((r) => r.status === STATUS_ERROR);
     if (errors.length > 0) {

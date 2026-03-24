@@ -7,10 +7,16 @@ vi.mock("./fly-cli", () => ({
   execFlyCLI: vi.fn(),
   getAuthEnv: vi.fn(),
   parseMultilineInput: vi.fn(),
+  appendTransferResults: vi.fn(),
 }));
 
 import * as core from "@actions/core";
-import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
+import {
+  execFlyCLI,
+  getAuthEnv,
+  parseMultilineInput,
+  appendTransferResults,
+} from "./fly-cli";
 import { runDownload } from "./download";
 
 describe("runDownload", () => {
@@ -69,6 +75,15 @@ describe("runDownload", () => {
     );
     expect(core.setSecret).toHaveBeenCalledWith("test-token");
     expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
+    expect(appendTransferResults).toHaveBeenCalledWith(
+      "download",
+      "my-app",
+      "1.0.0",
+      [
+        { name: "installer.dmg", status: "success" },
+        { name: "readme.txt", status: "success" },
+      ],
+    );
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 

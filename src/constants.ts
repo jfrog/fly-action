@@ -77,6 +77,10 @@ export const STATUS_ERROR = "error";
 // Default output directory for downloads
 export const DEFAULT_OUTPUT_DIR = ".";
 
+// Env var used to accumulate upload/download results across sub-action steps.
+// Each invocation appends a JSON line; the post step reads and renders them.
+export const ENV_FLY_TRANSFER_RESULTS = "FLY_TRANSFER_RESULTS";
+
 // Version resolution
 export const MAX_VERSION_LENGTH = 40;
 export const FALLBACK_VERSION = "unknown";

@@ -3,17 +3,57 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
-import { CollectedArtifact } from "./types";
+import { CollectedArtifact, TransferSummaryEntry } from "./types";
+import { ENV_FLY_TRANSFER_RESULTS } from "./constants";
+
+const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
 function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
   if (artifacts.length === 0) {
     return "";
   }
 
-  const esc = (s: string) => s.replace(/\|/g, "\\|");
   const header = "| Artifact | Type |\n| --- | --- |";
-  const rows = artifacts.map((a) => `| ${esc(a.name)} | ${esc(a.type)} |`);
+  const rows = artifacts.map(
+    (a) => `| ${escPipe(a.name)} | ${escPipe(a.type)} |`,
+  );
   return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+}
+
+export function parseTransferResults(raw: string): TransferSummaryEntry[] {
+  if (!raw.trim()) return [];
+  return raw
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as TransferSummaryEntry);
+}
+
+export function buildTransfersTable(entries: TransferSummaryEntry[]): string {
+  if (entries.length === 0) return "";
+
+  const typeIcon = (type: string) => (type === "upload" ? "⬆️" : "⬇️");
+  const statusIcon = (s: string) =>
+    s === "success" ? "✅" : s === "error" ? "❌" : "ℹ️";
+
+  const header =
+    "| | Type | Package | Version | File | Status |\n| --- | --- | --- | --- | --- | --- |";
+  const rows: string[] = [];
+
+  for (const entry of entries) {
+    for (const result of entry.results) {
+      const cols = [
+        typeIcon(entry.type),
+        escPipe(entry.type),
+        escPipe(entry.name),
+        escPipe(entry.version),
+        escPipe(result.name),
+        `${statusIcon(result.status)} ${escPipe(result.status)}`,
+      ];
+      rows.push(`| ${cols.join(" | ")} |`);
+    }
+  }
+
+  return `\n### Uploads & Downloads\n\n${header}\n${rows.join("\n")}\n`;
 }
 
 export async function createJobSummary(
@@ -48,6 +88,21 @@ export async function createJobSummary(
     markdownContent = markdownContent.replace(
       "{{ARTIFACTS_TABLE}}",
       artifactsTable,
+    );
+
+    const transfersRaw = process.env[ENV_FLY_TRANSFER_RESULTS] || "";
+    let transfersTable = "";
+    try {
+      const entries = parseTransferResults(transfersRaw);
+      transfersTable = buildTransfersTable(entries);
+    } catch (err) {
+      core.warning(
+        `Failed to parse transfer results: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    markdownContent = markdownContent.replace(
+      "{{TRANSFERS_TABLE}}",
+      transfersTable,
     );
 
     const summary = core.summary.addRaw(markdownContent);

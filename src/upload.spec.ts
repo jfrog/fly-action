@@ -7,10 +7,16 @@ vi.mock("./fly-cli", () => ({
   execFlyCLI: vi.fn(),
   getAuthEnv: vi.fn(),
   parseMultilineInput: vi.fn(),
+  appendTransferResults: vi.fn(),
 }));
 
 import * as core from "@actions/core";
-import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
+import {
+  execFlyCLI,
+  getAuthEnv,
+  parseMultilineInput,
+  appendTransferResults,
+} from "./fly-cli";
 import { runUpload } from "./upload";
 
 describe("runUpload", () => {
@@ -66,6 +72,15 @@ describe("runUpload", () => {
     );
     expect(core.setSecret).toHaveBeenCalledWith("test-token");
     expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
+    expect(appendTransferResults).toHaveBeenCalledWith(
+      "upload",
+      "my-app",
+      "1.0.0",
+      [
+        { name: "app.zip", status: "success" },
+        { name: "app.tar.gz", status: "success" },
+      ],
+    );
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
