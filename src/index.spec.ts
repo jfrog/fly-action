@@ -24,8 +24,10 @@ import {
   ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_IGNORE_PACKAGE_MANAGERS,
   ENV_FLY_URL,
   DEFAULT_FLY_URL,
+  CLI_CMD_SETUP,
 } from "./constants";
 
 const MOCK_TOKEN = `test-${"access"}-tok`;
@@ -217,7 +219,7 @@ describe("run", () => {
     vi.mocked(exec.exec).mockImplementation(
       async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
         const env = options?.env;
-        expect(env?.FLY_IGNORE_PACKAGE_MANAGERS).toBe("docker");
+        expect(env?.[ENV_FLY_IGNORE_PACKAGE_MANAGERS]).toBe("docker");
         return 0;
       },
     );
@@ -252,11 +254,11 @@ describe("run", () => {
 
     expect(exec.exec).toHaveBeenCalledWith(
       "/cached/fly/fly",
-      ["setup"],
+      [CLI_CMD_SETUP],
       expect.objectContaining({
         env: expect.objectContaining({
-          FLY_URL: "https://resolved-tenant.jfrog.io",
-          FLY_ACCESS_TOKEN: MOCK_TOKEN,
+          [ENV_FLY_URL_RUNTIME]: "https://resolved-tenant.jfrog.io",
+          [ENV_FLY_ACCESS_TOKEN_RUNTIME]: MOCK_TOKEN,
         }),
       }),
     );

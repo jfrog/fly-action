@@ -27,6 +27,7 @@ import {
 import {
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  UNIX_EXECUTABLE_MODE,
 } from "./constants";
 
 describe("resolvePlatformArch", () => {
@@ -73,7 +74,9 @@ describe("resolvePlatformArch", () => {
     const origPlatform = process.platform;
     Object.defineProperty(process, "platform", { value: "freebsd" });
 
-    expect(() => resolvePlatformArch()).toThrow("Unsupported platform: freebsd");
+    expect(() => resolvePlatformArch()).toThrow(
+      "Unsupported platform: freebsd",
+    );
 
     Object.defineProperty(process, "platform", { value: origPlatform });
   });
@@ -82,7 +85,9 @@ describe("resolvePlatformArch", () => {
     const origArch = process.arch;
     Object.defineProperty(process, "arch", { value: "ia32" });
 
-    expect(() => resolvePlatformArch()).toThrow("Unsupported architecture: ia32");
+    expect(() => resolvePlatformArch()).toThrow(
+      "Unsupported architecture: ia32",
+    );
 
     Object.defineProperty(process, "arch", { value: origArch });
   });
@@ -207,7 +212,10 @@ describe("downloadFlyCLI", () => {
     const result = await downloadFlyCLI();
 
     expect(tc.downloadTool).toHaveBeenCalled();
-    expect(fs.chmodSync).toHaveBeenCalledWith("/tmp/fly-download", 0o755);
+    expect(fs.chmodSync).toHaveBeenCalledWith(
+      "/tmp/fly-download",
+      UNIX_EXECUTABLE_MODE,
+    );
     expect(tc.cacheFile).toHaveBeenCalledWith(
       "/tmp/fly-download",
       expect.any(String),
@@ -230,12 +238,10 @@ describe("execFlyCLI", () => {
       results: [{ name: "file.zip", status: "success" }],
     });
 
-    vi.mocked(exec.exec).mockImplementation(
-      async (_cmd, _args, options) => {
-        options?.listeners?.stdout?.(Buffer.from(jsonResponse));
-        return 0;
-      },
-    );
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+      return 0;
+    });
 
     const response = await execFlyCLI(["upload", "--name", "test"]);
     expect(response.command).toBe("upload");
@@ -244,12 +250,10 @@ describe("execFlyCLI", () => {
   });
 
   it("throws when stdout is not valid JSON", async () => {
-    vi.mocked(exec.exec).mockImplementation(
-      async (_cmd, _args, options) => {
-        options?.listeners?.stdout?.(Buffer.from("not json"));
-        return 1;
-      },
-    );
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from("not json"));
+      return 1;
+    });
 
     await expect(execFlyCLI(["upload"])).rejects.toThrow(
       "Failed to parse Fly CLI JSON output",
@@ -262,13 +266,11 @@ describe("execFlyCLI", () => {
       results: [],
     });
 
-    vi.mocked(exec.exec).mockImplementation(
-      async (_cmd, _args, options) => {
-        options?.listeners?.stdout?.(Buffer.from(jsonResponse));
-        options?.listeners?.stderr?.(Buffer.from("some debug log\n"));
-        return 0;
-      },
-    );
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+      options?.listeners?.stderr?.(Buffer.from("some debug log\n"));
+      return 0;
+    });
 
     await execFlyCLI(["upload"]);
     expect(core.info).toHaveBeenCalledWith(
@@ -313,7 +315,9 @@ describe("getAuthEnv", () => {
 
 describe("parseMultilineInput", () => {
   it("splits by newlines and trims whitespace", () => {
-    const result = parseMultilineInput("file1.zip\n  file2.tar.gz  \nfile3.bin");
+    const result = parseMultilineInput(
+      "file1.zip\n  file2.tar.gz  \nfile3.bin",
+    );
     expect(result).toEqual(["file1.zip", "file2.tar.gz", "file3.bin"]);
   });
 

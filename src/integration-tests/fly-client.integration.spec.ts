@@ -12,7 +12,12 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { execSync, spawn, SpawnOptions } from "child_process";
-import { SUPPORTED_PACKAGE_MANAGERS, PLATFORM_MAP, ARCH_MAP, FLY_CLI_DOWNLOAD_BASE } from "../constants";
+import {
+  SUPPORTED_PACKAGE_MANAGERS,
+  PLATFORM_MAP,
+  ARCH_MAP,
+  FLY_CLI_DOWNLOAD_BASE,
+} from "../constants";
 
 let binPath: string;
 
@@ -24,14 +29,18 @@ async function downloadBinary(): Promise<string> {
   const osMapped = PLATFORM_MAP[process.platform];
   const archMapped = ARCH_MAP[process.arch];
   if (!osMapped || !archMapped) {
-    throw new Error(`Unsupported platform/arch: ${process.platform}/${process.arch}`);
+    throw new Error(
+      `Unsupported platform/arch: ${process.platform}/${process.arch}`,
+    );
   }
 
   const ext = process.platform === "win32" ? ".exe" : "";
   const binaryName = `fly${ext}`;
   const url = `${FLY_CLI_DOWNLOAD_BASE}/${osMapped}-${archMapped}/${binaryName}`;
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fly-integration-test-"));
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "fly-integration-test-"),
+  );
   const dest = path.join(tmpDir, binaryName);
 
   // Use curl for the download — available on all GitHub Actions runners and macOS/Linux
@@ -321,8 +330,19 @@ describe("Fly Client Integration Tests", () => {
 
     it("should accept all package managers in the exact order the action sends them", async () => {
       const managersFromAction = [
-        "dotnet", "go", "gradle", "maven", "npm", "pip",
-        "pipenv", "pnpm", "twine", "nuget", "docker", "helm", "podman",
+        "dotnet",
+        "go",
+        "gradle",
+        "maven",
+        "npm",
+        "pip",
+        "pipenv",
+        "pnpm",
+        "twine",
+        "nuget",
+        "docker",
+        "helm",
+        "podman",
       ];
 
       const result = await spawnBinary([
@@ -340,7 +360,10 @@ describe("Fly Client Integration Tests", () => {
     it("should handle duplicate package managers gracefully", async () => {
       const result = await spawnBinary([
         "setup",
-        "npm", "npm", "pip", "pip",
+        "npm",
+        "npm",
+        "pip",
+        "pip",
         "--url",
         "https://test.example.com",
       ]);
@@ -370,10 +393,14 @@ describe("Fly Client Integration Tests", () => {
     it("should fail with clear error when no file arguments given", async () => {
       const result = await spawnBinary([
         "upload",
-        "--name", "test-pkg",
-        "--version", "1.0.0",
-        "--url", "https://test.example.com",
-        "--access-token", "fake-token",
+        "--name",
+        "test-pkg",
+        "--version",
+        "1.0.0",
+        "--url",
+        "https://test.example.com",
+        "--access-token",
+        "fake-token",
       ]);
       expect(result.exitCode).not.toBe(0);
       const combined = result.stdout + result.stderr;
@@ -383,8 +410,10 @@ describe("Fly Client Integration Tests", () => {
     it("should require --name flag", async () => {
       const result = await spawnBinary([
         "upload",
-        "--version", "1.0.0",
-        "--url", "https://test.example.com",
+        "--version",
+        "1.0.0",
+        "--url",
+        "https://test.example.com",
         "somefile.txt",
       ]);
       expect(result.exitCode).not.toBe(0);
@@ -393,8 +422,10 @@ describe("Fly Client Integration Tests", () => {
     it("should require --version flag", async () => {
       const result = await spawnBinary([
         "upload",
-        "--name", "test-pkg",
-        "--url", "https://test.example.com",
+        "--name",
+        "test-pkg",
+        "--url",
+        "https://test.example.com",
         "somefile.txt",
       ]);
       expect(result.exitCode).not.toBe(0);
@@ -405,7 +436,9 @@ describe("Fly Client Integration Tests", () => {
     it("should display download help", () => {
       const result = execBinary(["download", "--help"]);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("Download files from Fly generic storage");
+      expect(result.stdout).toContain(
+        "Download files from Fly generic storage",
+      );
       expect(result.stdout).toContain("FILE");
     });
 
@@ -423,10 +456,14 @@ describe("Fly Client Integration Tests", () => {
     it("should fail with clear error when no filename arguments given", async () => {
       const result = await spawnBinary([
         "download",
-        "--name", "test-pkg",
-        "--version", "1.0.0",
-        "--url", "https://test.example.com",
-        "--access-token", "fake-token",
+        "--name",
+        "test-pkg",
+        "--version",
+        "1.0.0",
+        "--url",
+        "https://test.example.com",
+        "--access-token",
+        "fake-token",
       ]);
       expect(result.exitCode).not.toBe(0);
       const combined = result.stdout + result.stderr;
@@ -436,8 +473,10 @@ describe("Fly Client Integration Tests", () => {
     it("should require --name flag", async () => {
       const result = await spawnBinary([
         "download",
-        "--version", "1.0.0",
-        "--url", "https://test.example.com",
+        "--version",
+        "1.0.0",
+        "--url",
+        "https://test.example.com",
         "somefile.txt",
       ]);
       expect(result.exitCode).not.toBe(0);
@@ -446,8 +485,10 @@ describe("Fly Client Integration Tests", () => {
     it("should require --version flag", async () => {
       const result = await spawnBinary([
         "download",
-        "--name", "test-pkg",
-        "--url", "https://test.example.com",
+        "--name",
+        "test-pkg",
+        "--url",
+        "https://test.example.com",
         "somefile.txt",
       ]);
       expect(result.exitCode).not.toBe(0);
@@ -456,11 +497,16 @@ describe("Fly Client Integration Tests", () => {
     it("should accept --output-dir flag", async () => {
       const result = await spawnBinary([
         "download",
-        "--name", "test-pkg",
-        "--version", "1.0.0",
-        "--output-dir", "/tmp",
-        "--url", "https://test.example.com",
-        "--access-token", "fake-token",
+        "--name",
+        "test-pkg",
+        "--version",
+        "1.0.0",
+        "--output-dir",
+        "/tmp",
+        "--url",
+        "https://test.example.com",
+        "--access-token",
+        "fake-token",
         "somefile.txt",
       ]);
       // Will fail on auth, but should accept the flag without parsing errors
@@ -540,7 +586,9 @@ describe("Package manager installation tolerance", () => {
     const result = await spawnBinary([
       "setup",
       ...SUPPORTED_PACKAGE_MANAGERS,
-      "docker", "podman", "helm",
+      "docker",
+      "podman",
+      "helm",
       "--url",
       "https://test.example.com",
     ]);

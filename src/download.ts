@@ -2,46 +2,72 @@
 
 import * as core from "@actions/core";
 import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
+import {
+  INPUT_NAME,
+  INPUT_VERSION,
+  INPUT_FILES,
+  INPUT_EXCLUDE,
+  INPUT_OUTPUT_DIR,
+  OUTPUT_RESULTS,
+  CLI_CMD_DOWNLOAD,
+  CLI_FLAG_NAME,
+  CLI_FLAG_VERSION,
+  CLI_FLAG_URL,
+  CLI_FLAG_ACCESS_TOKEN,
+  CLI_FLAG_EXCLUDE,
+  CLI_FLAG_OUTPUT_DIR,
+  STATUS_ERROR,
+  DEFAULT_OUTPUT_DIR,
+} from "./constants";
 
 export async function runDownload(): Promise<void> {
   try {
-    const name = core.getInput("name", { required: true });
-    const version = core.getInput("version", { required: true });
-    const filesInput = core.getInput("files", { required: true });
-    const outputDir = core.getInput("output-dir") || ".";
-    const excludeInput = core.getInput("exclude");
+    const name = core.getInput(INPUT_NAME, { required: true });
+    const version = core.getInput(INPUT_VERSION, { required: true });
+    const filesInput = core.getInput(INPUT_FILES, { required: true });
+    const outputDir = core.getInput(INPUT_OUTPUT_DIR) || DEFAULT_OUTPUT_DIR;
+    const excludeInput = core.getInput(INPUT_EXCLUDE);
 
     const { url, token } = getAuthEnv();
 
     const files = parseMultilineInput(filesInput);
     if (files.length === 0) {
-      throw new Error("No files specified. Provide at least one remote filename.");
+      throw new Error(
+        "No files specified. Provide at least one remote filename.",
+      );
     }
 
     const args = [
-      "download",
-      "--name", name,
-      "--version", version,
-      "--output-dir", outputDir,
-      "--url", url,
-      "--access-token", token,
+      CLI_CMD_DOWNLOAD,
+      CLI_FLAG_NAME,
+      name,
+      CLI_FLAG_VERSION,
+      version,
+      CLI_FLAG_OUTPUT_DIR,
+      outputDir,
+      CLI_FLAG_URL,
+      url,
+      CLI_FLAG_ACCESS_TOKEN,
+      token,
     ];
 
     const excludes = parseMultilineInput(excludeInput);
     for (const pattern of excludes) {
-      args.push("--exclude", pattern);
+      args.push(CLI_FLAG_EXCLUDE, pattern);
     }
 
     args.push(...files);
 
     const response = await execFlyCLI(args);
 
-    core.setOutput("results", JSON.stringify(response.results));
+    core.setOutput(OUTPUT_RESULTS, JSON.stringify(response.results));
 
-    const errors = response.results.filter((r) => r.status === "error");
+    const errors = response.results.filter((r) => r.status === STATUS_ERROR);
     if (errors.length > 0) {
       const summary = errors.map((e) => `${e.name}: ${e.message}`).join("\n");
-      core.setFailed(`Download failed for ${errors.length} file(s):\n${summary}`);
+      core.setFailed(
+        `Download failed for ${errors.length} file(s):\n${summary}`,
+      );
     } else {
       core.info(
         `Successfully downloaded ${response.results.length} file(s) from ${name}@${version}`,

@@ -49,18 +49,20 @@ describe("runUpload", () => {
 
     expect(execFlyCLI).toHaveBeenCalledWith([
       "upload",
-      "--name", "my-app",
-      "--version", "1.0.0",
-      "--url", "https://tenant.jfrog.io",
-      "--access-token", "test-token",
-      "--exclude", "*.log",
+      "--name",
+      "my-app",
+      "--version",
+      "1.0.0",
+      "--url",
+      "https://tenant.jfrog.io",
+      "--access-token",
+      "test-token",
+      "--exclude",
+      "*.log",
       "dist/*.zip",
       "dist/*.tar.gz",
     ]);
-    expect(core.setOutput).toHaveBeenCalledWith(
-      "results",
-      expect.any(String),
-    );
+    expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 

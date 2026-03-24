@@ -50,19 +50,22 @@ describe("runDownload", () => {
 
     expect(execFlyCLI).toHaveBeenCalledWith([
       "download",
-      "--name", "my-app",
-      "--version", "1.0.0",
-      "--output-dir", "./release",
-      "--url", "https://tenant.jfrog.io",
-      "--access-token", "test-token",
-      "--exclude", "*.sig",
+      "--name",
+      "my-app",
+      "--version",
+      "1.0.0",
+      "--output-dir",
+      "./release",
+      "--url",
+      "https://tenant.jfrog.io",
+      "--access-token",
+      "test-token",
+      "--exclude",
+      "*.sig",
       "installer.dmg",
       "readme.txt",
     ]);
-    expect(core.setOutput).toHaveBeenCalledWith(
-      "results",
-      expect.any(String),
-    );
+    expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 

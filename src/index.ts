@@ -13,8 +13,10 @@ import {
   ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_IGNORE_PACKAGE_MANAGERS,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
+  CLI_CMD_SETUP,
 } from "./constants";
 
 /**
@@ -103,9 +105,9 @@ export async function run(): Promise<void> {
     // Pass env vars inline for the setup call — exportVariable writes to
     // GITHUB_ENV which only takes effect in subsequent steps, not this one.
     const envVars: Record<string, string> = {
-      FLY_URL: flyTenantUrl,
-      FLY_ACCESS_TOKEN: accessToken,
-      FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
+      [ENV_FLY_URL_RUNTIME]: flyTenantUrl,
+      [ENV_FLY_ACCESS_TOKEN_RUNTIME]: accessToken,
+      [ENV_FLY_IGNORE_PACKAGE_MANAGERS]: ignorePackageManagers,
     };
 
     const options = {
@@ -113,7 +115,7 @@ export async function run(): Promise<void> {
     };
 
     core.info("Executing Fly CLI setup");
-    const args = ["setup"];
+    const args = [CLI_CMD_SETUP];
     const exitCode = await exec.exec(binPath, args, options);
 
     if (exitCode !== 0) {

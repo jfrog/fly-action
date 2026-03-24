@@ -11,6 +11,10 @@ import {
   ARCH_MAP,
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  UNIX_EXECUTABLE_MODE,
+  CLI_CMD_VERSION,
+  MAX_VERSION_LENGTH,
+  FALLBACK_VERSION,
 } from "./constants";
 import { FlyClientResponse } from "./types";
 
@@ -61,7 +65,7 @@ export function getBinaryName(): string {
  */
 export async function resolveVersion(binPath: string): Promise<string> {
   let stdout = "";
-  await exec.exec(binPath, ["version"], {
+  await exec.exec(binPath, [CLI_CMD_VERSION], {
     silent: true,
     listeners: {
       stdout: (data) => {
@@ -72,20 +76,20 @@ export async function resolveVersion(binPath: string): Promise<string> {
 
   try {
     const response: FlyClientResponse = JSON.parse(stdout);
-    const flyResult = response.results.find((r) => r.name === "fly");
+    const flyResult = response.results.find((r) => r.name === FLY_TOOL_NAME);
     const message = flyResult?.message || "";
 
     const semverMatch = message.match(/(\d+\.\d+\.\d+)/);
     if (semverMatch) {
       return semverMatch[1];
     }
-    return message.trim().slice(0, 40) || "unknown";
+    return message.trim().slice(0, MAX_VERSION_LENGTH) || FALLBACK_VERSION;
   } catch {
     const semverMatch = stdout.match(/(\d+\.\d+\.\d+)/);
     if (semverMatch) {
       return semverMatch[1];
     }
-    return stdout.trim().slice(0, 40) || "unknown";
+    return stdout.trim().slice(0, MAX_VERSION_LENGTH) || FALLBACK_VERSION;
   }
 }
 
@@ -104,7 +108,7 @@ export async function downloadFlyCLI(): Promise<string> {
   const downloadedPath = await tc.downloadTool(url);
 
   if (process.platform !== "win32") {
-    fs.chmodSync(downloadedPath, 0o755);
+    fs.chmodSync(downloadedPath, UNIX_EXECUTABLE_MODE);
   }
 
   const version = await resolveVersion(downloadedPath);
@@ -118,7 +122,7 @@ export async function downloadFlyCLI(): Promise<string> {
   );
 
   if (process.platform !== "win32") {
-    fs.chmodSync(path.join(cachedDir, binaryName), 0o755);
+    fs.chmodSync(path.join(cachedDir, binaryName), UNIX_EXECUTABLE_MODE);
   }
 
   core.addPath(cachedDir);
@@ -132,9 +136,7 @@ export async function downloadFlyCLI(): Promise<string> {
  * and returns the parsed response. The binary must already be on PATH
  * (set up by the root action via downloadFlyCLI).
  */
-export async function execFlyCLI(
-  args: string[],
-): Promise<FlyClientResponse> {
+export async function execFlyCLI(args: string[]): Promise<FlyClientResponse> {
   let stdout = "";
   let stderr = "";
 
