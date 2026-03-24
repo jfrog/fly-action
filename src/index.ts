@@ -19,6 +19,7 @@ import {
   ENV_FLY_URL,
   CLI_CMD_SETUP,
 } from "./constants";
+import { getErrorMessage } from "./utils";
 
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
@@ -131,8 +132,7 @@ export async function run(): Promise<void> {
   } catch (error) {
     core.error("Error occurred during execution.");
 
-    if (error instanceof Error) core.setFailed(error.message);
-    else core.setFailed("An unknown error occurred");
+    core.setFailed(getErrorMessage(error));
   }
 }
 

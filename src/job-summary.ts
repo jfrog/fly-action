@@ -4,7 +4,8 @@ import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
 import { CollectedArtifact, TransferSummaryEntry } from "./types";
-import { ENV_FLY_TRANSFER_RESULTS } from "./constants";
+import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
+import { getErrorMessage } from "./utils";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
@@ -65,7 +66,7 @@ export async function createJobSummary(
     const workflowName = process.env.GITHUB_WORKFLOW;
     const runNumber = process.env.GITHUB_RUN_NUMBER;
 
-    const baseUrl = "https://fly.jfrog.ai";
+    const baseUrl = DEFAULT_FLY_URL;
 
     let releaseUrl = baseUrl;
     if (fullRepo && owner && workflowName && runNumber) {
@@ -96,9 +97,7 @@ export async function createJobSummary(
       const entries = parseTransferResults(transfersRaw);
       transfersTable = buildTransfersTable(entries);
     } catch (err) {
-      core.warning(
-        `Failed to parse transfer results: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      core.warning(`Failed to parse transfer results: ${getErrorMessage(err)}`);
     }
     markdownContent = markdownContent.replace(
       "{{TRANSFERS_TABLE}}",
@@ -110,6 +109,6 @@ export async function createJobSummary(
     await summary.write();
     core.info("Job summary created successfully from markdown template");
   } catch (error) {
-    core.warning(`Failed to create job summary: ${error}`);
+    core.warning(`Failed to create job summary: ${getErrorMessage(error)}`);
   }
 }

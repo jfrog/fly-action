@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { EndCiResponse, CollectedArtifact } from "./types";
-import { createHttpClient } from "./utils";
+import { createHttpClient, getErrorMessage } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 // Retry configuration
@@ -47,7 +47,8 @@ async function postWithRetry(
       lastResponse = response;
       lastError = new Error(`Server error ${statusCode}`);
     } catch (error: unknown) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError =
+        error instanceof Error ? error : new Error(getErrorMessage(error));
     }
 
     if (attempt < MAX_RETRIES) {
@@ -136,26 +137,21 @@ export async function runPost(): Promise<void> {
       );
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    core.error(`Error during CI end notification: ${message}`);
-    // Re-throw the error to be caught by the mainRunner or the test
+    core.error(`Error during CI end notification: ${getErrorMessage(error)}`);
     throw error;
   } finally {
     httpClient.dispose();
   }
 }
 
-// New exported function to handle the main execution logic
 export async function runPostScriptLogic(): Promise<void> {
   try {
     await runPost();
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    core.setFailed(message);
+    core.setFailed(getErrorMessage(error));
   }
 }
 
-// Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
   runPostScriptLogic();
 }

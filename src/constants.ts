@@ -82,19 +82,3 @@ export const ENV_FLY_TRANSFER_RESULTS = "FLY_TRANSFER_RESULTS";
 // Version resolution
 export const MAX_VERSION_LENGTH = 40;
 export const FALLBACK_VERSION = "unknown";
-
-/**
- * Supported standard package managers - always configured by fly-client.
- */
-export const SUPPORTED_PACKAGE_MANAGERS = [
-  "npm",
-  "pnpm",
-  "pip",
-  "pipenv",
-  "twine",
-  "maven",
-  "gradle",
-  "dotnet",
-  "nuget",
-  "go",
-] as const;

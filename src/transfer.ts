@@ -1,6 +1,7 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
+import { getErrorMessage } from "./utils";
 import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
 import {
   INPUT_NAME,
@@ -81,8 +82,7 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
       );
     }
   } catch (error) {
-    if (error instanceof Error) core.setFailed(error.message);
-    else core.setFailed(`An unknown error occurred during ${config.type}`);
+    core.setFailed(getErrorMessage(error));
   }
 }
 

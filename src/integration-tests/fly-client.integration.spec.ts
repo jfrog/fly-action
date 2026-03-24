@@ -12,12 +12,20 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { execSync, spawn, SpawnOptions } from "child_process";
-import {
-  SUPPORTED_PACKAGE_MANAGERS,
-  PLATFORM_MAP,
-  ARCH_MAP,
-  FLY_CLI_DOWNLOAD_BASE,
-} from "../constants";
+import { PLATFORM_MAP, ARCH_MAP, FLY_CLI_DOWNLOAD_BASE } from "../constants";
+
+const SUPPORTED_PACKAGE_MANAGERS = [
+  "npm",
+  "pnpm",
+  "pip",
+  "pipenv",
+  "twine",
+  "maven",
+  "gradle",
+  "dotnet",
+  "nuget",
+  "go",
+] as const;
 
 let binPath: string;
 

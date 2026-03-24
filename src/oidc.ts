@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
-import { createHttpClient } from "./utils";
+import { createHttpClient, getErrorMessage } from "./utils";
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -13,14 +13,12 @@ type TokenJson = { access_token?: string; [key: string]: unknown };
  * Gets an OIDC token from the GitHub Actions runtime
  * @returns The OIDC token or undefined if the request failed
  */
-export async function getIDToken(): Promise<string | undefined> {
+async function getIDToken(): Promise<string | undefined> {
   try {
     core.debug("Fetching OIDC token from GitHub");
     return await core.getIDToken();
   } catch (error) {
-    core.warning(
-      `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    core.warning(`Failed to get OIDC token: ${getErrorMessage(error)}`);
     return undefined;
   }
 }

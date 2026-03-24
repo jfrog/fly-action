@@ -9,8 +9,7 @@
     "test": "vitest run --exclude 'src/integration-tests/**'",
     "lint": "eslint src/**/*.ts",
     "prepare": "npm run build",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "postinstall": "npm run format"
+    "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
     "@actions/core": "^3.0.0",

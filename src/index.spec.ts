@@ -237,7 +237,7 @@ describe("run", () => {
     (authenticateOidc as Mock).mockRejectedValue("failString");
 
     await run();
-    expect(core.setFailed).toHaveBeenCalledWith("An unknown error occurred");
+    expect(core.setFailed).toHaveBeenCalledWith("failString");
   });
 
   it("calls fly setup with correct binary path", async () => {

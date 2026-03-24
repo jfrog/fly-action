@@ -259,18 +259,17 @@ describe("runPost", () => {
   });
 });
 
-// Test suite for the mainRunner (now runPostScriptLogic)
 describe("runPostScriptLogic", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock core.getState for mainRunner tests
+    // Mock core.getState
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
       return "";
     });
-    // Mock HttpClient for mainRunner tests
+    // Mock HttpClient
     (HttpClient as unknown as Mock).mockImplementation(() => {
       return {
         post: mockHttpClientPost,
