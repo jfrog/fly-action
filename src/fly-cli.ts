@@ -1,0 +1,204 @@
+// Copyright (c) JFrog Ltd. (2025)
+
+import * as core from "@actions/core";
+import * as exec from "@actions/exec";
+import * as tc from "@actions/tool-cache";
+import * as fs from "fs";
+import * as path from "path";
+import {
+  FLY_CLI_DOWNLOAD_BASE,
+  PLATFORM_MAP,
+  ARCH_MAP,
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
+} from "./constants";
+import { FlyClientResponse } from "./types";
+
+const FLY_TOOL_NAME = "fly";
+
+/**
+ * Maps Node.js process.platform/arch to the Go binary naming used by releases.jfrog.io.
+ * Throws if the current platform or architecture is unsupported.
+ */
+export function resolvePlatformArch(): { os: string; arch: string } {
+  const os = PLATFORM_MAP[process.platform];
+  if (!os) {
+    throw new Error(
+      `Unsupported platform: ${process.platform}. Supported: ${Object.keys(PLATFORM_MAP).join(", ")}`,
+    );
+  }
+  const arch = ARCH_MAP[process.arch];
+  if (!arch) {
+    throw new Error(
+      `Unsupported architecture: ${process.arch}. Supported: ${Object.keys(ARCH_MAP).join(", ")}`,
+    );
+  }
+  return { os, arch };
+}
+
+/**
+ * Builds the download URL for the fly CLI binary.
+ */
+export function buildDownloadUrl(os: string, arch: string): string {
+  const ext = os === "windows" ? ".exe" : "";
+  return `${FLY_CLI_DOWNLOAD_BASE}/${os}-${arch}/${FLY_TOOL_NAME}${ext}`;
+}
+
+/**
+ * Returns the binary filename for the current platform.
+ */
+export function getBinaryName(): string {
+  return process.platform === "win32" ? "fly.exe" : "fly";
+}
+
+/**
+ * Resolves the fly CLI version by running `fly version` and parsing the
+ * structured JSON output. The command outputs:
+ *   {"command":"version","results":[{"name":"fly","status":"success","message":"<version>"}]}
+ *
+ * Extracts a semver (X.Y.Z) from the message field. Falls back to the raw
+ * message or "unknown" if parsing fails.
+ */
+export async function resolveVersion(binPath: string): Promise<string> {
+  let stdout = "";
+  await exec.exec(binPath, ["version"], {
+    silent: true,
+    listeners: {
+      stdout: (data) => {
+        stdout += data.toString();
+      },
+    },
+  });
+
+  try {
+    const response: FlyClientResponse = JSON.parse(stdout);
+    const flyResult = response.results.find((r) => r.name === "fly");
+    const message = flyResult?.message || "";
+
+    const semverMatch = message.match(/(\d+\.\d+\.\d+)/);
+    if (semverMatch) {
+      return semverMatch[1];
+    }
+    return message.trim().slice(0, 40) || "unknown";
+  } catch {
+    const semverMatch = stdout.match(/(\d+\.\d+\.\d+)/);
+    if (semverMatch) {
+      return semverMatch[1];
+    }
+    return stdout.trim().slice(0, 40) || "unknown";
+  }
+}
+
+/**
+ * Downloads the fly CLI binary from releases.jfrog.io and caches it using
+ * @actions/tool-cache. Returns the directory containing the cached binary.
+ *
+ * On subsequent runs (self-hosted runners), a cached version is reused if available.
+ */
+export async function downloadFlyCLI(): Promise<string> {
+  const { os, arch } = resolvePlatformArch();
+  const url = buildDownloadUrl(os, arch);
+  const binaryName = getBinaryName();
+
+  core.info(`Downloading Fly CLI from ${url}`);
+  const downloadedPath = await tc.downloadTool(url);
+
+  if (process.platform !== "win32") {
+    fs.chmodSync(downloadedPath, 0o755);
+  }
+
+  const version = await resolveVersion(downloadedPath);
+  core.info(`Fly CLI version: ${version}`);
+
+  const cachedDir = await tc.cacheFile(
+    downloadedPath,
+    binaryName,
+    FLY_TOOL_NAME,
+    version,
+  );
+
+  if (process.platform !== "win32") {
+    fs.chmodSync(path.join(cachedDir, binaryName), 0o755);
+  }
+
+  core.addPath(cachedDir);
+  core.info(`Fly CLI cached and added to PATH: ${cachedDir}`);
+
+  return cachedDir;
+}
+
+/**
+ * Executes the fly CLI with the given arguments, captures JSON stdout,
+ * and returns the parsed response. The binary must already be on PATH
+ * (set up by the root action via downloadFlyCLI).
+ */
+export async function execFlyCLI(
+  args: string[],
+): Promise<FlyClientResponse> {
+  let stdout = "";
+  let stderr = "";
+
+  const exitCode = await exec.exec(FLY_TOOL_NAME, args, {
+    ignoreReturnCode: true,
+    listeners: {
+      stdout: (data) => {
+        stdout += data.toString();
+      },
+      stderr: (data) => {
+        stderr += data.toString();
+      },
+    },
+  });
+
+  if (stderr.trim()) {
+    core.info(`Fly CLI stderr:\n${stderr.trim()}`);
+  }
+
+  let response: FlyClientResponse;
+  try {
+    response = JSON.parse(stdout);
+  } catch {
+    throw new Error(
+      `Failed to parse Fly CLI JSON output (exit code ${exitCode}).\n` +
+        `stdout: ${stdout}\nstderr: ${stderr}`,
+    );
+  }
+
+  return response;
+}
+
+/**
+ * Reads FLY_URL and FLY_ACCESS_TOKEN from the environment.
+ * These are set by the root fly-action during OIDC authentication.
+ * Throws a descriptive error if either is missing.
+ */
+export function getAuthEnv(): { url: string; token: string } {
+  const url = process.env[ENV_FLY_URL_RUNTIME];
+  if (!url) {
+    throw new Error(
+      `${ENV_FLY_URL_RUNTIME} environment variable is not set. ` +
+        `Run jfrog/fly-action@v1 first to authenticate.`,
+    );
+  }
+
+  const token = process.env[ENV_FLY_ACCESS_TOKEN_RUNTIME];
+  if (!token) {
+    throw new Error(
+      `${ENV_FLY_ACCESS_TOKEN_RUNTIME} environment variable is not set. ` +
+        `Run jfrog/fly-action@v1 first to authenticate.`,
+    );
+  }
+
+  return { url, token };
+}
+
+/**
+ * Splits a multiline action input into individual arguments.
+ * Filters out empty lines and trims whitespace.
+ */
+export function parseMultilineInput(input: string): string[] {
+  return input
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}

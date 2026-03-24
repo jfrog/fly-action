@@ -23,6 +23,27 @@ export const ENV_FLY_ACTION_CONFIGURED = "FLY_ACTION_CONFIGURED";
 // Exported to GITHUB_ENV so subsequent steps can use ${{ env.FLY_REGISTRY_SUBDOMAIN }}
 export const ENV_FLY_REGISTRY_SUBDOMAIN = "FLY_REGISTRY_SUBDOMAIN";
 
+// Runtime env vars exported to GITHUB_ENV by the root action so that
+// sub-actions (upload/download) and user run: steps can use the fly CLI.
+export const ENV_FLY_URL_RUNTIME = "FLY_URL";
+export const ENV_FLY_ACCESS_TOKEN_RUNTIME = "FLY_ACCESS_TOKEN";
+
+// Fly CLI binary download from releases.jfrog.io.
+// [RELEASE] is an Artifactory token that resolves to the latest published version.
+export const FLY_CLI_DOWNLOAD_BASE =
+  "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]";
+
+export const PLATFORM_MAP: Record<string, string> = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+};
+
+export const ARCH_MAP: Record<string, string> = {
+  x64: "amd64",
+  arm64: "arm64",
+};
+
 /**
  * Supported standard package managers - always configured by fly-client.
  */

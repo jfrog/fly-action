@@ -2,6 +2,9 @@
 dist/
 coverage/
 
+# Fly CLI binaries (downloaded at runtime from releases.jfrog.io)
+bin/
+
 # Environment variables
 .env
 

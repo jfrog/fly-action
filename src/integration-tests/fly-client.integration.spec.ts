@@ -2,30 +2,53 @@
 
 /**
  * Integration tests for the Fly Client CLI.
- * These tests verify that the fly-client is functional and accepts expected arguments.
+ * These tests download the latest fly CLI binary from releases.jfrog.io
+ * and verify that it is functional and accepts expected arguments.
  *
- * Note: These tests run against the actual fly-client binary and require:
- * - The appropriate binary for your platform (darwin-arm64, darwin-x64, linux-arm64, linux-x64)
- * - The binary to be present in the bin/ directory
+ * Note: These tests require network access to download the binary.
  */
 
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
 import { execSync, spawn, SpawnOptions } from "child_process";
-import { SUPPORTED_PACKAGE_MANAGERS } from "../constants";
+import { SUPPORTED_PACKAGE_MANAGERS, PLATFORM_MAP, ARCH_MAP, FLY_CLI_DOWNLOAD_BASE } from "../constants";
 
-// Determine the correct binary for the current platform
-const getBinaryPath = (): string => {
-  const binName = `fly-${process.platform}-${process.arch}`;
-  return path.resolve(__dirname, "..", "..", "bin", binName);
-};
+let binPath: string;
+
+/**
+ * Downloads the fly CLI binary from releases.jfrog.io to a temp directory.
+ * Uses the same URL pattern as the action's downloadFlyCLI function.
+ */
+async function downloadBinary(): Promise<string> {
+  const osMapped = PLATFORM_MAP[process.platform];
+  const archMapped = ARCH_MAP[process.arch];
+  if (!osMapped || !archMapped) {
+    throw new Error(`Unsupported platform/arch: ${process.platform}/${process.arch}`);
+  }
+
+  const ext = process.platform === "win32" ? ".exe" : "";
+  const binaryName = `fly${ext}`;
+  const url = `${FLY_CLI_DOWNLOAD_BASE}/${osMapped}-${archMapped}/${binaryName}`;
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fly-integration-test-"));
+  const dest = path.join(tmpDir, binaryName);
+
+  // Use curl for the download — available on all GitHub Actions runners and macOS/Linux
+  execSync(`curl -fsSL -o "${dest}" "${url}"`, { timeout: 60000 });
+
+  if (process.platform !== "win32") {
+    fs.chmodSync(dest, 0o755);
+  }
+
+  return dest;
+}
 
 // Helper to execute binary and capture output
 const execBinary = (
   args: string[],
   env?: Record<string, string>,
 ): { stdout: string; stderr: string; exitCode: number } => {
-  const binPath = getBinaryPath();
   try {
     const result = execSync(`"${binPath}" ${args.join(" ")}`, {
       encoding: "utf-8",
@@ -53,7 +76,6 @@ const spawnBinary = (
   env?: Record<string, string>,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   return new Promise((resolve) => {
-    const binPath = getBinaryPath();
     const options: SpawnOptions = {
       env: { ...process.env, ...env },
     };
@@ -99,32 +121,24 @@ const spawnBinary = (
   });
 };
 
+// Download binary once before all tests
+beforeAll(async () => {
+  binPath = await downloadBinary();
+}, 120000); // 2 min timeout for download
+
 describe("Fly Client Integration Tests", () => {
-  const binPath = getBinaryPath();
-
-  describe("Fly client existence and permissions", () => {
-    it("should have the fly-client file present", () => {
-      expect(fs.existsSync(binPath)).toBe(true);
-    });
-
+  describe("Fly client binary", () => {
     it("should be an executable file", () => {
       const stats = fs.statSync(binPath);
       expect(stats.isFile()).toBe(true);
-      // Check if file has execute permissions (on Unix-like systems)
       if (process.platform !== "win32") {
-        const isExecutable = !!(stats.mode & fs.constants.X_OK);
-        if (!isExecutable) {
-          // Make it executable for the test
-          fs.chmodSync(binPath, 0o755);
-        }
-        const updatedStats = fs.statSync(binPath);
-        expect(!!(updatedStats.mode & fs.constants.X_OK)).toBe(true);
+        expect(!!(stats.mode & fs.constants.X_OK)).toBe(true);
       }
     });
 
     it("should have reasonable file size (> 1MB)", () => {
       const stats = fs.statSync(binPath);
-      expect(stats.size).toBeGreaterThan(1024 * 1024); // > 1MB
+      expect(stats.size).toBeGreaterThan(1024 * 1024);
     });
   });
 
@@ -132,7 +146,7 @@ describe("Fly Client Integration Tests", () => {
     it("should display version information with --version flag", () => {
       const result = execBinary(["--version"]);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toMatch(/\d+\.\d+\.\d+|[a-f0-9]+/i); // semver or commit hash
+      expect(result.stdout).toMatch(/\d+\.\d+\.\d+|[a-f0-9]+/i);
     });
 
     it("should display version information with -v flag", () => {
@@ -165,13 +179,15 @@ describe("Fly Client Integration Tests", () => {
       expect(result.stdout).toContain("NAME:");
     });
 
-    it("should list available commands", () => {
+    it("should list available commands including upload and download", () => {
       const result = execBinary(["--help"]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("setup");
       expect(result.stdout).toContain("status");
       expect(result.stdout).toContain("teardown");
       expect(result.stdout).toContain("version");
+      expect(result.stdout).toContain("upload");
+      expect(result.stdout).toContain("download");
     });
   });
 
@@ -187,12 +203,10 @@ describe("Fly Client Integration Tests", () => {
       const result = execBinary(["setup", "--help"]);
       expect(result.exitCode).toBe(0);
 
-      // Check all our supported package managers are listed
       SUPPORTED_PACKAGE_MANAGERS.forEach((manager) => {
         expect(result.stdout.toLowerCase()).toContain(manager.toLowerCase());
       });
 
-      // Check container managers are also listed
       expect(result.stdout.toLowerCase()).toContain("docker");
       expect(result.stdout.toLowerCase()).toContain("podman");
       expect(result.stdout.toLowerCase()).toContain("helm");
@@ -222,17 +236,13 @@ describe("Fly Client Integration Tests", () => {
 
   describe("Setup command argument validation", () => {
     it("should require URL when running setup", async () => {
-      // Run setup without URL - should fail
       const result = await spawnBinary(["setup", "npm"]);
-      // The binary should fail without a URL
       expect(result.exitCode).not.toBe(0);
     });
 
     it("should accept package manager arguments", async () => {
-      // This will fail due to missing URL, but should parse the args correctly
       const result = await spawnBinary(["setup", "npm", "pip", "maven"]);
-      // Just checking it doesn't crash on parsing
-      expect(result.exitCode).not.toBe(0); // Fails due to missing URL, not parsing
+      expect(result.exitCode).not.toBe(0);
     });
 
     it("should accept multiple package managers", async () => {
@@ -243,7 +253,6 @@ describe("Fly Client Integration Tests", () => {
         "podman",
         "helm",
       ]);
-      // Will fail due to missing URL, but should accept all managers
       expect(result.exitCode).not.toBe(0);
     });
 
@@ -254,9 +263,7 @@ describe("Fly Client Integration Tests", () => {
         "--url",
         "https://example.com",
       ]);
-      // Will fail due to missing auth, but should accept URL
       expect(result.exitCode).not.toBe(0);
-      // Should not contain URL parsing error
       expect(result.stderr).not.toContain("invalid URL");
     });
   });
@@ -269,7 +276,6 @@ describe("Fly Client Integration Tests", () => {
       "helm",
     ];
 
-    // Test each supported standard package manager individually
     SUPPORTED_PACKAGE_MANAGERS.forEach((manager) => {
       it(`should accept ${manager} as a valid package manager`, async () => {
         const result = await spawnBinary([
@@ -278,7 +284,6 @@ describe("Fly Client Integration Tests", () => {
           "--url",
           "https://test.example.com",
         ]);
-        // Should fail on auth, NOT on "unknown package manager"
         const combinedOutput = (result.stdout + result.stderr).toLowerCase();
         expect(combinedOutput).not.toContain("unknown package manager");
         expect(combinedOutput).not.toContain("invalid package manager");
@@ -286,7 +291,6 @@ describe("Fly Client Integration Tests", () => {
       });
     });
 
-    // Test each container package manager individually
     ["docker", "podman", "helm"].forEach((manager) => {
       it(`should accept ${manager} (container) as a valid package manager`, async () => {
         const result = await spawnBinary([
@@ -295,7 +299,6 @@ describe("Fly Client Integration Tests", () => {
           "--url",
           "https://test.example.com",
         ]);
-        // Should fail on auth, NOT on "unknown package manager"
         const combinedOutput = (result.stdout + result.stderr).toLowerCase();
         expect(combinedOutput).not.toContain("unknown package manager");
         expect(combinedOutput).not.toContain("invalid package manager");
@@ -310,7 +313,6 @@ describe("Fly Client Integration Tests", () => {
         "--url",
         "https://test.example.com",
       ]);
-      // Should fail on auth, NOT on parsing or unknown managers
       const combinedOutput = (result.stdout + result.stderr).toLowerCase();
       expect(combinedOutput).not.toContain("unknown package manager");
       expect(combinedOutput).not.toContain("invalid package manager");
@@ -318,21 +320,9 @@ describe("Fly Client Integration Tests", () => {
     });
 
     it("should accept all package managers in the exact order the action sends them", async () => {
-      // This mimics exactly what index.ts sends to the binary
       const managersFromAction = [
-        "dotnet",
-        "go",
-        "gradle",
-        "maven",
-        "npm",
-        "pip",
-        "pipenv",
-        "pnpm",
-        "twine",
-        "nuget",
-        "docker",
-        "helm",
-        "podman",
+        "dotnet", "go", "gradle", "maven", "npm", "pip",
+        "pipenv", "pnpm", "twine", "nuget", "docker", "helm", "podman",
       ];
 
       const result = await spawnBinary([
@@ -350,16 +340,133 @@ describe("Fly Client Integration Tests", () => {
     it("should handle duplicate package managers gracefully", async () => {
       const result = await spawnBinary([
         "setup",
-        "npm",
-        "npm",
-        "pip",
-        "pip",
+        "npm", "npm", "pip", "pip",
         "--url",
         "https://test.example.com",
       ]);
-      // Should not crash on duplicates
       const combinedOutput = (result.stdout + result.stderr).toLowerCase();
       expect(combinedOutput).not.toContain("duplicate");
+    });
+  });
+
+  describe("Upload command", () => {
+    it("should display upload help", () => {
+      const result = execBinary(["upload", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Upload files to Fly generic storage");
+      expect(result.stdout).toContain("FILE");
+    });
+
+    it("should list upload flags in help", () => {
+      const result = execBinary(["upload", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("--name");
+      expect(result.stdout).toContain("--version");
+      expect(result.stdout).toContain("--url");
+      expect(result.stdout).toContain("--access-token");
+      expect(result.stdout).toContain("--exclude");
+    });
+
+    it("should fail with clear error when no file arguments given", async () => {
+      const result = await spawnBinary([
+        "upload",
+        "--name", "test-pkg",
+        "--version", "1.0.0",
+        "--url", "https://test.example.com",
+        "--access-token", "fake-token",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+      const combined = result.stdout + result.stderr;
+      expect(combined.toLowerCase()).toContain("file");
+    });
+
+    it("should require --name flag", async () => {
+      const result = await spawnBinary([
+        "upload",
+        "--version", "1.0.0",
+        "--url", "https://test.example.com",
+        "somefile.txt",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+    });
+
+    it("should require --version flag", async () => {
+      const result = await spawnBinary([
+        "upload",
+        "--name", "test-pkg",
+        "--url", "https://test.example.com",
+        "somefile.txt",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+    });
+  });
+
+  describe("Download command", () => {
+    it("should display download help", () => {
+      const result = execBinary(["download", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Download files from Fly generic storage");
+      expect(result.stdout).toContain("FILE");
+    });
+
+    it("should list download flags in help", () => {
+      const result = execBinary(["download", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("--name");
+      expect(result.stdout).toContain("--version");
+      expect(result.stdout).toContain("--url");
+      expect(result.stdout).toContain("--access-token");
+      expect(result.stdout).toContain("--exclude");
+      expect(result.stdout).toContain("--output-dir");
+    });
+
+    it("should fail with clear error when no filename arguments given", async () => {
+      const result = await spawnBinary([
+        "download",
+        "--name", "test-pkg",
+        "--version", "1.0.0",
+        "--url", "https://test.example.com",
+        "--access-token", "fake-token",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+      const combined = result.stdout + result.stderr;
+      expect(combined.toLowerCase()).toContain("file");
+    });
+
+    it("should require --name flag", async () => {
+      const result = await spawnBinary([
+        "download",
+        "--version", "1.0.0",
+        "--url", "https://test.example.com",
+        "somefile.txt",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+    });
+
+    it("should require --version flag", async () => {
+      const result = await spawnBinary([
+        "download",
+        "--name", "test-pkg",
+        "--url", "https://test.example.com",
+        "somefile.txt",
+      ]);
+      expect(result.exitCode).not.toBe(0);
+    });
+
+    it("should accept --output-dir flag", async () => {
+      const result = await spawnBinary([
+        "download",
+        "--name", "test-pkg",
+        "--version", "1.0.0",
+        "--output-dir", "/tmp",
+        "--url", "https://test.example.com",
+        "--access-token", "fake-token",
+        "somefile.txt",
+      ]);
+      // Will fail on auth, but should accept the flag without parsing errors
+      const combined = (result.stdout + result.stderr).toLowerCase();
+      expect(combined).not.toContain("invalid flag");
+      expect(combined).not.toContain("unknown flag");
     });
   });
 
@@ -396,7 +503,6 @@ describe("Fly Client Integration Tests", () => {
       const result = await spawnBinary(["setup", "npm"], {
         FLY_URL: "https://test.example.com",
       });
-      // Should progress further (fail on auth, not URL)
       expect(result.exitCode).not.toBe(0);
     });
 
@@ -431,32 +537,20 @@ describe("Fly Client Integration Tests", () => {
 
 describe("Package manager installation tolerance", () => {
   it("should not fail due to package managers not being installed on the system", async () => {
-    // Run setup with all package managers - some may not be installed on the test machine
-    // (e.g., dotnet, nuget, gradle, helm, podman are often not installed)
-    // The fly-client should NOT fail because a package manager isn't installed
     const result = await spawnBinary([
       "setup",
       ...SUPPORTED_PACKAGE_MANAGERS,
-      "docker",
-      "podman",
-      "helm",
+      "docker", "podman", "helm",
       "--url",
       "https://test.example.com",
     ]);
 
     const combinedOutput = result.stdout + result.stderr;
-
-    // Should NOT contain errors about package managers not being installed/found
-    // Error format: "failed to setup "dotnet": ... executable file not found in $PATH"
     expect(combinedOutput).not.toContain("executable file not found");
     expect(combinedOutput).not.toContain("not found in $PATH");
-
-    // The only failure should be authentication-related, not package-manager-availability-related
-    // Exit code will be non-zero due to missing auth, which is expected
     expect(result.exitCode).not.toBe(0);
   });
 
-  // Test individual package managers that are commonly NOT installed
   const uncommonManagers = ["dotnet", "nuget", "gradle", "helm", "podman"];
 
   uncommonManagers.forEach((manager) => {
@@ -469,42 +563,9 @@ describe("Package manager installation tolerance", () => {
       ]);
 
       const combinedOutput = result.stdout + result.stderr;
-
-      // Should NOT fail because the package manager binary isn't installed
-      // Error format: "failed to setup "dotnet": ... executable file not found in $PATH"
       expect(combinedOutput).not.toContain("executable file not found");
       expect(combinedOutput).not.toContain("not found in $PATH");
-
-      // Failure should be auth-related, not package-manager-availability-related
       expect(result.exitCode).not.toBe(0);
     });
-  });
-});
-
-describe("Fly client cross-platform check", () => {
-  it("should have all platform fly-client binaries present", () => {
-    const binDir = path.resolve(__dirname, "..", "..", "bin");
-    const expectedBinaries = [
-      "fly-darwin-arm64",
-      "fly-darwin-x64",
-      "fly-linux-arm64",
-      "fly-linux-x64",
-      "fly-win32-arm64.exe",
-      "fly-win32-x64.exe",
-    ];
-
-    expectedBinaries.forEach((binName) => {
-      const binPath = path.join(binDir, binName);
-      expect(fs.existsSync(binPath)).toBe(true);
-    });
-  });
-
-  it("should have consistent version across all fly-client binaries", () => {
-    // Get version from current platform fly-client
-    const currentResult = execBinary(["version"]);
-    const currentVersion = currentResult.stdout;
-
-    // We can only test the current platform's fly-client
-    expect(currentVersion).toContain("Version:");
   });
 });

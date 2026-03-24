@@ -1,0 +1,333 @@
+// Copyright (c) JFrog Ltd. (2025)
+
+import { vi, type Mock } from "vitest";
+
+vi.mock("@actions/core");
+vi.mock("@actions/exec");
+vi.mock("@actions/tool-cache");
+vi.mock("fs", async () => {
+  const actual = await vi.importActual<typeof import("fs")>("fs");
+  return { ...actual, chmodSync: vi.fn() };
+});
+
+import * as core from "@actions/core";
+import * as exec from "@actions/exec";
+import * as tc from "@actions/tool-cache";
+import * as fs from "fs";
+import {
+  resolvePlatformArch,
+  buildDownloadUrl,
+  getBinaryName,
+  resolveVersion,
+  downloadFlyCLI,
+  execFlyCLI,
+  getAuthEnv,
+  parseMultilineInput,
+} from "./fly-cli";
+import {
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
+} from "./constants";
+
+describe("resolvePlatformArch", () => {
+  it("maps darwin/arm64 correctly", () => {
+    const origPlatform = process.platform;
+    const origArch = process.arch;
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    Object.defineProperty(process, "arch", { value: "arm64" });
+
+    const result = resolvePlatformArch();
+    expect(result).toEqual({ os: "darwin", arch: "arm64" });
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+    Object.defineProperty(process, "arch", { value: origArch });
+  });
+
+  it("maps linux/x64 to linux/amd64", () => {
+    const origPlatform = process.platform;
+    const origArch = process.arch;
+    Object.defineProperty(process, "platform", { value: "linux" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+
+    const result = resolvePlatformArch();
+    expect(result).toEqual({ os: "linux", arch: "amd64" });
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+    Object.defineProperty(process, "arch", { value: origArch });
+  });
+
+  it("maps win32/x64 to windows/amd64", () => {
+    const origPlatform = process.platform;
+    const origArch = process.arch;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    Object.defineProperty(process, "arch", { value: "x64" });
+
+    const result = resolvePlatformArch();
+    expect(result).toEqual({ os: "windows", arch: "amd64" });
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+    Object.defineProperty(process, "arch", { value: origArch });
+  });
+
+  it("throws for unsupported platform", () => {
+    const origPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "freebsd" });
+
+    expect(() => resolvePlatformArch()).toThrow("Unsupported platform: freebsd");
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+  });
+
+  it("throws for unsupported architecture", () => {
+    const origArch = process.arch;
+    Object.defineProperty(process, "arch", { value: "ia32" });
+
+    expect(() => resolvePlatformArch()).toThrow("Unsupported architecture: ia32");
+
+    Object.defineProperty(process, "arch", { value: origArch });
+  });
+});
+
+describe("buildDownloadUrl", () => {
+  it("builds URL for darwin-arm64", () => {
+    const url = buildDownloadUrl("darwin", "arm64");
+    expect(url).toBe(
+      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/darwin-arm64/fly",
+    );
+  });
+
+  it("builds URL for windows-amd64 with .exe", () => {
+    const url = buildDownloadUrl("windows", "amd64");
+    expect(url).toBe(
+      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/windows-amd64/fly.exe",
+    );
+  });
+
+  it("builds URL for linux-amd64", () => {
+    const url = buildDownloadUrl("linux", "amd64");
+    expect(url).toBe(
+      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/linux-amd64/fly",
+    );
+  });
+});
+
+describe("getBinaryName", () => {
+  it("returns fly on non-windows", () => {
+    const origPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux" });
+
+    expect(getBinaryName()).toBe("fly");
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+  });
+
+  it("returns fly.exe on windows", () => {
+    const origPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32" });
+
+    expect(getBinaryName()).toBe("fly.exe");
+
+    Object.defineProperty(process, "platform", { value: origPlatform });
+  });
+});
+
+describe("resolveVersion", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("extracts semver from JSON version command output", async () => {
+    const jsonOutput = JSON.stringify({
+      command: "version",
+      results: [{ name: "fly", status: "success", message: "1.2.3" }],
+    });
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonOutput));
+      return 0;
+    });
+
+    const version = await resolveVersion("/tmp/fly");
+    expect(version).toBe("1.2.3");
+  });
+
+  it("extracts semver from formatted version message", async () => {
+    const jsonOutput = JSON.stringify({
+      command: "version",
+      results: [
+        { name: "fly", status: "success", message: "Fly CLI\nVersion: 2.5.0" },
+      ],
+    });
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonOutput));
+      return 0;
+    });
+
+    const version = await resolveVersion("/tmp/fly");
+    expect(version).toBe("2.5.0");
+  });
+
+  it("falls back to raw stdout when JSON parsing fails", async () => {
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from("fly version 3.0.1\n"));
+      return 0;
+    });
+
+    const version = await resolveVersion("/tmp/fly");
+    expect(version).toBe("3.0.1");
+  });
+
+  it("returns unknown when no version can be extracted", async () => {
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(""));
+      return 0;
+    });
+
+    const version = await resolveVersion("/tmp/fly");
+    expect(version).toBe("unknown");
+  });
+});
+
+describe("downloadFlyCLI", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("downloads, caches, and adds to PATH", async () => {
+    const jsonOutput = JSON.stringify({
+      command: "version",
+      results: [{ name: "fly", status: "success", message: "1.2.3" }],
+    });
+    (tc.downloadTool as Mock).mockResolvedValue("/tmp/fly-download");
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonOutput));
+      return 0;
+    });
+    (tc.cacheFile as Mock).mockResolvedValue("/cached/fly/1.2.3");
+
+    const result = await downloadFlyCLI();
+
+    expect(tc.downloadTool).toHaveBeenCalled();
+    expect(fs.chmodSync).toHaveBeenCalledWith("/tmp/fly-download", 0o755);
+    expect(tc.cacheFile).toHaveBeenCalledWith(
+      "/tmp/fly-download",
+      expect.any(String),
+      "fly",
+      "1.2.3",
+    );
+    expect(core.addPath).toHaveBeenCalledWith("/cached/fly/1.2.3");
+    expect(result).toBe("/cached/fly/1.2.3");
+  });
+});
+
+describe("execFlyCLI", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("parses JSON stdout into FlyClientResponse", async () => {
+    const jsonResponse = JSON.stringify({
+      command: "upload",
+      results: [{ name: "file.zip", status: "success" }],
+    });
+
+    vi.mocked(exec.exec).mockImplementation(
+      async (_cmd, _args, options) => {
+        options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+        return 0;
+      },
+    );
+
+    const response = await execFlyCLI(["upload", "--name", "test"]);
+    expect(response.command).toBe("upload");
+    expect(response.results).toHaveLength(1);
+    expect(response.results[0].status).toBe("success");
+  });
+
+  it("throws when stdout is not valid JSON", async () => {
+    vi.mocked(exec.exec).mockImplementation(
+      async (_cmd, _args, options) => {
+        options?.listeners?.stdout?.(Buffer.from("not json"));
+        return 1;
+      },
+    );
+
+    await expect(execFlyCLI(["upload"])).rejects.toThrow(
+      "Failed to parse Fly CLI JSON output",
+    );
+  });
+
+  it("logs stderr as info", async () => {
+    const jsonResponse = JSON.stringify({
+      command: "upload",
+      results: [],
+    });
+
+    vi.mocked(exec.exec).mockImplementation(
+      async (_cmd, _args, options) => {
+        options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+        options?.listeners?.stderr?.(Buffer.from("some debug log\n"));
+        return 0;
+      },
+    );
+
+    await execFlyCLI(["upload"]);
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining("some debug log"),
+    );
+  });
+});
+
+describe("getAuthEnv", () => {
+  afterEach(() => {
+    delete process.env[ENV_FLY_URL_RUNTIME];
+    delete process.env[ENV_FLY_ACCESS_TOKEN_RUNTIME];
+  });
+
+  it("returns url and token from environment", () => {
+    process.env[ENV_FLY_URL_RUNTIME] = "https://tenant.jfrog.io";
+    process.env[ENV_FLY_ACCESS_TOKEN_RUNTIME] = "test-token";
+
+    const { url, token } = getAuthEnv();
+    expect(url).toBe("https://tenant.jfrog.io");
+    expect(token).toBe("test-token");
+  });
+
+  it("throws when FLY_URL is missing", () => {
+    delete process.env[ENV_FLY_URL_RUNTIME];
+    process.env[ENV_FLY_ACCESS_TOKEN_RUNTIME] = "test-token";
+
+    expect(() => getAuthEnv()).toThrow(
+      "FLY_URL environment variable is not set",
+    );
+  });
+
+  it("throws when FLY_ACCESS_TOKEN is missing", () => {
+    process.env[ENV_FLY_URL_RUNTIME] = "https://tenant.jfrog.io";
+    delete process.env[ENV_FLY_ACCESS_TOKEN_RUNTIME];
+
+    expect(() => getAuthEnv()).toThrow(
+      "FLY_ACCESS_TOKEN environment variable is not set",
+    );
+  });
+});
+
+describe("parseMultilineInput", () => {
+  it("splits by newlines and trims whitespace", () => {
+    const result = parseMultilineInput("file1.zip\n  file2.tar.gz  \nfile3.bin");
+    expect(result).toEqual(["file1.zip", "file2.tar.gz", "file3.bin"]);
+  });
+
+  it("filters out empty lines", () => {
+    const result = parseMultilineInput("file1.zip\n\n\nfile2.zip\n");
+    expect(result).toEqual(["file1.zip", "file2.zip"]);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(parseMultilineInput("")).toEqual([]);
+    expect(parseMultilineInput("  \n  \n  ")).toEqual([]);
+  });
+
+  it("handles single-line input", () => {
+    expect(parseMultilineInput("file.zip")).toEqual(["file.zip"]);
+  });
+});

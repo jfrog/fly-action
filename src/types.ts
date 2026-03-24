@@ -30,3 +30,22 @@ export interface CollectedArtifact {
 export interface EndCiResponse {
   artifacts: CollectedArtifact[];
 }
+
+/**
+ * JSON envelope written to stdout by every fly CLI command.
+ * Mirrors Go type: client/internal/output/response.go → Response
+ */
+export interface FlyClientResponse {
+  command: string;
+  results: FlyClientResult[];
+}
+
+/**
+ * A single item within a FlyClientResponse.
+ * Mirrors Go type: client/internal/output/response.go → Result
+ */
+export interface FlyClientResult {
+  name: string;
+  status: "success" | "error" | "configured" | "not_configured";
+  message?: string;
+}

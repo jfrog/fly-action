@@ -2,9 +2,8 @@
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
-import * as fs from "fs";
-import * as path from "path";
 import { authenticateOidc } from "./oidc";
+import { downloadFlyCLI, getBinaryName } from "./fly-cli";
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
@@ -12,25 +11,11 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
 } from "./constants";
-
-/**
- * Resolves the platform-specific Fly binary path and ensures it is executable
- */
-export function resolveFlyCLIBinaryPath(): string {
-  const ext = process.platform === "win32" ? ".exe" : "";
-  const binName = `fly-${process.platform}-${process.arch}${ext}`;
-  const binPath = path.resolve(__dirname, "..", "bin", binName);
-  if (!fs.existsSync(binPath)) {
-    throw new Error(
-      `Fly CLI binary not found at ${binPath} for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
-    );
-  }
-  if (process.platform !== "win32") fs.chmodSync(binPath, 0o755);
-  return binPath;
-}
 
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
@@ -102,12 +87,21 @@ export async function run(): Promise<void> {
     const registryHost = flyTenantUrl.replace(/^https?:\/\//, "");
     core.exportVariable(ENV_FLY_REGISTRY_SUBDOMAIN, registryHost);
 
+    // Export credentials to GITHUB_ENV so sub-actions (upload/download)
+    // and user run: steps can use the fly CLI.
+    core.exportVariable(ENV_FLY_URL_RUNTIME, flyTenantUrl);
+    core.exportVariable(ENV_FLY_ACCESS_TOKEN_RUNTIME, accessToken);
+
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
     core.info("State saved for post-job notification.");
 
-    const binPath = resolveFlyCLIBinaryPath();
+    const binDir = await downloadFlyCLI();
+    const binPath = `${binDir}/${getBinaryName()}`;
     core.info(`CLI binary path: ${binPath}`);
+
+    // Pass env vars inline for the setup call — exportVariable writes to
+    // GITHUB_ENV which only takes effect in subsequent steps, not this one.
     const envVars: Record<string, string> = {
       FLY_URL: flyTenantUrl,
       FLY_ACCESS_TOKEN: accessToken,
@@ -118,7 +112,6 @@ export async function run(): Promise<void> {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
 
-    // Run fly-client setup (fly-client will configure all package managers)
     core.info("Executing Fly CLI setup");
     const args = ["setup"];
     const exitCode = await exec.exec(binPath, args, options);
