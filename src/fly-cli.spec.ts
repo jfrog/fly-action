@@ -190,11 +190,22 @@ describe("resolveVersion", () => {
     const version = await resolveVersion("/tmp/fly");
     expect(version).toBe("unknown");
   });
+
+  it("returns unknown when exec throws (e.g. binary not found)", async () => {
+    vi.mocked(exec.exec).mockRejectedValue(new Error("ENOENT: no such file"));
+
+    const version = await resolveVersion("/tmp/nonexistent");
+    expect(version).toBe("unknown");
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to run fly version"),
+    );
+  });
 });
 
 describe("downloadFlyCLI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    (tc.find as Mock).mockReturnValue("");
   });
 
   it("downloads, caches, and adds to PATH", async () => {
@@ -222,6 +233,26 @@ describe("downloadFlyCLI", () => {
       "fly",
       "1.2.3",
     );
+    expect(core.addPath).toHaveBeenCalledWith("/cached/fly/1.2.3");
+    expect(result).toBe("/cached/fly/1.2.3");
+  });
+
+  it("reuses existing tool-cache when version matches", async () => {
+    const jsonOutput = JSON.stringify({
+      command: "version",
+      results: [{ name: "fly", status: "success", message: "1.2.3" }],
+    });
+    (tc.downloadTool as Mock).mockResolvedValue("/tmp/fly-download");
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonOutput));
+      return 0;
+    });
+    (tc.find as Mock).mockReturnValue("/cached/fly/1.2.3");
+
+    const result = await downloadFlyCLI();
+
+    expect(tc.downloadTool).toHaveBeenCalled();
+    expect(tc.cacheFile).not.toHaveBeenCalled();
     expect(core.addPath).toHaveBeenCalledWith("/cached/fly/1.2.3");
     expect(result).toBe("/cached/fly/1.2.3");
   });
@@ -276,6 +307,43 @@ describe("execFlyCLI", () => {
     expect(core.info).toHaveBeenCalledWith(
       expect.stringContaining("some debug log"),
     );
+  });
+
+  it("warns on non-zero exit code with valid JSON", async () => {
+    const jsonResponse = JSON.stringify({
+      command: "upload",
+      results: [{ name: "file.zip", status: "error", message: "auth failed" }],
+    });
+
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+      return 1;
+    });
+
+    const response = await execFlyCLI(["upload"]);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("exited with code 1"),
+    );
+    expect(response.results[0].status).toBe("error");
+  });
+
+  it("passes env vars to exec when provided", async () => {
+    const jsonResponse = JSON.stringify({
+      command: "upload",
+      results: [],
+    });
+
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(jsonResponse));
+      expect(options?.env?.FLY_URL).toBe("https://test.jfrog.io");
+      expect(options?.env?.FLY_ACCESS_TOKEN).toBe("secret");
+      return 0;
+    });
+
+    await execFlyCLI(["upload"], {
+      FLY_URL: "https://test.jfrog.io",
+      FLY_ACCESS_TOKEN: "secret",
+    });
   });
 });
 

@@ -253,7 +253,7 @@ describe("run", () => {
     await run();
 
     expect(exec.exec).toHaveBeenCalledWith(
-      "/cached/fly/fly",
+      expect.stringMatching(/[/\\]cached[/\\]fly[/\\]fly$/),
       [CLI_CMD_SETUP],
       expect.objectContaining({
         env: expect.objectContaining({

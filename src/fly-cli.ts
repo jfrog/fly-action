@@ -16,6 +16,8 @@ import {
   MAX_VERSION_LENGTH,
   FALLBACK_VERSION,
 } from "./constants";
+
+const WINDOWS_OS = "windows";
 import { FlyClientResponse } from "./types";
 
 const FLY_TOOL_NAME = "fly";
@@ -44,7 +46,7 @@ export function resolvePlatformArch(): { os: string; arch: string } {
  * Builds the download URL for the fly CLI binary.
  */
 export function buildDownloadUrl(os: string, arch: string): string {
-  const ext = os === "windows" ? ".exe" : "";
+  const ext = os === WINDOWS_OS ? ".exe" : "";
   return `${FLY_CLI_DOWNLOAD_BASE}/${os}-${arch}/${FLY_TOOL_NAME}${ext}`;
 }
 
@@ -65,14 +67,21 @@ export function getBinaryName(): string {
  */
 export async function resolveVersion(binPath: string): Promise<string> {
   let stdout = "";
-  await exec.exec(binPath, [CLI_CMD_VERSION], {
-    silent: true,
-    listeners: {
-      stdout: (data) => {
-        stdout += data.toString();
+  try {
+    await exec.exec(binPath, [CLI_CMD_VERSION], {
+      silent: true,
+      listeners: {
+        stdout: (data) => {
+          stdout += data.toString();
+        },
       },
-    },
-  });
+    });
+  } catch (err) {
+    core.warning(
+      `Failed to run fly version: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return FALLBACK_VERSION;
+  }
 
   try {
     const response: FlyClientResponse = JSON.parse(stdout);
@@ -114,6 +123,14 @@ export async function downloadFlyCLI(): Promise<string> {
   const version = await resolveVersion(downloadedPath);
   core.info(`Fly CLI version: ${version}`);
 
+  // Reuse cached binary on self-hosted runners if the same version was previously downloaded
+  const existingCache = tc.find(FLY_TOOL_NAME, version);
+  if (existingCache) {
+    core.info(`Fly CLI ${version} found in tool-cache, skipping re-cache`);
+    core.addPath(existingCache);
+    return existingCache;
+  }
+
   const cachedDir = await tc.cacheFile(
     downloadedPath,
     binaryName,
@@ -135,12 +152,20 @@ export async function downloadFlyCLI(): Promise<string> {
  * Executes the fly CLI with the given arguments, captures JSON stdout,
  * and returns the parsed response. The binary must already be on PATH
  * (set up by the root action via downloadFlyCLI).
+ *
+ * @param args - CLI arguments (subcommand, flags, positional args)
+ * @param env  - Optional extra environment variables merged with process.env.
+ *               Use this to pass secrets (FLY_ACCESS_TOKEN) instead of CLI args
+ *               so they don't appear in process listings.
  */
-export async function execFlyCLI(args: string[]): Promise<FlyClientResponse> {
+export async function execFlyCLI(
+  args: string[],
+  env?: Record<string, string>,
+): Promise<FlyClientResponse> {
   let stdout = "";
   let stderr = "";
 
-  const exitCode = await exec.exec(FLY_TOOL_NAME, args, {
+  const execOptions: exec.ExecOptions = {
     ignoreReturnCode: true,
     listeners: {
       stdout: (data) => {
@@ -150,10 +175,25 @@ export async function execFlyCLI(args: string[]): Promise<FlyClientResponse> {
         stderr += data.toString();
       },
     },
-  });
+  };
+
+  if (env) {
+    execOptions.env = {
+      ...(process.env as Record<string, string>),
+      ...env,
+    };
+  }
+
+  const exitCode = await exec.exec(FLY_TOOL_NAME, args, execOptions);
 
   if (stderr.trim()) {
     core.info(`Fly CLI stderr:\n${stderr.trim()}`);
+  }
+
+  if (exitCode !== 0) {
+    core.warning(
+      `Fly CLI exited with code ${exitCode} for command: ${args[0] || FLY_TOOL_NAME}`,
+    );
   }
 
   let response: FlyClientResponse;

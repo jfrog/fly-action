@@ -2,6 +2,7 @@
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
+import * as path from "path";
 import { authenticateOidc } from "./oidc";
 import { downloadFlyCLI, getBinaryName } from "./fly-cli";
 import {
@@ -99,7 +100,7 @@ export async function run(): Promise<void> {
     core.info("State saved for post-job notification.");
 
     const binDir = await downloadFlyCLI();
-    const binPath = `${binDir}/${getBinaryName()}`;
+    const binPath = path.join(binDir, getBinaryName());
     core.info(`CLI binary path: ${binPath}`);
 
     // Pass env vars inline for the setup call — exportVariable writes to

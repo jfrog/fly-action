@@ -12,10 +12,10 @@ import {
   CLI_CMD_DOWNLOAD,
   CLI_FLAG_NAME,
   CLI_FLAG_VERSION,
-  CLI_FLAG_URL,
-  CLI_FLAG_ACCESS_TOKEN,
   CLI_FLAG_EXCLUDE,
   CLI_FLAG_OUTPUT_DIR,
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
   STATUS_ERROR,
   DEFAULT_OUTPUT_DIR,
 } from "./constants";
@@ -29,6 +29,7 @@ export async function runDownload(): Promise<void> {
     const excludeInput = core.getInput(INPUT_EXCLUDE);
 
     const { url, token } = getAuthEnv();
+    core.setSecret(token);
 
     const files = parseMultilineInput(filesInput);
     if (files.length === 0) {
@@ -45,10 +46,6 @@ export async function runDownload(): Promise<void> {
       version,
       CLI_FLAG_OUTPUT_DIR,
       outputDir,
-      CLI_FLAG_URL,
-      url,
-      CLI_FLAG_ACCESS_TOKEN,
-      token,
     ];
 
     const excludes = parseMultilineInput(excludeInput);
@@ -58,7 +55,10 @@ export async function runDownload(): Promise<void> {
 
     args.push(...files);
 
-    const response = await execFlyCLI(args);
+    const response = await execFlyCLI(args, {
+      [ENV_FLY_URL_RUNTIME]: url,
+      [ENV_FLY_ACCESS_TOKEN_RUNTIME]: token,
+    });
 
     core.setOutput(OUTPUT_RESULTS, JSON.stringify(response.results));
 

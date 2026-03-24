@@ -48,23 +48,26 @@ describe("runDownload", () => {
 
     await runDownload();
 
-    expect(execFlyCLI).toHaveBeenCalledWith([
-      "download",
-      "--name",
-      "my-app",
-      "--version",
-      "1.0.0",
-      "--output-dir",
-      "./release",
-      "--url",
-      "https://tenant.jfrog.io",
-      "--access-token",
-      "test-token",
-      "--exclude",
-      "*.sig",
-      "installer.dmg",
-      "readme.txt",
-    ]);
+    expect(execFlyCLI).toHaveBeenCalledWith(
+      [
+        "download",
+        "--name",
+        "my-app",
+        "--version",
+        "1.0.0",
+        "--output-dir",
+        "./release",
+        "--exclude",
+        "*.sig",
+        "installer.dmg",
+        "readme.txt",
+      ],
+      {
+        FLY_URL: "https://tenant.jfrog.io",
+        FLY_ACCESS_TOKEN: "test-token",
+      },
+    );
+    expect(core.setSecret).toHaveBeenCalledWith("test-token");
     expect(core.setOutput).toHaveBeenCalledWith("results", expect.any(String));
     expect(core.setFailed).not.toHaveBeenCalled();
   });
@@ -94,6 +97,10 @@ describe("runDownload", () => {
 
     expect(execFlyCLI).toHaveBeenCalledWith(
       expect.arrayContaining(["--output-dir", "."]),
+      expect.objectContaining({
+        FLY_URL: "https://tenant.jfrog.io",
+        FLY_ACCESS_TOKEN: "test-token",
+      }),
     );
   });
 
