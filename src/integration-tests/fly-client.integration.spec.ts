@@ -164,8 +164,7 @@ describe("Fly Client Integration Tests", () => {
       expect(result.stdout).toMatch(/\d+\.\d+\.\d+|[a-f0-9]+/i);
     });
 
-    // TODO: enable once the CLI publishes structured JSON for `fly version`
-    it.skip("should display version information with version command", () => {
+    it("should display version information with version command", () => {
       const result = execBinary(["version"]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("Fly CLI");
@@ -189,18 +188,13 @@ describe("Fly Client Integration Tests", () => {
       expect(result.stdout).toContain("NAME:");
     });
 
-    it("should list available commands", () => {
+    it("should list available commands including upload and download", () => {
       const result = execBinary(["--help"]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("setup");
       expect(result.stdout).toContain("status");
       expect(result.stdout).toContain("teardown");
       expect(result.stdout).toContain("version");
-    });
-
-    // TODO: enable once the CLI publishes upload/download commands
-    it.skip("should list upload and download commands", () => {
-      const result = execBinary(["--help"]);
       expect(result.stdout).toContain("upload");
       expect(result.stdout).toContain("download");
     });
@@ -380,8 +374,7 @@ describe("Fly Client Integration Tests", () => {
     });
   });
 
-  // TODO: enable once the CLI publishes upload/download commands
-  describe.skip("Upload command", () => {
+  describe("Upload command", () => {
     it("should display upload help", () => {
       const result = execBinary(["upload", "--help"]);
       expect(result.exitCode).toBe(0);
@@ -441,8 +434,7 @@ describe("Fly Client Integration Tests", () => {
     });
   });
 
-  // TODO: enable once the CLI publishes upload/download commands
-  describe.skip("Download command", () => {
+  describe("Download command", () => {
     it("should display download help", () => {
       const result = execBinary(["download", "--help"]);
       expect(result.exitCode).toBe(0);
