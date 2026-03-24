@@ -44,7 +44,7 @@ async function downloadBinary(): Promise<string> {
   const dest = path.join(tmpDir, binaryName);
 
   // Use curl for the download — available on all GitHub Actions runners and macOS/Linux
-  execSync(`curl -fsSL -o "${dest}" "${url}"`, { timeout: 60000 });
+  execSync(`curl -gfsSL -o "${dest}" "${url}"`, { timeout: 60000 });
 
   if (process.platform !== "win32") {
     fs.chmodSync(dest, 0o755);
