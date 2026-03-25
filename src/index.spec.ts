@@ -20,6 +20,7 @@ import { downloadFlyCLI } from "./fly-cli";
 import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL_RUNTIME,
@@ -50,6 +51,22 @@ describe("resolveOidcUrl", () => {
     process.env[ENV_FLY_URL] = "https://fly.jfrog.info";
     const result = resolveOidcUrl();
     expect(result).toBe("https://fly.jfrog.info");
+  });
+
+  it("rejects non-HTTPS url input", () => {
+    vi.mocked(core.getInput).mockReturnValue("http://fly.evil.com");
+    expect(() => resolveOidcUrl()).toThrow("must use HTTPS");
+  });
+
+  it("rejects non-HTTPS CUSTOM_FLY_URL", () => {
+    vi.mocked(core.getInput).mockReturnValue("");
+    process.env[ENV_FLY_URL] = "http://fly.evil.com";
+    expect(() => resolveOidcUrl()).toThrow("must use HTTPS");
+  });
+
+  it("rejects invalid URL format", () => {
+    vi.mocked(core.getInput).mockReturnValue("not-a-url");
+    expect(() => resolveOidcUrl()).toThrow("not a valid URL");
   });
 
   it("returns default fly.jfrog.ai on github.com", () => {
@@ -141,6 +158,42 @@ describe("run", () => {
     );
   });
 
+  it("strips trailing slash from registry subdomain", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://url" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io/",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_REGISTRY_SUBDOMAIN,
+      "resolved-tenant.jfrog.io",
+    );
+  });
+
+  it("saves platform URL to state", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://custom.fly.io" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://tenant.jfrog.io",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(core.saveState).toHaveBeenCalledWith(
+      STATE_FLY_PLATFORM_URL,
+      "https://custom.fly.io",
+    );
+  });
+
   it("exports FLY_URL and FLY_ACCESS_TOKEN to GITHUB_ENV on success", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
       name === "url" ? "https://url" : "",
@@ -180,7 +233,7 @@ describe("run", () => {
 
   it("calls setFailed on non-zero exit code", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "u" : "",
+      name === "url" ? "https://fly.test.io" : "",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",
@@ -199,7 +252,7 @@ describe("run", () => {
   });
 
   it("calls setFailed on exception", async () => {
-    vi.mocked(core.getInput).mockImplementation(() => "x");
+    vi.mocked(core.getInput).mockImplementation(() => "https://fly.test.io");
     (authenticateOidc as Mock).mockRejectedValue(new Error("oidc fail"));
 
     await run();
@@ -210,7 +263,7 @@ describe("run", () => {
 
   it("passes ignore input to environment variables", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "u" : "docker",
+      name === "url" ? "https://fly.test.io" : "docker",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",
@@ -233,7 +286,7 @@ describe("run", () => {
   });
 
   it("handles non-Error exceptions with unknown error message", async () => {
-    vi.mocked(core.getInput).mockImplementation(() => "u");
+    vi.mocked(core.getInput).mockImplementation(() => "https://fly.test.io");
     (authenticateOidc as Mock).mockRejectedValue("failString");
 
     await run();
@@ -271,7 +324,7 @@ describe("run error branches", () => {
     vi.resetAllMocks();
     delete process.env[ENV_FLY_ACTION_CONFIGURED];
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "url" : "",
+      name === "url" ? "https://fly.test.io" : "",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",

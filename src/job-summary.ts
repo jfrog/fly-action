@@ -59,6 +59,7 @@ export function buildTransfersTable(entries: TransferSummaryEntry[]): string {
 
 export async function createJobSummary(
   artifacts: CollectedArtifact[] = [],
+  flyPlatformUrl?: string,
 ): Promise<void> {
   try {
     const fullRepo = process.env.GITHUB_REPOSITORY;
@@ -66,7 +67,7 @@ export async function createJobSummary(
     const workflowName = process.env.GITHUB_WORKFLOW;
     const runNumber = process.env.GITHUB_RUN_NUMBER;
 
-    const baseUrl = DEFAULT_FLY_URL;
+    const baseUrl = flyPlatformUrl || DEFAULT_FLY_URL;
 
     let releaseUrl = baseUrl;
     if (fullRepo && owner && workflowName && runNumber) {

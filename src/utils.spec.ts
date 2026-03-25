@@ -4,6 +4,7 @@ import {
   createHttpClient,
   DEFAULT_HTTP_TIMEOUT_MS,
   getErrorMessage,
+  truncate,
 } from "./utils";
 
 describe("utils", () => {
@@ -37,6 +38,24 @@ describe("utils", () => {
     it("should handle TypeError", () => {
       const error = new TypeError("Type mismatch");
       expect(getErrorMessage(error)).toBe("Type mismatch");
+    });
+  });
+
+  describe("truncate", () => {
+    it("returns short strings unchanged", () => {
+      expect(truncate("hello")).toBe("hello");
+    });
+
+    it("truncates strings exceeding the limit", () => {
+      const long = "a".repeat(600);
+      const result = truncate(long);
+      expect(result.length).toBeLessThan(600);
+      expect(result).toContain("… (truncated)");
+    });
+
+    it("respects custom max length", () => {
+      const result = truncate("abcdefgh", 5);
+      expect(result).toBe("abcde… (truncated)");
     });
   });
 

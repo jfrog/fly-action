@@ -16,6 +16,7 @@ export const ENV_FLY_URL = "CUSTOM_FLY_URL";
 
 export const STATE_FLY_URL = "fly-url";
 export const STATE_FLY_ACCESS_TOKEN = "fly-access-token";
+export const STATE_FLY_PLATFORM_URL = "fly-platform-url";
 
 // Environment variable to track if action has already run in this job
 export const ENV_FLY_ACTION_CONFIGURED = "FLY_ACTION_CONFIGURED";
@@ -82,3 +83,7 @@ export const ENV_FLY_TRANSFER_RESULTS = "FLY_TRANSFER_RESULTS";
 // Version resolution
 export const MAX_VERSION_LENGTH = 40;
 export const FALLBACK_VERSION = "unknown";
+
+// Error output truncation — prevents secrets or internal details from leaking
+// into GitHub Actions logs via exception messages.
+export const MAX_ERROR_OUTPUT_LENGTH = 500;

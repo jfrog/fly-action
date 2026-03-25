@@ -4,7 +4,11 @@ import { vi, type Mock, type Mocked } from "vitest";
 import * as core from "@actions/core";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { IncomingHttpHeaders } from "http";
-import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
+import {
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
+} from "./constants";
 import { runPost, runPostScriptLogic } from "./post";
 
 // Mock @actions/core
@@ -68,6 +72,7 @@ describe("runPost", () => {
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PLATFORM_URL) return "https://fly.jfrog.ai";
       return "";
     });
   });
@@ -263,10 +268,10 @@ describe("runPostScriptLogic", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Mock core.getState
     mockCore.getState.mockImplementation((name: string) => {
       if (name === STATE_FLY_URL) return "https://fly.example.com";
       if (name === STATE_FLY_ACCESS_TOKEN) return "test-access-token";
+      if (name === STATE_FLY_PLATFORM_URL) return "https://fly.jfrog.ai";
       return "";
     });
     // Mock HttpClient

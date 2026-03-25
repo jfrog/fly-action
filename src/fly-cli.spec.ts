@@ -7,7 +7,7 @@ vi.mock("@actions/exec");
 vi.mock("@actions/tool-cache");
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
-  return { ...actual, chmodSync: vi.fn() };
+  return { ...actual, chmodSync: vi.fn(), readFileSync: vi.fn() };
 });
 
 import * as core from "@actions/core";
@@ -181,7 +181,7 @@ describe("resolveVersion", () => {
     expect(version).toBe("3.0.1");
   });
 
-  it("returns unknown when no version can be extracted", async () => {
+  it("returns fallback when no version can be extracted", async () => {
     vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
       options?.listeners?.stdout?.(Buffer.from(""));
       return 0;
@@ -206,6 +206,13 @@ describe("downloadFlyCLI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     (tc.find as Mock).mockReturnValue("");
+    // Checksum sidecar not available by default — logs debug and proceeds
+    (tc.downloadTool as Mock).mockImplementation(async (url: string) => {
+      if (url.endsWith(".sha256")) throw new Error("404 Not Found");
+      return "/tmp/fly-download";
+    });
+    // Mock readFileSync for checksum verification (binary content)
+    vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from("binary-content"));
   });
 
   it("downloads, caches, and adds to PATH", async () => {
@@ -213,7 +220,6 @@ describe("downloadFlyCLI", () => {
       command: "version",
       results: [{ name: "fly", status: "success", message: "1.2.3" }],
     });
-    (tc.downloadTool as Mock).mockResolvedValue("/tmp/fly-download");
     vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
       options?.listeners?.stdout?.(Buffer.from(jsonOutput));
       return 0;
@@ -242,7 +248,6 @@ describe("downloadFlyCLI", () => {
       command: "version",
       results: [{ name: "fly", status: "success", message: "1.2.3" }],
     });
-    (tc.downloadTool as Mock).mockResolvedValue("/tmp/fly-download");
     vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
       options?.listeners?.stdout?.(Buffer.from(jsonOutput));
       return 0;
@@ -255,6 +260,27 @@ describe("downloadFlyCLI", () => {
     expect(tc.cacheFile).not.toHaveBeenCalled();
     expect(core.addPath).toHaveBeenCalledWith("/cached/fly/1.2.3");
     expect(result).toBe("/cached/fly/1.2.3");
+  });
+
+  it("uses content hash when version detection fails", async () => {
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stdout?.(Buffer.from(""));
+      return 0;
+    });
+    (tc.cacheFile as Mock).mockResolvedValue("/cached/fly/0.0.0-hash");
+
+    const result = await downloadFlyCLI();
+
+    expect(tc.cacheFile).toHaveBeenCalledWith(
+      "/tmp/fly-download",
+      expect.any(String),
+      "fly",
+      expect.stringMatching(/^0\.0\.0-[a-f0-9]{12}$/),
+    );
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("content hash as cache key"),
+    );
+    expect(result).toBe("/cached/fly/0.0.0-hash");
   });
 });
 

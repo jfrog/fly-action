@@ -1,10 +1,14 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
-import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
+import {
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
+} from "./constants";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { EndCiResponse, CollectedArtifact } from "./types";
-import { createHttpClient, getErrorMessage } from "./utils";
+import { createHttpClient, getErrorMessage, truncate } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 // Retry configuration
@@ -126,15 +130,14 @@ export async function runPost(): Promise<void> {
       }
 
       core.info("📋 Creating job summary...");
-      await createJobSummary(artifacts);
+      const flyPlatformUrl = core.getState(STATE_FLY_PLATFORM_URL);
+      await createJobSummary(artifacts, flyPlatformUrl || undefined);
     } else {
       const body = await response.readBody();
-      core.error(
-        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
-      );
-      throw new Error(
-        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
-      );
+      core.debug(`Full ci/end error body: ${body}`);
+      const msg = `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${truncate(body)}`;
+      core.error(msg);
+      throw new Error(msg);
     }
   } catch (error: unknown) {
     core.error(`Error during CI end notification: ${getErrorMessage(error)}`);

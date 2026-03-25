@@ -18,6 +18,7 @@ import {
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
   CLI_CMD_SETUP,
+  STATE_FLY_PLATFORM_URL,
 } from "./constants";
 import { getErrorMessage } from "./utils";
 
@@ -31,9 +32,29 @@ import { getErrorMessage } from "./utils";
  * because GHES installations live in a separate Fly environment. The action
  * fails fast with a clear message when neither `url` nor `CUSTOM_FLY_URL` is set.
  */
+/**
+ * Validates that a Fly URL uses HTTPS. Rejects plaintext HTTP to prevent
+ * OIDC token exfiltration via a compromised GITHUB_ENV variable.
+ */
+function validateFlyUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid Fly URL: "${url}" is not a valid URL.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(
+      `Invalid Fly URL: "${url}" must use HTTPS. ` +
+        `Sending OIDC tokens over plaintext HTTP is not supported.`,
+    );
+  }
+}
+
 export function resolveOidcUrl(): string {
   const inputUrl = core.getInput(INPUT_URL);
   if (inputUrl) {
+    validateFlyUrl(inputUrl);
     core.warning(
       `The 'url' input is deprecated and will be removed in a future version. ` +
         `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
@@ -43,6 +64,7 @@ export function resolveOidcUrl(): string {
 
   const envUrl = process.env[ENV_FLY_URL];
   if (envUrl) {
+    validateFlyUrl(envUrl);
     core.info(`Using Fly URL from ${ENV_FLY_URL} environment variable.`);
     return envUrl;
   }
@@ -84,11 +106,9 @@ export async function run(): Promise<void> {
 
     core.info(`Fly tenant URL: ${flyTenantUrl}`);
 
-    // Export the hostname without protocol so it's directly usable in Docker
-    // image names, Helm OCI refs, etc. Users add their own prefix as needed:
-    //   Docker: $FLY_REGISTRY_SUBDOMAIN/docker/my-app:tag
-    //   Helm:   oci://$FLY_REGISTRY_SUBDOMAIN/helmoci
-    const registryHost = flyTenantUrl.replace(/^https?:\/\//, "");
+    const registryHost = flyTenantUrl
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "");
     core.exportVariable(ENV_FLY_REGISTRY_SUBDOMAIN, registryHost);
 
     // Export credentials to GITHUB_ENV so sub-actions (upload/download)
@@ -98,6 +118,7 @@ export async function run(): Promise<void> {
 
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
+    core.saveState(STATE_FLY_PLATFORM_URL, oidcUrl);
     core.info("State saved for post-job notification.");
 
     const binDir = await downloadFlyCLI();

@@ -105,6 +105,14 @@ describe("createJobSummary", () => {
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
+  it("should use custom platform URL when provided", async () => {
+    await createJobSummary([], "https://fly.jfrog.info");
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("https://fly.jfrog.info");
+    expect(markdownContent).not.toContain("https://fly.jfrog.ai");
+  });
+
   it("should handle summary write failures", async () => {
     mockSummary.write.mockRejectedValue(new Error("Write failed"));
 

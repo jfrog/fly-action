@@ -141,6 +141,9 @@ vi.mock("../utils", () => ({
     }),
     dispose: vi.fn(),
   })),
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
+  truncate: (s: string) => s,
 }));
 
 // --- Keep fs.readFileSync real (for job summary template) but mock chmodSync ---
@@ -163,6 +166,7 @@ import {
   ENV_FLY_TRANSFER_RESULTS,
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
 } from "../constants";
 
 const ENV_VARS_TO_CLEAN = [
@@ -230,6 +234,7 @@ describe("Action lifecycle e2e", () => {
     // State saved for post step
     expect(mockState[STATE_FLY_URL]).toBe("https://e2e-tenant.jfrog.io");
     expect(mockState[STATE_FLY_ACCESS_TOKEN]).toBe("e2e-test-token");
+    expect(mockState[STATE_FLY_PLATFORM_URL]).toBe("https://fly.jfrog.ai");
 
     // Access token was masked
     expect(mockSecrets).toContain("e2e-test-token");

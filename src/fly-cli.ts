@@ -1,6 +1,7 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
+import * as crypto from "crypto";
 import * as exec from "@actions/exec";
 import * as tc from "@actions/tool-cache";
 import * as fs from "fs";
@@ -17,6 +18,7 @@ import {
   FALLBACK_VERSION,
 } from "./constants";
 import { FlyClientResponse } from "./types";
+import { getErrorMessage, truncate } from "./utils";
 
 const WINDOWS_OS = "windows";
 const FLY_TOOL_NAME = "fly";
@@ -76,9 +78,7 @@ export async function resolveVersion(binPath: string): Promise<string> {
       },
     });
   } catch (err) {
-    core.warning(
-      `Failed to run fly version: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    core.warning(`Failed to run fly version: ${getErrorMessage(err)}`);
     return FALLBACK_VERSION;
   }
 
@@ -107,6 +107,59 @@ export async function resolveVersion(binPath: string): Promise<string> {
  *
  * On subsequent runs (self-hosted runners), a cached version is reused if available.
  */
+/**
+ * Best-effort SHA256 checksum verification. Downloads a `.sha256` sidecar
+ * file alongside the binary. If the sidecar exists and the hash mismatches,
+ * throws immediately (supply-chain compromise). If the sidecar doesn't exist
+ * (404), logs a debug message and proceeds.
+ */
+async function verifyChecksum(
+  binaryPath: string,
+  binaryUrl: string,
+): Promise<void> {
+  const checksumUrl = `${binaryUrl}.sha256`;
+  try {
+    const checksumFile = await tc.downloadTool(checksumUrl);
+    const expectedHash = fs
+      .readFileSync(checksumFile, "utf8")
+      .trim()
+      .split(/\s+/)[0];
+    const actualHash = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(binaryPath))
+      .digest("hex");
+
+    if (expectedHash !== actualHash) {
+      throw new Error(
+        `SHA256 checksum mismatch for Fly CLI binary.\n` +
+          `Expected: ${expectedHash}\nActual:   ${actualHash}\n` +
+          `The binary may have been tampered with. ` +
+          `Delete your tool-cache and retry. If this persists, report it.`,
+      );
+    }
+    core.info(`Fly CLI checksum verified: ${actualHash}`);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("checksum mismatch")) {
+      throw err;
+    }
+    core.debug(
+      `Checksum file not available at ${checksumUrl}: ${getErrorMessage(err)}`,
+    );
+  }
+}
+
+/**
+ * Computes a short content hash for use as a tool-cache version key
+ * when version detection fails.
+ */
+function fileContentHash(filePath: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(fs.readFileSync(filePath))
+    .digest("hex")
+    .slice(0, 12);
+}
+
 export async function downloadFlyCLI(): Promise<string> {
   const { os, arch } = resolvePlatformArch();
   const url = buildDownloadUrl(os, arch);
@@ -119,7 +172,15 @@ export async function downloadFlyCLI(): Promise<string> {
     fs.chmodSync(downloadedPath, UNIX_EXECUTABLE_MODE);
   }
 
-  const version = await resolveVersion(downloadedPath);
+  await verifyChecksum(downloadedPath, url);
+
+  let version = await resolveVersion(downloadedPath);
+  if (version === FALLBACK_VERSION) {
+    version = `0.0.0-${fileContentHash(downloadedPath)}`;
+    core.warning(
+      `Could not determine Fly CLI version; using content hash as cache key: ${version}`,
+    );
+  }
   core.info(`Fly CLI version: ${version}`);
 
   // Reuse cached binary on self-hosted runners if the same version was previously downloaded
@@ -199,9 +260,11 @@ export async function execFlyCLI(
   try {
     response = JSON.parse(stdout);
   } catch {
+    core.debug(`Full CLI stdout: ${stdout}`);
+    core.debug(`Full CLI stderr: ${stderr}`);
     throw new Error(
       `Failed to parse Fly CLI JSON output (exit code ${exitCode}).\n` +
-        `stdout: ${stdout}\nstderr: ${stderr}`,
+        `stdout: ${truncate(stdout)}\nstderr: ${truncate(stderr)}`,
     );
   }
 
