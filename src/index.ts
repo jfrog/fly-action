@@ -2,9 +2,9 @@
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
-import * as fs from "fs";
 import * as path from "path";
 import { authenticateOidc } from "./oidc";
+import { downloadFlyCLI, getBinaryName } from "./fly-cli";
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
@@ -12,25 +12,15 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_IGNORE_PACKAGE_MANAGERS,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
+  CLI_CMD_SETUP,
+  STATE_FLY_PLATFORM_URL,
 } from "./constants";
-
-/**
- * Resolves the platform-specific Fly binary path and ensures it is executable
- */
-export function resolveFlyCLIBinaryPath(): string {
-  const ext = process.platform === "win32" ? ".exe" : "";
-  const binName = `fly-${process.platform}-${process.arch}${ext}`;
-  const binPath = path.resolve(__dirname, "..", "bin", binName);
-  if (!fs.existsSync(binPath)) {
-    throw new Error(
-      `Fly CLI binary not found at ${binPath} for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
-    );
-  }
-  if (process.platform !== "win32") fs.chmodSync(binPath, 0o755);
-  return binPath;
-}
+import { getErrorMessage } from "./utils";
 
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
@@ -42,9 +32,29 @@ export function resolveFlyCLIBinaryPath(): string {
  * because GHES installations live in a separate Fly environment. The action
  * fails fast with a clear message when neither `url` nor `CUSTOM_FLY_URL` is set.
  */
+/**
+ * Validates that a Fly URL uses HTTPS. Rejects plaintext HTTP to prevent
+ * OIDC token exfiltration via a compromised GITHUB_ENV variable.
+ */
+function validateFlyUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid Fly URL: "${url}" is not a valid URL.`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(
+      `Invalid Fly URL: "${url}" must use HTTPS. ` +
+        `Sending OIDC tokens over plaintext HTTP is not supported.`,
+    );
+  }
+}
+
 export function resolveOidcUrl(): string {
   const inputUrl = core.getInput(INPUT_URL);
   if (inputUrl) {
+    validateFlyUrl(inputUrl);
     core.warning(
       `The 'url' input is deprecated and will be removed in a future version. ` +
         `Remove it from your workflow — tenant is now resolved automatically from OIDC claims.`,
@@ -54,6 +64,7 @@ export function resolveOidcUrl(): string {
 
   const envUrl = process.env[ENV_FLY_URL];
   if (envUrl) {
+    validateFlyUrl(envUrl);
     core.info(`Using Fly URL from ${ENV_FLY_URL} environment variable.`);
     return envUrl;
   }
@@ -95,32 +106,39 @@ export async function run(): Promise<void> {
 
     core.info(`Fly tenant URL: ${flyTenantUrl}`);
 
-    // Export the hostname without protocol so it's directly usable in Docker
-    // image names, Helm OCI refs, etc. Users add their own prefix as needed:
-    //   Docker: $FLY_REGISTRY_SUBDOMAIN/docker/my-app:tag
-    //   Helm:   oci://$FLY_REGISTRY_SUBDOMAIN/helmoci
-    const registryHost = flyTenantUrl.replace(/^https?:\/\//, "");
+    const registryHost = flyTenantUrl
+      .replace(/^https?:\/\//, "")
+      .replace(/\/+$/, "");
     core.exportVariable(ENV_FLY_REGISTRY_SUBDOMAIN, registryHost);
+
+    // Export credentials to GITHUB_ENV so sub-actions (upload/download)
+    // and user run: steps can use the fly CLI.
+    core.exportVariable(ENV_FLY_URL_RUNTIME, flyTenantUrl);
+    core.exportVariable(ENV_FLY_ACCESS_TOKEN_RUNTIME, accessToken);
 
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
+    core.saveState(STATE_FLY_PLATFORM_URL, oidcUrl);
     core.info("State saved for post-job notification.");
 
-    const binPath = resolveFlyCLIBinaryPath();
+    const binDir = await downloadFlyCLI();
+    const binPath = path.join(binDir, getBinaryName());
     core.info(`CLI binary path: ${binPath}`);
+
+    // Pass env vars inline for the setup call — exportVariable writes to
+    // GITHUB_ENV which only takes effect in subsequent steps, not this one.
     const envVars: Record<string, string> = {
-      FLY_URL: flyTenantUrl,
-      FLY_ACCESS_TOKEN: accessToken,
-      FLY_IGNORE_PACKAGE_MANAGERS: ignorePackageManagers,
+      [ENV_FLY_URL_RUNTIME]: flyTenantUrl,
+      [ENV_FLY_ACCESS_TOKEN_RUNTIME]: accessToken,
+      [ENV_FLY_IGNORE_PACKAGE_MANAGERS]: ignorePackageManagers,
     };
 
     const options = {
       env: { ...process.env, ...envVars } as Record<string, string>,
     };
 
-    // Run fly-client setup (fly-client will configure all package managers)
     core.info("Executing Fly CLI setup");
-    const args = ["setup"];
+    const args = [CLI_CMD_SETUP];
     const exitCode = await exec.exec(binPath, args, options);
 
     if (exitCode !== 0) {
@@ -135,8 +153,7 @@ export async function run(): Promise<void> {
   } catch (error) {
     core.error("Error occurred during execution.");
 
-    if (error instanceof Error) core.setFailed(error.message);
-    else core.setFailed("An unknown error occurred");
+    core.setFailed(getErrorMessage(error));
   }
 }
 

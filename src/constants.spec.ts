@@ -1,31 +1,30 @@
 // Copyright (c) JFrog Ltd. (2025)
 
-import { SUPPORTED_PACKAGE_MANAGERS } from "./constants";
+import {
+  PLATFORM_MAP,
+  ARCH_MAP,
+  FLY_CLI_DOWNLOAD_BASE,
+  DEFAULT_FLY_URL,
+} from "./constants";
 
-describe("SUPPORTED_PACKAGE_MANAGERS", () => {
-  it("should contain all expected standard package managers", () => {
-    expect(SUPPORTED_PACKAGE_MANAGERS).toEqual([
-      "npm",
-      "pnpm",
-      "pip",
-      "pipenv",
-      "twine",
-      "maven",
-      "gradle",
-      "dotnet",
-      "nuget",
-      "go",
-    ]);
+describe("constants", () => {
+  it("should have valid platform mappings", () => {
+    expect(PLATFORM_MAP).toHaveProperty("darwin");
+    expect(PLATFORM_MAP).toHaveProperty("linux");
+    expect(PLATFORM_MAP).toHaveProperty("win32");
   });
 
-  it("should contain exactly 10 package managers", () => {
-    expect(SUPPORTED_PACKAGE_MANAGERS.length).toBe(10);
+  it("should have valid arch mappings", () => {
+    expect(ARCH_MAP).toHaveProperty("x64");
+    expect(ARCH_MAP).toHaveProperty("arm64");
   });
 
-  it("should NOT contain container-based package managers", () => {
-    const containerManagers = ["docker", "podman", "helm"];
-    containerManagers.forEach((manager) => {
-      expect(SUPPORTED_PACKAGE_MANAGERS).not.toContain(manager);
-    });
+  it("should have a valid CLI download base URL", () => {
+    expect(FLY_CLI_DOWNLOAD_BASE).toContain("releases.jfrog.io");
+    expect(FLY_CLI_DOWNLOAD_BASE).toContain("[RELEASE]");
+  });
+
+  it("should have a valid default Fly URL", () => {
+    expect(DEFAULT_FLY_URL).toBe("https://fly.jfrog.ai");
   });
 });

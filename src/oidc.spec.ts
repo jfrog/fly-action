@@ -91,7 +91,7 @@ describe("authenticateOidc", () => {
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://fly")).rejects.toThrow(
-      /OIDC failed 500: error body/, // Updated error message
+      /OIDC failed 500/,
     );
   });
 

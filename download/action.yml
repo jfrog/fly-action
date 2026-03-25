@@ -1,0 +1,29 @@
+name: 'Fly Download'
+description: 'Download files from Fly generic storage. Requires jfrog/fly-action to have run first for authentication.'
+author: 'JFrog'
+
+inputs:
+  name:
+    description: 'Package name'
+    required: true
+  version:
+    description: 'Package version'
+    required: true
+  files:
+    description: 'Remote filenames to download -- one per line (exact names, no glob expansion)'
+    required: true
+  output-dir:
+    description: 'Directory to save downloaded files'
+    required: false
+    default: '.'
+  exclude:
+    description: 'Glob patterns to exclude -- one per line. Matched against filename only.'
+    required: false
+
+outputs:
+  results:
+    description: 'JSON array of per-file results [{name, status, message}]'
+
+runs:
+  using: 'node24'
+  main: '../lib/download.js'

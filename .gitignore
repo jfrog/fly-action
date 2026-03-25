@@ -2,6 +2,9 @@
 dist/
 coverage/
 
+# Fly CLI binaries (downloaded at runtime from releases.jfrog.io)
+bin/
+
 # Environment variables
 .env
 
@@ -20,6 +23,4 @@ yarn-error.log*
 # Node modules
 node_modules/
 
-# Package lock files
-package-lock.json
 

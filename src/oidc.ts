@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
-import { createHttpClient } from "./utils";
+import { createHttpClient, getErrorMessage } from "./utils";
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -13,14 +13,12 @@ type TokenJson = { access_token?: string; [key: string]: unknown };
  * Gets an OIDC token from the GitHub Actions runtime
  * @returns The OIDC token or undefined if the request failed
  */
-export async function getIDToken(): Promise<string | undefined> {
+async function getIDToken(): Promise<string | undefined> {
   try {
     core.debug("Fetching OIDC token from GitHub");
     return await core.getIDToken();
   } catch (error) {
-    core.warning(
-      `Failed to get OIDC token: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    core.warning(`Failed to get OIDC token: ${getErrorMessage(error)}`);
     return undefined;
   }
 }
@@ -85,17 +83,19 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
         maskedResponse,
       )}`,
     );
-    throw new Error(`OIDC failed ${rawResponse.message.statusCode}: ${body}`);
+    throw new Error(
+      `OIDC failed ${rawResponse.message.statusCode}: ${JSON.stringify(maskedResponse)}`,
+    );
   }
   const parsed = parsedJson as Partial<FlyOidcResponse>;
   if (!parsed || !parsed.access_token) {
     throw new Error(
-      `OIDC response did not contain an access token, body: ${body}`,
+      `OIDC response did not contain an access token, body: ${JSON.stringify(maskedResponse)}`,
     );
   }
   if (!parsed.fly_tenant_url) {
     throw new Error(
-      `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${body}`,
+      `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${JSON.stringify(maskedResponse)}`,
     );
   }
   return {

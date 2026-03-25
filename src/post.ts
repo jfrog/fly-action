@@ -1,10 +1,14 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
-import { STATE_FLY_URL, STATE_FLY_ACCESS_TOKEN } from "./constants";
+import {
+  STATE_FLY_URL,
+  STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
+} from "./constants";
 import { HttpClient, HttpClientResponse } from "@actions/http-client";
 import { EndCiResponse, CollectedArtifact } from "./types";
-import { createHttpClient } from "./utils";
+import { createHttpClient, getErrorMessage, truncate } from "./utils";
 import { createJobSummary } from "./job-summary";
 
 // Retry configuration
@@ -47,7 +51,8 @@ async function postWithRetry(
       lastResponse = response;
       lastError = new Error(`Server error ${statusCode}`);
     } catch (error: unknown) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError =
+        error instanceof Error ? error : new Error(getErrorMessage(error));
     }
 
     if (attempt < MAX_RETRIES) {
@@ -125,37 +130,31 @@ export async function runPost(): Promise<void> {
       }
 
       core.info("📋 Creating job summary...");
-      await createJobSummary(artifacts);
+      const flyPlatformUrl = core.getState(STATE_FLY_PLATFORM_URL);
+      await createJobSummary(artifacts, flyPlatformUrl || undefined);
     } else {
       const body = await response.readBody();
-      core.error(
-        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
-      );
-      throw new Error(
-        `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${body}`,
-      );
+      core.debug(`Full ci/end error body: ${body}`);
+      const msg = `Failed to send CI end notification. Status: ${response.message.statusCode}. Body: ${truncate(body)}`;
+      core.error(msg);
+      throw new Error(msg);
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    core.error(`Error during CI end notification: ${message}`);
-    // Re-throw the error to be caught by the mainRunner or the test
+    core.error(`Error during CI end notification: ${getErrorMessage(error)}`);
     throw error;
   } finally {
     httpClient.dispose();
   }
 }
 
-// New exported function to handle the main execution logic
 export async function runPostScriptLogic(): Promise<void> {
   try {
     await runPost();
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    core.setFailed(message);
+    core.setFailed(getErrorMessage(error));
   }
 }
 
-// Original main execution block, now calling runPostScriptLogic
 if (require.main === module) {
   runPostScriptLogic();
 }

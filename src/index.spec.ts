@@ -2,76 +2,36 @@
 
 import { vi, type Mock } from "vitest";
 
-// Mock modules — vi.mock calls are hoisted
 vi.mock("@actions/core");
 vi.mock("@actions/exec");
-vi.mock("fs", async () => {
-  const actual = await vi.importActual<typeof import("fs")>("fs");
-  return { ...actual, existsSync: vi.fn(), chmodSync: vi.fn() };
-});
-vi.mock("path", async () => {
-  const actual = await vi.importActual<typeof import("path")>("path");
-  return { ...actual, resolve: vi.fn() };
-});
 vi.mock("./oidc", () => ({
   authenticateOidc: vi.fn(),
+}));
+vi.mock("./fly-cli", () => ({
+  downloadFlyCLI: vi.fn(),
+  getBinaryName: vi.fn(() => "fly"),
 }));
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
-import * as fs from "fs";
-import * as path from "path";
-import { resolveFlyCLIBinaryPath, resolveOidcUrl, run } from "./index";
+import { resolveOidcUrl, run } from "./index";
 import { authenticateOidc } from "./oidc";
+import { downloadFlyCLI } from "./fly-cli";
 import {
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
+  STATE_FLY_PLATFORM_URL,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
+  ENV_FLY_URL_RUNTIME,
+  ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_IGNORE_PACKAGE_MANAGERS,
   ENV_FLY_URL,
   DEFAULT_FLY_URL,
+  CLI_CMD_SETUP,
 } from "./constants";
 
-// Test-only dummy values (not real credentials)
 const MOCK_TOKEN = `test-${"access"}-tok`;
-
-describe("resolveFlyCLIBinaryPath", () => {
-  afterEach(() => vi.resetAllMocks());
-
-  it("returns resolved path when binary exists and sets permissions", () => {
-    const fakePath = "/fake/bin";
-    (path.resolve as Mock).mockReturnValue(fakePath);
-    (fs.existsSync as Mock).mockReturnValue(true);
-
-    const result = resolveFlyCLIBinaryPath();
-    expect(result).toBe(fakePath);
-    expect(fs.chmodSync as Mock).toHaveBeenCalledWith(fakePath, 0o755);
-  });
-
-  it("throws error when binary does not exist", () => {
-    (path.resolve as Mock).mockReturnValue("/fake/bin");
-    (fs.existsSync as Mock).mockReturnValue(false);
-
-    expect(() => resolveFlyCLIBinaryPath()).toThrow(
-      `Fly CLI binary not found at /fake/bin for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
-    );
-  });
-});
-
-describe("resolveFlyCLIBinaryPath Windows behavior", () => {
-  it("does not chmod on win32 platform", () => {
-    const origPlatform = process.platform;
-    Object.defineProperty(process, "platform", { value: "win32" });
-    (path.resolve as Mock).mockReturnValue("/fake/win/bin");
-    (fs.existsSync as Mock).mockReturnValue(true);
-
-    const result = resolveFlyCLIBinaryPath();
-    expect(result).toBe("/fake/win/bin");
-    expect(fs.chmodSync as Mock).not.toHaveBeenCalled();
-
-    Object.defineProperty(process, "platform", { value: origPlatform });
-  });
-});
 
 describe("resolveOidcUrl", () => {
   afterEach(() => {
@@ -91,6 +51,22 @@ describe("resolveOidcUrl", () => {
     process.env[ENV_FLY_URL] = "https://fly.jfrog.info";
     const result = resolveOidcUrl();
     expect(result).toBe("https://fly.jfrog.info");
+  });
+
+  it("rejects non-HTTPS url input", () => {
+    vi.mocked(core.getInput).mockReturnValue("http://fly.evil.com");
+    expect(() => resolveOidcUrl()).toThrow("must use HTTPS");
+  });
+
+  it("rejects non-HTTPS CUSTOM_FLY_URL", () => {
+    vi.mocked(core.getInput).mockReturnValue("");
+    process.env[ENV_FLY_URL] = "http://fly.evil.com";
+    expect(() => resolveOidcUrl()).toThrow("must use HTTPS");
+  });
+
+  it("rejects invalid URL format", () => {
+    vi.mocked(core.getInput).mockReturnValue("not-a-url");
+    expect(() => resolveOidcUrl()).toThrow("not a valid URL");
   });
 
   it("returns default fly.jfrog.ai on github.com", () => {
@@ -135,8 +111,7 @@ describe("run", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     delete process.env[ENV_FLY_ACTION_CONFIGURED];
-    (fs.existsSync as Mock).mockReturnValue(true);
-    (path.resolve as Mock).mockReturnValue("/fake/bin");
+    (downloadFlyCLI as Mock).mockResolvedValue("/cached/fly");
   });
 
   it("runs successfully when exec returns 0", async () => {
@@ -183,9 +158,82 @@ describe("run", () => {
     );
   });
 
+  it("strips trailing slash from registry subdomain", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://url" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io/",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_REGISTRY_SUBDOMAIN,
+      "resolved-tenant.jfrog.io",
+    );
+  });
+
+  it("saves platform URL to state", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://custom.fly.io" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://tenant.jfrog.io",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(core.saveState).toHaveBeenCalledWith(
+      STATE_FLY_PLATFORM_URL,
+      "https://custom.fly.io",
+    );
+  });
+
+  it("exports FLY_URL and FLY_ACCESS_TOKEN to GITHUB_ENV on success", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://url" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_URL_RUNTIME,
+      "https://resolved-tenant.jfrog.io",
+    );
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_ACCESS_TOKEN_RUNTIME,
+      MOCK_TOKEN,
+    );
+  });
+
+  it("downloads the fly CLI binary", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://url" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: MOCK_TOKEN,
+      flyTenantUrl: "https://resolved-tenant.jfrog.io",
+    });
+    vi.mocked(exec.exec).mockResolvedValue(0);
+
+    await run();
+
+    expect(downloadFlyCLI).toHaveBeenCalled();
+  });
+
   it("calls setFailed on non-zero exit code", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "u" : "",
+      name === "url" ? "https://fly.test.io" : "",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",
@@ -204,7 +252,7 @@ describe("run", () => {
   });
 
   it("calls setFailed on exception", async () => {
-    vi.mocked(core.getInput).mockImplementation(() => "x");
+    vi.mocked(core.getInput).mockImplementation(() => "https://fly.test.io");
     (authenticateOidc as Mock).mockRejectedValue(new Error("oidc fail"));
 
     await run();
@@ -215,7 +263,7 @@ describe("run", () => {
 
   it("passes ignore input to environment variables", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "u" : "docker",
+      name === "url" ? "https://fly.test.io" : "docker",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",
@@ -224,7 +272,7 @@ describe("run", () => {
     vi.mocked(exec.exec).mockImplementation(
       async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
         const env = options?.env;
-        expect(env?.FLY_IGNORE_PACKAGE_MANAGERS).toBe("docker");
+        expect(env?.[ENV_FLY_IGNORE_PACKAGE_MANAGERS]).toBe("docker");
         return 0;
       },
     );
@@ -238,14 +286,14 @@ describe("run", () => {
   });
 
   it("handles non-Error exceptions with unknown error message", async () => {
-    vi.mocked(core.getInput).mockImplementation(() => "u");
+    vi.mocked(core.getInput).mockImplementation(() => "https://fly.test.io");
     (authenticateOidc as Mock).mockRejectedValue("failString");
 
     await run();
-    expect(core.setFailed).toHaveBeenCalledWith("An unknown error occurred");
+    expect(core.setFailed).toHaveBeenCalledWith("failString");
   });
 
-  it("calls fly setup without package manager arguments", async () => {
+  it("calls fly setup with correct binary path", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) =>
       name === "url" ? "https://test.com" : "",
     );
@@ -258,12 +306,12 @@ describe("run", () => {
     await run();
 
     expect(exec.exec).toHaveBeenCalledWith(
-      "/fake/bin",
-      ["setup"],
+      expect.stringMatching(/[/\\]cached[/\\]fly[/\\]fly$/),
+      [CLI_CMD_SETUP],
       expect.objectContaining({
         env: expect.objectContaining({
-          FLY_URL: "https://resolved-tenant.jfrog.io",
-          FLY_ACCESS_TOKEN: MOCK_TOKEN,
+          [ENV_FLY_URL_RUNTIME]: "https://resolved-tenant.jfrog.io",
+          [ENV_FLY_ACCESS_TOKEN_RUNTIME]: MOCK_TOKEN,
         }),
       }),
     );
@@ -271,12 +319,12 @@ describe("run", () => {
   });
 });
 
-describe("run exec and binary error branches", () => {
+describe("run error branches", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     delete process.env[ENV_FLY_ACTION_CONFIGURED];
     vi.mocked(core.getInput).mockImplementation((name: string) =>
-      name === "url" ? "url" : "",
+      name === "url" ? "https://fly.test.io" : "",
     );
     (authenticateOidc as Mock).mockResolvedValue({
       accessToken: "t",
@@ -285,23 +333,20 @@ describe("run exec and binary error branches", () => {
   });
 
   it("calls setFailed when exec throws error", async () => {
-    (fs.existsSync as Mock).mockReturnValue(true);
-    (path.resolve as Mock).mockReturnValue("/fake/bin");
+    (downloadFlyCLI as Mock).mockResolvedValue("/cached/fly");
     vi.mocked(exec.exec).mockRejectedValue(new Error("exec error"));
 
     await run();
     expect(core.setFailed).toHaveBeenCalledWith("exec error");
   });
 
-  it("calls setFailed when binary is missing", async () => {
-    (fs.existsSync as Mock).mockReturnValue(false);
-    (path.resolve as Mock).mockReturnValue("/test/path/fly-darwin-arm64");
-    vi.mocked(core.getInput).mockImplementation(() => "");
+  it("calls setFailed when binary download fails", async () => {
+    (downloadFlyCLI as Mock).mockRejectedValue(
+      new Error("Download failed: 404"),
+    );
 
     await run();
-    expect(core.setFailed).toHaveBeenCalledWith(
-      `Fly CLI binary not found at /test/path/fly-darwin-arm64 for ${process.platform}/${process.arch}. Ensure it is present in the 'bin' directory of the action.`,
-    );
+    expect(core.setFailed).toHaveBeenCalledWith("Download failed: 404");
   });
 });
 
@@ -309,8 +354,7 @@ describe("run idempotency", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     delete process.env[ENV_FLY_ACTION_CONFIGURED];
-    (fs.existsSync as Mock).mockReturnValue(true);
-    (path.resolve as Mock).mockReturnValue("/fake/bin");
+    (downloadFlyCLI as Mock).mockResolvedValue("/cached/fly");
   });
 
   afterEach(() => {

@@ -1,0 +1,25 @@
+name: 'Fly Upload'
+description: 'Upload files to Fly generic storage. Requires jfrog/fly-action to have run first for authentication.'
+author: 'JFrog'
+
+inputs:
+  name:
+    description: 'Package name'
+    required: true
+  version:
+    description: 'Package version'
+    required: true
+  files:
+    description: 'Files to upload -- one per line. Supports glob patterns (*, ?, [], **). Basename is used as remote filename.'
+    required: true
+  exclude:
+    description: 'Glob patterns to exclude -- one per line (e.g. *.log). Matched against basename only.'
+    required: false
+
+outputs:
+  results:
+    description: 'JSON array of per-file results [{name, status, message}]'
+
+runs:
+  using: 'node24'
+  main: '../lib/upload.js'

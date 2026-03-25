@@ -16,13 +16,15 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
+- ✅ Upload and download generic artifacts via sub-actions
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
 - ✅ Retry mechanism with exponential backoff for CI notifications
 - ✅ Exports tenant registry hostname as `FLY_REGISTRY_SUBDOMAIN` environment variable for subsequent steps
+- ✅ Job summary with collected artifacts and transfer results
 
-## Usage
+## Quick Start
 
 ```yaml
 name: Build with Fly Registry
@@ -49,7 +51,69 @@ jobs:
           docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }}
 ```
 
-### OIDC Authentication (Required)
+## Upload & Download Sub-Actions
+
+Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
+
+### Upload
+
+```yaml
+- name: Upload build artifacts
+  uses: jfrog/fly-action/upload@v1
+  with:
+    name: my-app
+    version: '1.0.0'
+    files: |
+      dist/app.zip
+      dist/app.tar.gz
+    exclude: |
+      *.log
+```
+
+| Input | Description | Required |
+| --- | --- | --- |
+| `name` | Package name | Yes |
+| `version` | Package version | Yes |
+| `files` | Files to upload — one per line, supports glob patterns | Yes |
+| `exclude` | Glob patterns to exclude — one per line | No |
+
+### Download
+
+```yaml
+- name: Download artifacts
+  uses: jfrog/fly-action/download@v1
+  with:
+    name: my-app
+    version: '1.0.0'
+    files: |
+      app.zip
+    output-dir: ./downloads
+```
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `name` | Package name | Yes | |
+| `version` | Package version | Yes | |
+| `files` | Remote filenames to download — one per line | Yes | |
+| `output-dir` | Directory to save downloaded files | No | `.` |
+| `exclude` | Glob patterns to exclude — one per line | No | |
+
+Both sub-actions output a `results` JSON array with per-file status:
+
+```yaml
+- name: Upload
+  id: upload
+  uses: jfrog/fly-action/upload@v1
+  with:
+    name: my-app
+    version: '1.0.0'
+    files: dist/app.zip
+
+- name: Check results
+  run: echo '${{ steps.upload.outputs.results }}'
+```
+
+## OIDC Authentication (Required)
 
 This action requires OIDC authentication. The OIDC token is used to track uploads and downloads on the Fly server. You must set `permissions: id-token: write` in your workflow file.
 
@@ -58,30 +122,6 @@ permissions:
   contents: read
   id-token: write # Required for OIDC authentication
 ```
-
-#### Optional Inputs
-
-- `ignore`: Comma-separated list of package managers to ignore (e.g., docker,pip)
-
-## Inputs
-
-| Input | Description | Required | Default |
-| --- | --- | --- | --- |
-| `ignore` | Comma-separated list of package managers to ignore | No | None |
-
-## Environment Variable
-
-After the action runs, the **`FLY_REGISTRY_SUBDOMAIN`** environment variable is automatically available in all subsequent steps. It contains the resolved tenant registry hostname (e.g., `acmecorp.jfrog.io`):
-
-```yaml
-- name: Push Docker image
-  run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:latest
-
-- name: Push Helm chart
-  run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
-```
-
-## OIDC Authentication
 
 When using OIDC authentication:
 
@@ -94,6 +134,62 @@ When using OIDC authentication:
    - Automatically notify the Fly server when the CI session ends (using GitHub Actions post-job mechanism)
 
 > **Note**: The CI end notification runs automatically as a post-job step. This ensures it executes even if the main action fails, for proper session management on the Fly server. If the CI end notification step itself encounters an error, it will cause the overall workflow to be marked as failed.
+
+## Inputs
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `ignore` | Comma-separated list of package managers to ignore | No | None |
+
+## Environment Variables
+
+After the action runs, the following environment variables are available in all subsequent steps:
+
+| Variable | Description |
+| --- | --- |
+| `FLY_REGISTRY_SUBDOMAIN` | Resolved tenant registry hostname (e.g., `acmecorp.jfrog.io`). Use for Docker image tags, Helm OCI refs, etc. |
+| `FLY_URL` | Full Fly tenant URL (e.g., `https://acmecorp.jfrog.io`). Used by the fly CLI and sub-actions. |
+| `FLY_ACCESS_TOKEN` | Short-lived OIDC-derived access token. Used by the fly CLI and sub-actions. Masked in logs via `core.setSecret`. |
+
+```yaml
+- name: Push Docker image
+  run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:latest
+
+- name: Push Helm chart
+  run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
+
+- name: Use fly CLI directly
+  run: fly upload --name my-pkg --version 1.0.0 ./artifact.zip
+```
+
+### Trust Model
+
+`FLY_ACCESS_TOKEN` is exported to `GITHUB_ENV` so that sub-actions and `run:` steps can use the fly CLI. This means **any subsequent step in the job** (including third-party actions) can read the token via `process.env`. The token is:
+
+- **Short-lived** — scoped to the CI session, expires when the job ends
+- **Masked in logs** — registered via `core.setSecret` so it won't appear in action output
+- **OIDC-scoped** — derived from the repository's OIDC claims, limited to the tenant
+
+If you use third-party actions after `jfrog/fly-action`, ensure you trust them with this access level.
+
+## GitHub Enterprise Server (GHES)
+
+On GitHub Enterprise Server, the default `fly.jfrog.ai` endpoint cannot resolve tenants because GHES installations live in a separate Fly environment.
+
+Set the `CUSTOM_FLY_URL` organization-level variable to your Fly environment URL:
+
+```yaml
+env:
+  CUSTOM_FLY_URL: https://fly.your-instance.jfrog.info
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: jfrog/fly-action@v1
+```
+
+The action enforces HTTPS on all custom URLs to prevent OIDC token exfiltration.
 
 ## Supported Package Managers
 

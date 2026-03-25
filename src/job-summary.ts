@@ -3,21 +3,63 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
-import { CollectedArtifact } from "./types";
+import { CollectedArtifact, TransferSummaryEntry } from "./types";
+import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
+import { getErrorMessage } from "./utils";
+
+const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
 function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
   if (artifacts.length === 0) {
     return "";
   }
 
-  const esc = (s: string) => s.replace(/\|/g, "\\|");
   const header = "| Artifact | Type |\n| --- | --- |";
-  const rows = artifacts.map((a) => `| ${esc(a.name)} | ${esc(a.type)} |`);
+  const rows = artifacts.map(
+    (a) => `| ${escPipe(a.name)} | ${escPipe(a.type)} |`,
+  );
   return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+}
+
+export function parseTransferResults(raw: string): TransferSummaryEntry[] {
+  if (!raw.trim()) return [];
+  return raw
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line) as TransferSummaryEntry);
+}
+
+export function buildTransfersTable(entries: TransferSummaryEntry[]): string {
+  if (entries.length === 0) return "";
+
+  const typeIcon = (type: string) => (type === "upload" ? "⬆️" : "⬇️");
+  const statusIcon = (s: string) =>
+    s === "success" ? "✅" : s === "error" ? "❌" : "ℹ️";
+
+  const header =
+    "| | Type | Package | Version | File | Status |\n| --- | --- | --- | --- | --- | --- |";
+  const rows: string[] = [];
+
+  for (const entry of entries) {
+    for (const result of entry.results) {
+      const cols = [
+        typeIcon(entry.type),
+        escPipe(entry.type),
+        escPipe(entry.name),
+        escPipe(entry.version),
+        escPipe(result.name),
+        `${statusIcon(result.status)} ${escPipe(result.status)}`,
+      ];
+      rows.push(`| ${cols.join(" | ")} |`);
+    }
+  }
+
+  return `\n### Uploads & Downloads\n\n${header}\n${rows.join("\n")}\n`;
 }
 
 export async function createJobSummary(
   artifacts: CollectedArtifact[] = [],
+  flyPlatformUrl?: string,
 ): Promise<void> {
   try {
     const fullRepo = process.env.GITHUB_REPOSITORY;
@@ -25,7 +67,7 @@ export async function createJobSummary(
     const workflowName = process.env.GITHUB_WORKFLOW;
     const runNumber = process.env.GITHUB_RUN_NUMBER;
 
-    const baseUrl = "https://fly.jfrog.ai";
+    const baseUrl = flyPlatformUrl || DEFAULT_FLY_URL;
 
     let releaseUrl = baseUrl;
     if (fullRepo && owner && workflowName && runNumber) {
@@ -50,11 +92,24 @@ export async function createJobSummary(
       artifactsTable,
     );
 
+    const transfersRaw = process.env[ENV_FLY_TRANSFER_RESULTS] || "";
+    let transfersTable = "";
+    try {
+      const entries = parseTransferResults(transfersRaw);
+      transfersTable = buildTransfersTable(entries);
+    } catch (err) {
+      core.warning(`Failed to parse transfer results: ${getErrorMessage(err)}`);
+    }
+    markdownContent = markdownContent.replace(
+      "{{TRANSFERS_TABLE}}",
+      transfersTable,
+    );
+
     const summary = core.summary.addRaw(markdownContent);
 
     await summary.write();
     core.info("Job summary created successfully from markdown template");
   } catch (error) {
-    core.warning(`Failed to create job summary: ${error}`);
+    core.warning(`Failed to create job summary: ${getErrorMessage(error)}`);
   }
 }
