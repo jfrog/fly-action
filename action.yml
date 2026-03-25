@@ -17,7 +17,7 @@ inputs:
     required: false
 
 runs:
-  using: 'node22'
+  using: 'node24'
   main: 'lib/index.js'
   post: 'lib/post.js'
 
