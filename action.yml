@@ -17,7 +17,10 @@ inputs:
     required: false
 
 runs:
-  using: 'node24'
+  # IMPORTANT: must stay node20 — GHES runners (synced via JFROG/fly-action)
+  # only support up to node20. Do NOT upgrade to node24 without first
+  # confirming GHES runner support. See PRs #32 and #36.
+  using: 'node20'
   main: 'lib/index.js'
   post: 'lib/post.js'
 
