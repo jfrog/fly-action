@@ -21,5 +21,7 @@ outputs:
     description: 'JSON array of per-file results [{name, status, message}]'
 
 runs:
-  using: 'node24'
+  # IMPORTANT: must stay node20 — GHES runners only support up to node20.
+  # See action.yml comment and PRs #32, #36.
+  using: 'node20'
   main: '../lib/upload.js'
