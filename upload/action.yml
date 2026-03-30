@@ -21,7 +21,6 @@ outputs:
     description: 'JSON array of per-file results [{name, status, message}]'
 
 runs:
-  # IMPORTANT: must stay node20 — GHES runners only support up to node20.
-  # See action.yml comment and PRs #32, #36.
-  using: 'node20'
+  # node24 for GitHub.com. GHES users: use jfrog/fly-action@v1-node20
+  using: 'node24'
   main: '../lib/upload.js'

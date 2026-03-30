@@ -46,3 +46,12 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tags: true
           force: true
+
+      - name: Create node20 compatibility tag for GHES
+        run: |
+          git checkout --detach HEAD
+          sed -i "s/using: 'node24'/using: 'node20'/" action.yml upload/action.yml download/action.yml
+          git add action.yml upload/action.yml download/action.yml
+          git commit -m "chore: node20 compatibility for GHES (auto-generated)"
+          git tag -f v$MAJOR-node20
+          git push origin v$MAJOR-node20 --force
