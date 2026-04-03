@@ -21,7 +21,23 @@ permissions:
   security-events: write
 
 jobs:
-  frogbot-scan:
+  frogbot-scan-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: frogbot
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - uses: jfrog/frogbot@v2
+        env:
+          JF_URL: ${{ secrets.FROGBOT_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.FROGBOT_ACCESS_TOKEN }}
+          JF_GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  frogbot-scan-repo:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
