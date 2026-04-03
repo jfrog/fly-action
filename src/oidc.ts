@@ -4,7 +4,7 @@ import * as core from "@actions/core";
 import * as http from "@actions/http-client";
 import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
-import { createHttpClient, getErrorMessage } from "./utils";
+import { createHttpClient, getErrorMessage, truncate } from "./utils";
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -53,8 +53,8 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     headers,
   );
   const body = await rawResponse.readBody();
-  // Parse JSON to mask access_token and register secret
   let parsedJson: TokenJson;
+  let jsonParseFailed = false;
   try {
     parsedJson = JSON.parse(body);
     if (parsedJson.access_token) {
@@ -62,29 +62,50 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     }
   } catch {
     parsedJson = {};
+    jsonParseFailed = true;
   }
   const maskedResponse = parsedJson.access_token
     ? { ...parsedJson, access_token: "***" }
     : parsedJson;
-  // Log response details
+  const statusCode = rawResponse.message.statusCode;
+  const isSuccess = statusCode === http.HttpCodes.OK || statusCode === 201;
+
   core.debug(
     `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
   );
-  // Log success or error and throw on non-success status
-  if (
-    rawResponse.message.statusCode === http.HttpCodes.OK ||
-    rawResponse.message.statusCode === 201
-  ) {
+
+  if (isSuccess) {
     core.debug(`OIDC authentication successful`);
     core.debug(`OIDC response body: ${JSON.stringify(maskedResponse)}`);
   } else {
-    core.error(
-      `OIDC failed ${rawResponse.message.statusCode}, body: ${JSON.stringify(
-        maskedResponse,
-      )}`,
-    );
+    const server =
+      rawResponse.message.headers["server"] ||
+      rawResponse.message.headers["x-cache"] ||
+      "unknown";
+    core.error(`OIDC failed ${statusCode} from server: ${server}`);
+
+    if (jsonParseFailed) {
+      core.error(
+        `Response is not JSON — possible infrastructure error page. Raw body: ${truncate(body, 500)}`,
+      );
+    } else {
+      core.error(`Response body: ${JSON.stringify(maskedResponse)}`);
+    }
+
+    if (
+      statusCode === 403 &&
+      (jsonParseFailed || Object.keys(parsedJson).length === 0)
+    ) {
+      core.error(
+        "Hint: a 403 with a non-JSON body usually means a CDN/WAF blocked the request " +
+          "before it reached the Fly service. If you are using self-hosted runners, " +
+          "ensure their outbound IP is allowlisted. " +
+          "Contact JFrog support if the issue persists.",
+      );
+    }
+
     throw new Error(
-      `OIDC failed ${rawResponse.message.statusCode}: ${JSON.stringify(maskedResponse)}`,
+      `OIDC failed ${statusCode}: ${jsonParseFailed ? truncate(body, 200) : JSON.stringify(maskedResponse)}`,
     );
   }
   const parsed = parsedJson as Partial<FlyOidcResponse>;
