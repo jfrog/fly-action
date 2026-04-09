@@ -3,13 +3,13 @@
 # Fly Action
 
 [![Scanned by Frogbot](https://raw.githubusercontent.com/jfrog/frogbot/refs/heads/master/images/frogbot-badge.svg)](https://docs.jfrog-applications.jfrog.io/jfrog-applications/frogbot)
-[![docs](https://img.shields.io/badge/Docs-%F0%9F%93%96-blue)](https://docs.fly.jfrog.ai)
+[![docs](https://img.shields.io/badge/Docs-%F0%9F%93%96-blue)](https://docs.fly.jfrog.com)
 
 </div>
 
 This GitHub Action downloads the Fly CLI and configures package managers to use Fly as a registry for dependencies.
 
-For more information about JFrog Fly, see the [official documentation](https://docs.fly.jfrog.ai).
+For more information about JFrog Fly, see the [official documentation](https://docs.fly.jfrog.com).
 
 ## Features
 
