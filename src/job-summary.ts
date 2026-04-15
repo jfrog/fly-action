@@ -6,19 +6,84 @@ import * as path from "path";
 import { CollectedArtifact, TransferSummaryEntry } from "./types";
 import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
 import { getErrorMessage } from "./utils";
+import { resolveAndDedup, resolveArtifact, dedupKey } from "./artifact-path";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
-function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
-  if (artifacts.length === 0) {
+const TYPE_ORDER: Record<string, number> = {
+  npm: 0,
+  docker: 1,
+  helmoci: 2,
+  oci: 3,
+  maven: 4,
+  pypi: 5,
+  nuget: 6,
+  go: 7,
+  generic: 8,
+};
+
+export function formatSize(bytes: number | undefined): string {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return i === 0 ? `${size} ${units[i]}` : `${size.toFixed(1)} ${units[i]}`;
+}
+
+interface TableRow {
+  type: string;
+  name: string;
+  version: string;
+  size?: number;
+}
+
+export function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
+  const resolved = resolveAndDedup(artifacts);
+
+  const sizeByKey = new Map<string, number>();
+  for (const a of artifacts) {
+    if (a.size && a.size > 0) {
+      const r = resolveArtifact(a);
+      const key = dedupKey(r);
+      if (!sizeByKey.has(key)) sizeByKey.set(key, a.size);
+    }
+  }
+
+  const rows: TableRow[] = resolved.map((r) => ({
+    ...r,
+    size: sizeByKey.get(dedupKey(r)),
+  }));
+
+  if (rows.length === 0) {
+    if (artifacts.length > 0) {
+      return "\n*No displayable artifacts (digest-only pushes are filtered)*\n";
+    }
     return "";
   }
 
-  const header = "| Artifact | Type |\n| --- | --- |";
-  const rows = artifacts.map(
-    (a) => `| ${escPipe(a.name)} | ${escPipe(a.type)} |`,
+  rows.sort(
+    (a, b) =>
+      (TYPE_ORDER[a.type.toLowerCase()] ?? 99) -
+      (TYPE_ORDER[b.type.toLowerCase()] ?? 99),
   );
-  return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+
+  const hasSize = rows.some((r) => r.size && r.size > 0);
+  const cols = hasSize
+    ? ["Type", "Package", "Version", "Size"]
+    : ["Type", "Package", "Version"];
+  const header = `| ${cols.join(" | ")} |\n| ${cols.map(() => "---").join(" | ")} |`;
+
+  const tableRows = rows.map((r) => {
+    const cells = [escPipe(r.type), escPipe(r.name), escPipe(r.version)];
+    if (hasSize) cells.push(formatSize(r.size));
+    return `| ${cells.join(" | ")} |`;
+  });
+
+  return `\n### Collected Artifacts\n\n${header}\n${tableRows.join("\n")}\n`;
 }
 
 export function parseTransferResults(raw: string): TransferSummaryEntry[] {
@@ -84,7 +149,11 @@ export async function createJobSummary(
     );
     const template = fs.readFileSync(templatePath, "utf8");
 
-    let markdownContent = template.replace("{{RELEASE_URL}}", releaseUrl);
+    const jobName = process.env.GITHUB_JOB || "CI Job";
+
+    let markdownContent = template
+      .replace("{{JOB_NAME}}", jobName)
+      .replace("{{RELEASE_URL}}", releaseUrl);
 
     const artifactsTable = buildArtifactsTable(artifacts);
     markdownContent = markdownContent.replace(

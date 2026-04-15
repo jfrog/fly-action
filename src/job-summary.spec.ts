@@ -24,6 +24,8 @@ import {
   createJobSummary,
   parseTransferResults,
   buildTransfersTable,
+  buildArtifactsTable,
+  formatSize,
 } from "./job-summary";
 import { CollectedArtifact, TransferSummaryEntry } from "./types";
 import { ENV_FLY_TRANSFER_RESULTS } from "./constants";
@@ -49,43 +51,43 @@ describe("createJobSummary", () => {
     await createJobSummary();
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain("# 🦋 Fly action");
-    expect(markdownContent).toContain("✅ **Completed successfully**");
-    expect(markdownContent).toContain("📢 [View release in Fly]");
+    expect(markdownContent).toContain("## test-job");
+    expect(markdownContent).toContain("[View release in Fly]");
     expect(markdownContent).toContain("https://fly.jfrog.ai");
     expect(markdownContent).not.toContain("Collected Artifacts");
     expect(mockSummary.write).toHaveBeenCalled();
   });
 
-  it("should render artifacts table when artifacts are provided", async () => {
+  it("should use GITHUB_JOB as section title", async () => {
+    process.env.GITHUB_JOB = "docker-release";
+    await createJobSummary();
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("## docker-release");
+  });
+
+  it("should render resolved artifacts table when artifacts are provided", async () => {
     const artifacts: CollectedArtifact[] = [
       {
-        name: "my-lib",
+        name: "my-lib-1.0.0.tgz",
         type: "npm",
-        path: "npm-local/my-lib/-/my-lib-1.0.0.tgz",
+        path: "my-lib/-/my-lib-1.0.0.tgz",
       },
-      { name: "my-app", type: "docker" },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/my-app/v2.0.0/manifest.json",
+      },
     ];
 
     await createJobSummary(artifacts);
 
     const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
     expect(markdownContent).toContain("### Collected Artifacts");
-    expect(markdownContent).toContain("| Artifact | Type |");
-    expect(markdownContent).toContain("| my-lib | npm |");
-    expect(markdownContent).toContain("| my-app | docker |");
+    expect(markdownContent).toContain("| Type | Package | Version |");
+    expect(markdownContent).toContain("| npm | my-lib | 1.0.0 |");
+    expect(markdownContent).toContain("| docker | myorg/my-app | v2.0.0 |");
     expect(mockSummary.write).toHaveBeenCalled();
-  });
-
-  it("should escape pipe characters in artifact data", async () => {
-    const artifacts: CollectedArtifact[] = [
-      { name: "my|lib", type: "npm|pnpm" },
-    ];
-
-    await createJobSummary(artifacts);
-
-    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
-    expect(markdownContent).toContain("| my\\|lib | npm\\|pnpm |");
   });
 
   it("should not render artifacts table for empty array", async () => {
@@ -303,5 +305,136 @@ describe("buildTransfersTable", () => {
     expect(table).toContain("my\\|pkg");
     expect(table).toContain("1\\|0");
     expect(table).toContain("a\\|b.zip");
+  });
+});
+
+describe("buildArtifactsTable", () => {
+  it("returns empty string for no artifacts", () => {
+    expect(buildArtifactsTable([])).toBe("");
+  });
+
+  it("resolves, deduplicates and renders artifacts", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/v1.0.0/manifest.json",
+      },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/v1.0.0/manifest.json",
+      },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/sha256:abc123/manifest.json",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    expect(table).toContain("| Type | Package | Version |");
+    expect(table).toContain("| docker | myorg/api | v1.0.0 |");
+    expect(table.match(/myorg\/api/g)).toHaveLength(1);
+  });
+
+  it("sorts artifacts by ecosystem", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "img/latest/manifest.json",
+      },
+      {
+        name: "lib-1.0.0.tgz",
+        type: "npm",
+        path: "lib/-/lib-1.0.0.tgz",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    const npmIdx = table.indexOf("npm");
+    const dockerIdx = table.indexOf("docker");
+    expect(npmIdx).toBeLessThan(dockerIdx);
+  });
+
+  it("renders size column when at least one artifact has size", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "lib-1.0.0.tgz",
+        type: "npm",
+        path: "lib/-/lib-1.0.0.tgz",
+        size: 1048576,
+      },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/v1.0.0/manifest.json",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    expect(table).toContain("| Type | Package | Version | Size |");
+    expect(table).toContain("| npm | lib | 1.0.0 | 1.0 MB |");
+    expect(table).toContain("| docker | myorg/api | v1.0.0 |  |");
+  });
+
+  it("shows fallback message when all artifacts are filtered (digest-only)", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/sha256:abc123/manifest.json",
+      },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/sha256:def456/manifest.json",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    expect(table).toContain("No displayable artifacts");
+    expect(table).not.toContain("Collected Artifacts");
+  });
+
+  it("omits size column when no artifact has size", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "lib-1.0.0.tgz",
+        type: "npm",
+        path: "lib/-/lib-1.0.0.tgz",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    expect(table).toContain("| Type | Package | Version |");
+    expect(table).not.toContain("Size");
+  });
+});
+
+describe("formatSize", () => {
+  it("returns empty string for undefined", () => {
+    expect(formatSize(undefined)).toBe("");
+  });
+
+  it("returns empty string for 0", () => {
+    expect(formatSize(0)).toBe("");
+  });
+
+  it("formats bytes", () => {
+    expect(formatSize(500)).toBe("500 B");
+  });
+
+  it("formats kilobytes", () => {
+    expect(formatSize(2048)).toBe("2.0 KB");
+  });
+
+  it("formats megabytes", () => {
+    expect(formatSize(1048576)).toBe("1.0 MB");
+  });
+
+  it("formats gigabytes", () => {
+    expect(formatSize(1073741824)).toBe("1.0 GB");
   });
 });
