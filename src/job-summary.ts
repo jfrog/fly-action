@@ -3,8 +3,16 @@
 import * as core from "@actions/core";
 import * as fs from "fs";
 import * as path from "path";
-import { CollectedArtifact, TransferSummaryEntry } from "./types";
-import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
+import {
+  CollectedArtifact,
+  DistributeResponse,
+  TransferSummaryEntry,
+} from "./types";
+import {
+  DEFAULT_FLY_URL,
+  ENV_FLY_TRANSFER_RESULTS,
+  STATE_FLY_DISTRIBUTE_RESULTS,
+} from "./constants";
 import { getErrorMessage } from "./utils";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
@@ -27,6 +35,17 @@ export function parseTransferResults(raw: string): TransferSummaryEntry[] {
     .split("\n")
     .filter((line) => line.trim().length > 0)
     .map((line) => JSON.parse(line) as TransferSummaryEntry);
+}
+
+export function buildDistributedTable(results: DistributeResponse[]): string {
+  if (results.length === 0) return "";
+
+  const header = "| Package | Version | Download URL |\n| --- | --- | --- |";
+  const rows = results.map(
+    (r) =>
+      `| ${escPipe(r.package_name)} | ${escPipe(r.package_version)} | [${escPipe(r.download_url)}](${r.download_url}) |`,
+  );
+  return `\n### 🌐 Distributed Artifacts\n\n${header}\n${rows.join("\n")}\n`;
 }
 
 export function buildTransfersTable(entries: TransferSummaryEntry[]): string {
@@ -103,6 +122,24 @@ export async function createJobSummary(
     markdownContent = markdownContent.replace(
       "{{TRANSFERS_TABLE}}",
       transfersTable,
+    );
+
+    let distributedTable = "";
+    try {
+      const distributedRaw = core.getState(STATE_FLY_DISTRIBUTE_RESULTS);
+      if (distributedRaw) {
+        const distributedResults: DistributeResponse[] =
+          JSON.parse(distributedRaw);
+        distributedTable = buildDistributedTable(distributedResults);
+      }
+    } catch (err) {
+      core.warning(
+        `Failed to parse distribute results: ${getErrorMessage(err)}`,
+      );
+    }
+    markdownContent = markdownContent.replace(
+      "{{DISTRIBUTED_TABLE}}",
+      distributedTable,
     );
 
     const summary = core.summary.addRaw(markdownContent);

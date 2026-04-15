@@ -48,6 +48,11 @@ export const ARCH_MAP: Record<string, string> = {
 
 export const UNIX_EXECUTABLE_MODE = 0o755;
 
+// Action input names for public distribution
+export const INPUT_DISTRIBUTE = "distribute";
+export const INPUT_DISTRIBUTE_TYPE = "distribute_type";
+export const STATE_FLY_DISTRIBUTE_RESULTS = "fly-distribute-results";
+
 // Action input names for upload/download sub-actions
 export const INPUT_NAME = "name";
 export const INPUT_VERSION = "version";

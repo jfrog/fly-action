@@ -15,6 +15,17 @@ inputs:
   ignore:
     description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'
     required: false
+  distribute:
+    description: 'Comma-separated list of generic artifacts to make publicly downloadable (e.g., "my-app:1.0.0,my-lib:2.3.1")'
+    required: false
+  distribute_type:
+    description: 'Package type for distributed artifacts (default: generic)'
+    required: false
+    default: 'generic'
+
+outputs:
+  distribute_results:
+    description: 'JSON array of distributed artifact results (package_name, package_version, public_url, download_url)'
 
 runs:
   # node24 for GitHub.com. GHES users: use jfrog/fly-action@v1-node20
