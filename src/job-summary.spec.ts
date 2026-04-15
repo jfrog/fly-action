@@ -379,6 +379,25 @@ describe("buildArtifactsTable", () => {
     expect(table).toContain("| docker | myorg/api | v1.0.0 |  |");
   });
 
+  it("shows fallback message when all artifacts are filtered (digest-only)", () => {
+    const artifacts: CollectedArtifact[] = [
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/sha256:abc123/manifest.json",
+      },
+      {
+        name: "manifest.json",
+        type: "docker",
+        path: "myorg/api/sha256:def456/manifest.json",
+      },
+    ];
+
+    const table = buildArtifactsTable(artifacts);
+    expect(table).toContain("No displayable artifacts");
+    expect(table).not.toContain("Collected Artifacts");
+  });
+
   it("omits size column when no artifact has size", () => {
     const artifacts: CollectedArtifact[] = [
       {

@@ -6,7 +6,7 @@ import * as path from "path";
 import { CollectedArtifact, TransferSummaryEntry } from "./types";
 import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
 import { getErrorMessage } from "./utils";
-import { resolveArtifact, dedupKey } from "./artifact-path";
+import { resolveAndDedup, resolveArtifact, dedupKey } from "./artifact-path";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
@@ -42,21 +42,28 @@ interface TableRow {
 }
 
 export function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
-  const seen = new Set<string>();
-  const rows: TableRow[] = [];
+  const resolved = resolveAndDedup(artifacts);
 
-  for (const artifact of artifacts) {
-    const resolved = resolveArtifact(artifact);
-    if (resolved.version === "") continue;
-
-    const key = dedupKey(resolved);
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    rows.push({ ...resolved, size: artifact.size });
+  const sizeByKey = new Map<string, number>();
+  for (const a of artifacts) {
+    if (a.size && a.size > 0) {
+      const r = resolveArtifact(a);
+      const key = dedupKey(r);
+      if (!sizeByKey.has(key)) sizeByKey.set(key, a.size);
+    }
   }
 
-  if (rows.length === 0) return "";
+  const rows: TableRow[] = resolved.map((r) => ({
+    ...r,
+    size: sizeByKey.get(dedupKey(r)),
+  }));
+
+  if (rows.length === 0) {
+    if (artifacts.length > 0) {
+      return "\n*No displayable artifacts (digest-only pushes are filtered)*\n";
+    }
+    return "";
+  }
 
   rows.sort(
     (a, b) =>

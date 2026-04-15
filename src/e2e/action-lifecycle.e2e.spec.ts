@@ -308,8 +308,9 @@ describe("Action lifecycle e2e", () => {
     const summaryMarkdown = vi.mocked(mockSummary.addRaw).mock
       .calls[0][0] as string;
 
-    // Summary contains a job name header (GITHUB_JOB or fallback)
-    expect(summaryMarkdown).toMatch(/^## \S+/m);
+    // Summary contains the job name header from GITHUB_JOB (or fallback)
+    const expectedJobName = process.env.GITHUB_JOB || "CI Job";
+    expect(summaryMarkdown).toContain(`## ${expectedJobName}`);
 
     // Summary contains artifacts from ci/end response
     expect(summaryMarkdown).toContain("Collected Artifacts");
