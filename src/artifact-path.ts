@@ -29,7 +29,10 @@ export function resolveArtifact(artifact: CollectedArtifact): ResolvedArtifact {
     case "docker":
     case "oci":
     case "helmoci":
-      return { ...parseDockerPath(deployPath, artifactName), type: packageType };
+      return {
+        ...parseDockerPath(deployPath, artifactName),
+        type: packageType,
+      };
     case "maven":
       return { ...parseMavenPath(deployPath, artifactName), type: packageType };
     case "pypi":
@@ -37,7 +40,10 @@ export function resolveArtifact(artifact: CollectedArtifact): ResolvedArtifact {
     case "nuget":
       return { ...parseNuGetPath(deployPath, artifactName), type: packageType };
     case "generic":
-      return { ...parseGenericPath(deployPath, artifactName), type: packageType };
+      return {
+        ...parseGenericPath(deployPath, artifactName),
+        type: packageType,
+      };
     default:
       return { name: artifactName, version: artifactName, type: packageType };
   }
