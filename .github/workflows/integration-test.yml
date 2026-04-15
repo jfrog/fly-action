@@ -61,7 +61,10 @@ jobs:
           cd /tmp/go-publish-test
           go mod init github.com/fly-action-ci/test-module
           echo 'package main; func main() {}' > main.go
-          git init && git add . && git commit -m "init"
+          git init
+          git config user.name "CI"
+          git config user.email "ci@jfrog.com"
+          git add . && git commit -m "init"
           git tag v0.0.1-ci.${{ github.run_id }}
 
       - name: Publish Go module
