@@ -14,6 +14,7 @@ const { mockSummary, mockCore } = vi.hoisted(() => {
     warning: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    getState: vi.fn(),
   };
   return { mockSummary, mockCore };
 });
@@ -24,9 +25,10 @@ import {
   createJobSummary,
   parseTransferResults,
   buildTransfersTable,
+  buildDistributedTable,
 } from "./job-summary";
-import { CollectedArtifact, TransferSummaryEntry } from "./types";
-import { ENV_FLY_TRANSFER_RESULTS } from "./constants";
+import { CollectedArtifact, DistributeResponse, TransferSummaryEntry } from "./types";
+import { ENV_FLY_TRANSFER_RESULTS, STATE_FLY_DISTRIBUTE_RESULTS } from "./constants";
 
 describe("createJobSummary", () => {
   beforeEach(() => {
@@ -191,6 +193,48 @@ describe("createJobSummary", () => {
       expect.stringContaining("Failed to parse transfer results"),
     );
   });
+
+  it("should render distributed table when state has results", async () => {
+    const results: DistributeResponse[] = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
+        download_count: 0,
+      },
+    ];
+    mockCore.getState.mockReturnValue(JSON.stringify(results));
+
+    await createJobSummary();
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("### 🌐 Distributed Artifacts");
+    expect(markdownContent).toContain("my-app");
+    expect(markdownContent).toContain("1.0.0");
+    expect(markdownContent).toContain("my-app.tar.gz");
+  });
+
+  it("should not render distributed table when state is empty", async () => {
+    mockCore.getState.mockReturnValue("");
+
+    await createJobSummary();
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).not.toContain("Distributed Artifacts");
+  });
+
+  it("should warn on malformed distribute results JSON", async () => {
+    mockCore.getState.mockReturnValue("not valid json");
+
+    await createJobSummary();
+
+    expect(mockCore.warning).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to parse distribute results"),
+    );
+  });
 });
 
 describe("parseTransferResults", () => {
@@ -303,5 +347,91 @@ describe("buildTransfersTable", () => {
     expect(table).toContain("my\\|pkg");
     expect(table).toContain("1\\|0");
     expect(table).toContain("a\\|b.zip");
+  });
+});
+
+describe("buildDistributedTable", () => {
+  it("returns empty string for no results", () => {
+    expect(buildDistributedTable([])).toBe("");
+  });
+
+  it("renders table with correct header and columns", () => {
+    const results: DistributeResponse[] = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
+        download_count: 5,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    expect(table).toContain("### 🌐 Distributed Artifacts");
+    expect(table).toContain("| Package | Version | Download URL |");
+    expect(table).toContain("| my-app | 1.0.0 |");
+    expect(table).toContain("my-app.tar.gz");
+  });
+
+  it("renders a linked download URL", () => {
+    const url =
+      "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz";
+    const results: DistributeResponse[] = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url: url,
+        download_count: 0,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    expect(table).toContain(`[${url}](${url})`);
+  });
+
+  it("renders multiple results as separate rows", () => {
+    const results: DistributeResponse[] = [
+      {
+        package_name: "app-a",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url: "https://example.com/a",
+        download_url: "https://example.com/a/a.tar.gz",
+        download_count: 0,
+      },
+      {
+        package_name: "app-b",
+        package_version: "2.0.0",
+        package_type: "generic",
+        public_url: "https://example.com/b",
+        download_url: "https://example.com/b/b.tar.gz",
+        download_count: 0,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    expect(table).toContain("| app-a | 1.0.0 |");
+    expect(table).toContain("| app-b | 2.0.0 |");
+  });
+
+  it("escapes pipe characters in package name and version", () => {
+    const results: DistributeResponse[] = [
+      {
+        package_name: "my|app",
+        package_version: "1|0",
+        package_type: "generic",
+        public_url: "https://example.com/u",
+        download_url: "https://example.com/d",
+        download_count: 0,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    expect(table).toContain("my\\|app");
+    expect(table).toContain("1\\|0");
   });
 });
