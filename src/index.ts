@@ -8,11 +8,8 @@ import { downloadFlyCLI, getBinaryName } from "./fly-cli";
 import {
   INPUT_URL,
   INPUT_IGNORE_PACKAGE_MANAGERS,
-  INPUT_DISTRIBUTE,
-  INPUT_DISTRIBUTE_TYPE,
   STATE_FLY_URL,
   STATE_FLY_ACCESS_TOKEN,
-  STATE_FLY_DISTRIBUTE_RESULTS,
   ENV_FLY_ACTION_CONFIGURED,
   ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL_RUNTIME,
@@ -24,7 +21,6 @@ import {
   STATE_FLY_PLATFORM_URL,
 } from "./constants";
 import { getErrorMessage } from "./utils";
-import { parseDistributeInput, distributeArtifacts } from "./distribute";
 
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
@@ -150,25 +146,6 @@ export async function run(): Promise<void> {
       throw new Error("Fly setup command failed");
     }
     core.info("Fly CLI setup command completed successfully.");
-
-    // Public distribution — optional step triggered by the `distribute` input.
-    const distributeInput = core.getInput(INPUT_DISTRIBUTE);
-    if (distributeInput) {
-      const packageType = core.getInput(INPUT_DISTRIBUTE_TYPE) || "generic";
-      const entries = parseDistributeInput(distributeInput, packageType);
-      core.info(`Distributing ${entries.length} artifact(s) publicly...`);
-      const distributeResults = await distributeArtifacts(
-        flyTenantUrl,
-        accessToken,
-        entries,
-      );
-      const distributeResultsJson = JSON.stringify(distributeResults);
-      core.saveState(STATE_FLY_DISTRIBUTE_RESULTS, distributeResultsJson);
-      core.setOutput("distribute_results", distributeResultsJson);
-      core.info(
-        `✅ Successfully distributed ${distributeResults.length} artifact(s).`,
-      );
-    }
 
     // Mark action as configured to prevent duplicate runs in same job
     core.exportVariable(ENV_FLY_ACTION_CONFIGURED, "true");

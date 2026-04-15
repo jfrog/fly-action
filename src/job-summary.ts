@@ -11,7 +11,7 @@ import {
 import {
   DEFAULT_FLY_URL,
   ENV_FLY_TRANSFER_RESULTS,
-  STATE_FLY_DISTRIBUTE_RESULTS,
+  ENV_FLY_DISTRIBUTE_RESULTS,
 } from "./constants";
 import { getErrorMessage } from "./utils";
 
@@ -126,11 +126,13 @@ export async function createJobSummary(
 
     let distributedTable = "";
     try {
-      const distributedRaw = core.getState(STATE_FLY_DISTRIBUTE_RESULTS);
-      if (distributedRaw) {
-        const distributedResults: DistributeResponse[] =
-          JSON.parse(distributedRaw);
-        distributedTable = buildDistributedTable(distributedResults);
+      const distributedRaw = process.env[ENV_FLY_DISTRIBUTE_RESULTS] || "";
+      if (distributedRaw.trim()) {
+        const allResults: DistributeResponse[] = distributedRaw
+          .split("\n")
+          .filter((line) => line.trim().length > 0)
+          .flatMap((line) => JSON.parse(line) as DistributeResponse[]);
+        distributedTable = buildDistributedTable(allResults);
       }
     } catch (err) {
       core.warning(

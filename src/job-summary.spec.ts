@@ -28,7 +28,7 @@ import {
   buildDistributedTable,
 } from "./job-summary";
 import { CollectedArtifact, DistributeResponse, TransferSummaryEntry } from "./types";
-import { ENV_FLY_TRANSFER_RESULTS, STATE_FLY_DISTRIBUTE_RESULTS } from "./constants";
+import { ENV_FLY_TRANSFER_RESULTS, ENV_FLY_DISTRIBUTE_RESULTS } from "./constants";
 
 describe("createJobSummary", () => {
   beforeEach(() => {
@@ -45,6 +45,7 @@ describe("createJobSummary", () => {
     delete process.env.GITHUB_REPOSITORY_OWNER;
     delete process.env.GITHUB_JOB;
     delete process.env[ENV_FLY_TRANSFER_RESULTS];
+    delete process.env[ENV_FLY_DISTRIBUTE_RESULTS];
   });
 
   it("should create job summary with no artifacts", async () => {
@@ -194,7 +195,7 @@ describe("createJobSummary", () => {
     );
   });
 
-  it("should render distributed table when state has results", async () => {
+  it("should render distributed table when env var has results", async () => {
     const results: DistributeResponse[] = [
       {
         package_name: "my-app",
@@ -206,7 +207,7 @@ describe("createJobSummary", () => {
         download_count: 0,
       },
     ];
-    mockCore.getState.mockReturnValue(JSON.stringify(results));
+    process.env[ENV_FLY_DISTRIBUTE_RESULTS] = JSON.stringify(results);
 
     await createJobSummary();
 
@@ -217,8 +218,8 @@ describe("createJobSummary", () => {
     expect(markdownContent).toContain("my-app.tar.gz");
   });
 
-  it("should not render distributed table when state is empty", async () => {
-    mockCore.getState.mockReturnValue("");
+  it("should not render distributed table when env var is empty", async () => {
+    delete process.env[ENV_FLY_DISTRIBUTE_RESULTS];
 
     await createJobSummary();
 
@@ -227,7 +228,7 @@ describe("createJobSummary", () => {
   });
 
   it("should warn on malformed distribute results JSON", async () => {
-    mockCore.getState.mockReturnValue("not valid json");
+    process.env[ENV_FLY_DISTRIBUTE_RESULTS] = "not valid json";
 
     await createJobSummary();
 

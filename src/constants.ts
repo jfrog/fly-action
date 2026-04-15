@@ -48,10 +48,13 @@ export const ARCH_MAP: Record<string, string> = {
 
 export const UNIX_EXECUTABLE_MODE = 0o755;
 
-// Action input names for public distribution
-export const INPUT_DISTRIBUTE = "distribute";
-export const INPUT_DISTRIBUTE_TYPE = "distribute_type";
-export const STATE_FLY_DISTRIBUTE_RESULTS = "fly-distribute-results";
+// Action input names for distribute sub-action
+export const INPUT_DISTRIBUTE_ARTIFACTS = "artifacts";
+export const INPUT_DISTRIBUTE_TYPE = "type";
+
+// Env var used to accumulate distribute results across sub-action steps.
+// Each invocation appends a JSON line; the post step reads and renders them.
+export const ENV_FLY_DISTRIBUTE_RESULTS = "FLY_DISTRIBUTE_RESULTS";
 
 // Action input names for upload/download sub-actions
 export const INPUT_NAME = "name";
