@@ -308,9 +308,8 @@ describe("Action lifecycle e2e", () => {
     const summaryMarkdown = vi.mocked(mockSummary.addRaw).mock
       .calls[0][0] as string;
 
-    // Summary contains the standard header
-    expect(summaryMarkdown).toContain("Fly action");
-    expect(summaryMarkdown).toContain("Completed successfully");
+    // Summary contains the job name header
+    expect(summaryMarkdown).toContain("## CI Job");
 
     // Summary contains artifacts from ci/end response
     expect(summaryMarkdown).toContain("Collected Artifacts");

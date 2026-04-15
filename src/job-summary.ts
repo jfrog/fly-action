@@ -6,19 +6,77 @@ import * as path from "path";
 import { CollectedArtifact, TransferSummaryEntry } from "./types";
 import { DEFAULT_FLY_URL, ENV_FLY_TRANSFER_RESULTS } from "./constants";
 import { getErrorMessage } from "./utils";
+import { resolveArtifact, dedupKey } from "./artifact-path";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
-function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
-  if (artifacts.length === 0) {
-    return "";
+const TYPE_ORDER: Record<string, number> = {
+  npm: 0,
+  docker: 1,
+  helmoci: 2,
+  oci: 3,
+  maven: 4,
+  pypi: 5,
+  nuget: 6,
+  go: 7,
+  generic: 8,
+};
+
+export function formatSize(bytes: number | undefined): string {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  let size = bytes;
+  while (size >= 1024 && i < units.length - 1) {
+    size /= 1024;
+    i++;
+  }
+  return i === 0 ? `${size} ${units[i]}` : `${size.toFixed(1)} ${units[i]}`;
+}
+
+interface TableRow {
+  type: string;
+  name: string;
+  version: string;
+  size?: number;
+}
+
+export function buildArtifactsTable(artifacts: CollectedArtifact[]): string {
+  const seen = new Set<string>();
+  const rows: TableRow[] = [];
+
+  for (const artifact of artifacts) {
+    const resolved = resolveArtifact(artifact);
+    if (resolved.version === "") continue;
+
+    const key = dedupKey(resolved);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    rows.push({ ...resolved, size: artifact.size });
   }
 
-  const header = "| Artifact | Type |\n| --- | --- |";
-  const rows = artifacts.map(
-    (a) => `| ${escPipe(a.name)} | ${escPipe(a.type)} |`,
+  if (rows.length === 0) return "";
+
+  rows.sort(
+    (a, b) =>
+      (TYPE_ORDER[a.type.toLowerCase()] ?? 99) -
+      (TYPE_ORDER[b.type.toLowerCase()] ?? 99),
   );
-  return `\n### Collected Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+
+  const hasSize = rows.some((r) => r.size && r.size > 0);
+  const cols = hasSize
+    ? ["Type", "Package", "Version", "Size"]
+    : ["Type", "Package", "Version"];
+  const header = `| ${cols.join(" | ")} |\n| ${cols.map(() => "---").join(" | ")} |`;
+
+  const tableRows = rows.map((r) => {
+    const cells = [escPipe(r.type), escPipe(r.name), escPipe(r.version)];
+    if (hasSize) cells.push(formatSize(r.size));
+    return `| ${cells.join(" | ")} |`;
+  });
+
+  return `\n### Collected Artifacts\n\n${header}\n${tableRows.join("\n")}\n`;
 }
 
 export function parseTransferResults(raw: string): TransferSummaryEntry[] {
@@ -84,7 +142,11 @@ export async function createJobSummary(
     );
     const template = fs.readFileSync(templatePath, "utf8");
 
-    let markdownContent = template.replace("{{RELEASE_URL}}", releaseUrl);
+    const jobName = process.env.GITHUB_JOB || "CI Job";
+
+    let markdownContent = template
+      .replace("{{JOB_NAME}}", jobName)
+      .replace("{{RELEASE_URL}}", releaseUrl);
 
     const artifactsTable = buildArtifactsTable(artifacts);
     markdownContent = markdownContent.replace(
