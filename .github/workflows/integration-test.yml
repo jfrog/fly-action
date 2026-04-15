@@ -41,6 +41,34 @@ jobs:
       - name: Run fly-client integration tests
         run: npx vitest run src/integration-tests/
 
+  go-publish-integration:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: false
+
+      - name: Setup JFrog Fly
+        uses: ./
+
+      - name: Create test Go module
+        run: |
+          mkdir -p /tmp/go-publish-test
+          cd /tmp/go-publish-test
+          go mod init github.com/fly-action-ci/test-module
+          echo 'package main; func main() {}' > main.go
+          git init && git add . && git commit -m "init"
+          git tag v0.0.1-ci.${{ github.run_id }}
+
+      - name: Publish Go module
+        uses: ./go-publish
+        with:
+          path: /tmp/go-publish-test
+
   docker-integration:
     runs-on: ubuntu-24.04-arm
     steps:
