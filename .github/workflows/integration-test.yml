@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir -p /tmp/go-publish-test
           cd /tmp/go-publish-test
-          go mod init github.com/fly-action-ci/test-module
+          go mod init example.com/ci/test-module
           echo 'package main; func main() {}' > main.go
           git init
           git config user.name "CI"
@@ -74,12 +74,12 @@ jobs:
 
       - name: Verify published module is downloadable
         env:
-          GONOSUMDB: github.com/fly-action-ci/*
-          GONOSUMCHECK: github.com/fly-action-ci/*
+          GONOSUMDB: example.com/ci/*
+          GONOSUMCHECK: example.com/ci/*
         run: |
           mkdir /tmp/go-download-test && cd /tmp/go-download-test
           go mod init verify
-          go mod download github.com/fly-action-ci/test-module@v0.0.1-ci.${{ github.run_id }}
+          go mod download example.com/ci/test-module@v0.0.1-ci.${{ github.run_id }}
 
   docker-integration:
     runs-on: ubuntu-24.04-arm

@@ -17,6 +17,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
 - ✅ Upload and download generic artifacts via sub-actions
+- ✅ Publish Go modules to Fly Go registry
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
 - ✅ Automatic CI session end notification to the Fly server
@@ -97,6 +98,31 @@ Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
 | `files` | Remote filenames to download — one per line | Yes | |
 | `output-dir` | Directory to save downloaded files | No | `.` |
 | `exclude` | Glob patterns to exclude — one per line | No | |
+
+### Go Publish
+
+Publish Go modules to the Fly Go registry.
+
+```yaml
+- name: Publish Go module
+  uses: jfrog/fly-action/go-publish@v1
+  with:
+    path: ./libs/mylib   # optional — defaults to repository root
+    version: v1.2.3      # optional — auto-detected from git tags if omitted
+```
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `path` | Path to the module directory containing `go.mod` | No | `.` |
+| `version` | Module version to publish | No | Auto-detected from git tags |
+
+> **Note**: Consumers of modules published to Fly need to configure Go to skip the public checksum database, since privately published modules are not registered on `sum.golang.org`:
+>
+> ```bash
+> go env -w GONOSUMDB=example.com/myorg/* GONOSUMCHECK=example.com/myorg/*
+> ```
+>
+> Replace `example.com/myorg` with your module path prefix (typically the first two segments of the module path).
 
 Both sub-actions output a `results` JSON array with per-file status:
 
