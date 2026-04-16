@@ -1,4 +1,4 @@
-// Copyright (c) JFrog Ltd. (2025)
+// Copyright (c) JFrog Ltd. (2026)
 
 import { vi, type Mock } from "vitest";
 

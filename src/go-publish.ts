@@ -1,4 +1,4 @@
-// Copyright (c) JFrog Ltd. (2025)
+// Copyright (c) JFrog Ltd. (2026)
 
 import * as core from "@actions/core";
 import { execFlyCLI, getAuthEnv } from "./fly-cli";
