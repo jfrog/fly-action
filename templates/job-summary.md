@@ -1,11 +1,5 @@
-# 🦋 Fly action
-
-✅ **Completed successfully**
+## {{JOB_NAME}}
 {{ARTIFACTS_TABLE}}
 {{TRANSFERS_TABLE}}
 {{DISTRIBUTED_TABLE}}
----
-
-### 📢 [View release in Fly]({{RELEASE_URL}})
-
----
+[View release in Fly]({{RELEASE_URL}})

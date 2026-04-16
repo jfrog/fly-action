@@ -24,6 +24,8 @@ export interface CollectedArtifact {
   name: string;
   type: string;
   path?: string;
+  timestamp?: number; // Unix epoch seconds when artifact was collected
+  size?: number; // Content-Length in bytes (0 if unavailable)
 }
 
 /** Response from the CI End endpoint */
