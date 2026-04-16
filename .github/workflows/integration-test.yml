@@ -65,12 +65,13 @@ jobs:
           git config user.name "CI"
           git config user.email "ci@jfrog.com"
           git add . && git commit -m "init"
-          git tag v0.0.1-ci.${{ github.run_id }}
+          git tag v1.0.0
 
       - name: Publish Go module
         uses: ./go-publish
         with:
           path: /tmp/go-publish-test
+          version: v1.0.0
 
       - name: Verify published module is downloadable
         env:
@@ -79,21 +80,7 @@ jobs:
         run: |
           mkdir /tmp/go-download-test && cd /tmp/go-download-test
           go mod init verify
-          go mod download example.com/ci/test-module@v0.0.1-ci.${{ github.run_id }}
-
-      - name: Cleanup test module artifacts
-        if: always()
-        run: |
-          for attempt in 1 2 3; do
-            STATUS=$(curl -s -o /dev/stderr -w "%{http_code}" -X DELETE \
-              -H "Authorization: Bearer $FLY_ACCESS_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d '{"package_name":"example.com/ci/test-module","package_version":"v0.0.1-ci.${{ github.run_id }}","package_type":"go"}' \
-              "$FLY_URL/fly/api/v1/packages" 2>&1)
-            echo "Attempt $attempt: HTTP $STATUS"
-            [ "$STATUS" = "204" ] && break
-            sleep 5
-          done
+          go mod download example.com/ci/test-module@v1.0.0
 
   docker-integration:
     runs-on: ubuntu-24.04-arm
