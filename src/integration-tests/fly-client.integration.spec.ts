@@ -199,7 +199,7 @@ describe("Fly Client Integration Tests", () => {
       expect(result.stdout).toContain("NAME:");
     });
 
-    it("should list available commands including upload and download", () => {
+    it("should list available commands including upload, download, and publish", () => {
       const result = execBinary(["--help"]);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain("setup");
@@ -208,6 +208,7 @@ describe("Fly Client Integration Tests", () => {
       expect(result.stdout).toContain("version");
       expect(result.stdout).toContain("upload");
       expect(result.stdout).toContain("download");
+      expect(result.stdout).toContain("publish");
     });
   });
 
@@ -526,6 +527,28 @@ describe("Fly Client Integration Tests", () => {
       const combined = (result.stdout + result.stderr).toLowerCase();
       expect(combined).not.toContain("invalid flag");
       expect(combined).not.toContain("unknown flag");
+    });
+  });
+
+  describe("Publish command", () => {
+    it("should display publish go help", () => {
+      const result = execBinary(["publish", "go", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Publish Go modules to Fly");
+      expect(result.stdout).toContain("MODULE_DIR");
+    });
+
+    it("should list publish go flags in help", () => {
+      const result = execBinary(["publish", "go", "--help"]);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("--version");
+    });
+
+    it("should fail when no go.mod exists in target directory", async () => {
+      const result = await spawnBinary(["publish", "go", "/tmp"]);
+      expect(result.exitCode).not.toBe(0);
+      const combined = result.stdout + result.stderr;
+      expect(combined).toContain("go.mod");
     });
   });
 
