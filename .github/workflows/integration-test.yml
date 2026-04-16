@@ -72,6 +72,12 @@ jobs:
         with:
           path: /tmp/go-publish-test
 
+      - name: Verify published module is downloadable
+        run: |
+          mkdir /tmp/go-download-test && cd /tmp/go-download-test
+          go mod init verify
+          go mod download github.com/fly-action-ci/test-module@v0.0.1-ci.${{ github.run_id }}
+
   docker-integration:
     runs-on: ubuntu-24.04-arm
     steps:
