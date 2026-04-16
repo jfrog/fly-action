@@ -73,6 +73,9 @@ jobs:
           path: /tmp/go-publish-test
 
       - name: Verify published module is downloadable
+        env:
+          GONOSUMDB: github.com/fly-action-ci/*
+          GONOSUMCHECK: github.com/fly-action-ci/*
         run: |
           mkdir /tmp/go-download-test && cd /tmp/go-download-test
           go mod init verify
