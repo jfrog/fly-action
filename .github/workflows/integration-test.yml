@@ -84,11 +84,15 @@ jobs:
       - name: Cleanup test module artifacts
         if: always()
         run: |
-          curl -v -X DELETE \
-            -H "Authorization: Bearer $FLY_ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"package_name":"example.com/ci/test-module","package_version":"v0.0.1-ci.${{ github.run_id }}","package_type":"go"}' \
-            "$FLY_URL/fly/api/v1/packages" || true
+          for attempt in 1 2 3; do
+            STATUS=$(curl -s -o /dev/stderr -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $FLY_ACCESS_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"package_name":"example.com/ci/test-module","package_version":"v0.0.1-ci.${{ github.run_id }}","package_type":"go"}' \
+              "$FLY_URL/fly/api/v1/packages" 2>&1)
+            echo "Attempt $attempt: HTTP $STATUS"
+            [ "$STATUS" = "204" ] && break
+          done
 
   docker-integration:
     runs-on: ubuntu-24.04-arm
