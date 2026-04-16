@@ -92,6 +92,7 @@ jobs:
               "$FLY_URL/fly/api/v1/packages" 2>&1)
             echo "Attempt $attempt: HTTP $STATUS"
             [ "$STATUS" = "204" ] && break
+            sleep 5
           done
 
   docker-integration:
