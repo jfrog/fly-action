@@ -29,8 +29,15 @@ import {
   buildArtifactsTable,
   formatSize,
 } from "./job-summary";
-import { CollectedArtifact, DistributeResponse, TransferSummaryEntry } from "./types";
-import { ENV_FLY_TRANSFER_RESULTS, ENV_FLY_DISTRIBUTE_RESULTS } from "./constants";
+import {
+  CollectedArtifact,
+  DistributeResponse,
+  TransferSummaryEntry,
+} from "./types";
+import {
+  ENV_FLY_TRANSFER_RESULTS,
+  ENV_FLY_DISTRIBUTE_RESULTS,
+} from "./constants";
 
 describe("createJobSummary", () => {
   beforeEach(() => {
@@ -203,7 +210,8 @@ describe("createJobSummary", () => {
         package_name: "my-app",
         package_version: "1.0.0",
         package_type: "generic",
-        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
         download_url:
           "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
         download_count: 0,
@@ -364,7 +372,8 @@ describe("buildDistributedTable", () => {
         package_name: "my-app",
         package_version: "1.0.0",
         package_type: "generic",
-        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
         download_url:
           "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
         download_count: 5,
@@ -386,7 +395,8 @@ describe("buildDistributedTable", () => {
         package_name: "my-app",
         package_version: "1.0.0",
         package_type: "generic",
-        public_url: "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
         download_url: url,
         download_count: 0,
       },

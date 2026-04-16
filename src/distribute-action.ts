@@ -36,9 +36,7 @@ export async function runDistribute(): Promise<void> {
     core.setOutput(OUTPUT_RESULTS, resultsJson);
     appendDistributeResults(results);
 
-    core.info(
-      `✅ Successfully distributed ${results.length} artifact(s).`,
-    );
+    core.info(`✅ Successfully distributed ${results.length} artifact(s).`);
   } catch (error) {
     core.setFailed(getErrorMessage(error));
   }

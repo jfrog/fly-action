@@ -20,8 +20,7 @@ vi.mock("./utils", () => ({
     dispose: mockDispose,
   }),
   truncate: (s: string) => s,
-  getErrorMessage: (e: unknown) =>
-    e instanceof Error ? e.message : String(e),
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
 
 import * as core from "@actions/core";
