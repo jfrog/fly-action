@@ -23,10 +23,13 @@ export async function runGoPublish(): Promise<void> {
     const { url, token } = getAuthEnv();
     core.setSecret(token);
 
-    const args = [CLI_CMD_PUBLISH, "go", modulePath];
+    // Flags must precede MODULE_DIR: urfave/cli v2 stops parsing flags after
+    // the first positional arg, silently dropping --version.
+    const args = [CLI_CMD_PUBLISH, "go"];
     if (version) {
       args.push(CLI_FLAG_VERSION, version);
     }
+    args.push(modulePath);
 
     const response = await execFlyCLI(args, {
       [ENV_FLY_URL_RUNTIME]: url,
@@ -44,6 +47,31 @@ export async function runGoPublish(): Promise<void> {
     const errors = response.results.filter((r) => r.status === STATUS_ERROR);
     if (errors.length > 0) {
       const summary = errors.map((e) => `${e.name}: ${e.message}`).join("\n");
+
+      // Surface actionable hints *before* core.setFailed so they stay visible
+      // even if the red failure summary gets truncated in the GitHub UI. The
+      // markers come from the CLI's error messages; an older CLI without
+      // these hints will simply not match and we'll degrade to the raw
+      // failure summary.
+      const allMsgs = errors.map((e) => e.message).join("\n");
+      if (allMsgs.includes("not a git repository")) {
+        core.notice(
+          "Hint: `fly publish go` requires the module directory to be a git " +
+            "repository. If you generate sources at build time, run `git init`, " +
+            "`git add -A`, and `git commit -m init` before invoking go-publish.",
+        );
+      }
+      if (
+        allMsgs.includes("dubious ownership") ||
+        allMsgs.includes("safe.directory")
+      ) {
+        core.notice(
+          "Hint: git refuses to read this directory due to ownership mismatch " +
+            "(common in CI containers where the workspace is bind-mounted). " +
+            "Run `git config --system --add safe.directory '*'` before invoking go-publish.",
+        );
+      }
+
       core.setFailed(`Go publish failed:\n${summary}`);
     } else {
       for (const result of response.results) {
