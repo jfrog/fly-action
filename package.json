@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "post": "lib/post.js",
   "scripts": {
-    "build": "npm run format && tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/index.js && esbuild src/post.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/post.js && esbuild src/upload.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/upload.js && esbuild src/download.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/download.js && esbuild src/distribute-action.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/distribute-action.js && esbuild src/go-publish.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/go-publish.js",
+    "build": "npm run format && tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/index.js && esbuild src/post.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/post.js && esbuild src/upload.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/upload.js && esbuild src/download.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/download.js && esbuild src/distribute.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/distribute.js && esbuild src/go-publish.ts --bundle --platform=node --target=node20 --format=cjs --outfile=lib/go-publish.js",
     "test": "vitest run --exclude 'src/integration-tests/**'",
     "lint": "eslint src/**/*.ts",
     "prepare": "npm run build",

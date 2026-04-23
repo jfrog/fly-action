@@ -1,92 +1,74 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
-import { createHttpClient, truncate } from "./utils";
-import { DistributeEntry, DistributeResponse } from "./types";
+import { getAuthEnv } from "./fly-cli";
+import { parseDistributeInput, distributeArtifacts } from "./distribute-core";
+import {
+  INPUT_DISTRIBUTE_ARTIFACTS,
+  INPUT_DISTRIBUTE_TYPE,
+  OUTPUT_RESULTS,
+  ENV_FLY_DISTRIBUTE_RESULTS,
+} from "./constants";
+import { getErrorMessage } from "./utils";
+import { DistributeResponse } from "./types";
 
-const REQUEST_TIMEOUT_MS = 30000;
-
-/**
- * Parses a comma-separated "name:version" string into structured entries.
- * Example: "my-app:1.0.0, my-lib:2.3.1" → [{name: "my-app", version: "1.0.0", type: "generic"}, ...]
- */
-export function parseDistributeInput(
-  input: string,
-  packageType: string,
-): DistributeEntry[] {
-  return input
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-    .map((entry) => {
-      const colonIdx = entry.lastIndexOf(":");
-      if (colonIdx <= 0) {
-        throw new Error(
-          `Invalid distribute entry "${entry}". Expected format: "name:version".`,
-        );
-      }
-      return {
-        name: entry.slice(0, colonIdx).trim(),
-        version: entry.slice(colonIdx + 1).trim(),
-        type: packageType,
-      };
+export async function runDistribute(): Promise<void> {
+  try {
+    const artifactsInput = core.getInput(INPUT_DISTRIBUTE_ARTIFACTS, {
+      required: true,
     });
+    const packageType = core.getInput(INPUT_DISTRIBUTE_TYPE) || "generic";
+
+    const { url, token } = getAuthEnv();
+    core.setSecret(token);
+
+    const entries = parseDistributeInput(artifactsInput, packageType);
+    if (entries.length === 0) {
+      throw new Error(
+        'No artifacts to distribute. Provide at least one "name:version" pair.',
+      );
+    }
+
+    core.info(`Distributing ${entries.length} artifact(s) publicly...`);
+    const { successes, failures } = await distributeArtifacts(
+      url,
+      token,
+      entries,
+    );
+
+    // Always emit partial results before failing. Artifacts in `successes` were
+    // actually made public server-side; downstream steps and the job summary
+    // need to see them even when other entries failed.
+    core.setOutput(OUTPUT_RESULTS, JSON.stringify(successes));
+    appendDistributeResults(successes);
+
+    if (failures.length > 0) {
+      const failedList = failures
+        .map((f) => `${f.entry.name}:${f.entry.version} (${f.error})`)
+        .join("; ");
+      throw new Error(
+        `Failed to distribute ${failures.length} of ${entries.length} artifact(s): ${failedList}`,
+      );
+    }
+
+    core.info(`✅ Successfully distributed ${successes.length} artifact(s).`);
+  } catch (error) {
+    core.setFailed(getErrorMessage(error));
+  }
 }
 
 /**
- * Distributes one or more artifacts by calling the Fly backend.
- * Returns the list of successfully distributed artifacts.
+ * Appends distribute results to the FLY_DISTRIBUTE_RESULTS env var as a
+ * JSON line. The post step reads all accumulated lines to render the
+ * distributed artifacts table in the job summary.
  */
-export async function distributeArtifacts(
-  flyUrl: string,
-  accessToken: string,
-  entries: DistributeEntry[],
-): Promise<DistributeResponse[]> {
-  const httpClient = createHttpClient("fly-action", REQUEST_TIMEOUT_MS);
-  const results: DistributeResponse[] = [];
+function appendDistributeResults(results: DistributeResponse[]): void {
+  const line = JSON.stringify(results);
+  const existing = process.env[ENV_FLY_DISTRIBUTE_RESULTS] || "";
+  const updated = existing ? `${existing}\n${line}` : line;
+  core.exportVariable(ENV_FLY_DISTRIBUTE_RESULTS, updated);
+}
 
-  // Derive the tenant host from flyUrl so the backend builds correct public URLs.
-  const tenantHost = flyUrl.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-
-  try {
-    for (const entry of entries) {
-      const url = `${flyUrl}/fly/api/v1/artifacts/distribute`;
-      const body = JSON.stringify({
-        package_name: entry.name,
-        package_version: entry.version,
-        package_type: entry.type,
-      });
-
-      core.info(`Distributing ${entry.name}:${entry.version} (${entry.type})`);
-
-      const response = await httpClient.post(url, body, {
-        Authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
-        "X-JFROG-FLY-TENANT-HOST": tenantHost,
-      });
-
-      const statusCode = response.message.statusCode ?? 0;
-      const responseBody = await response.readBody();
-
-      if (statusCode !== 200) {
-        throw new Error(
-          `Failed to distribute ${entry.name}:${entry.version}. ` +
-            `Status: ${statusCode}. Body: ${truncate(responseBody)}`,
-        );
-      }
-
-      const parsed: DistributeResponse = JSON.parse(responseBody);
-      results.push(parsed);
-
-      core.info(
-        `✅ Distributed ${parsed.package_name}:${parsed.package_version}`,
-      );
-      core.info(`   Public URL: ${parsed.public_url}`);
-      core.info(`   Download:   ${parsed.download_url}`);
-    }
-  } finally {
-    httpClient.dispose();
-  }
-
-  return results;
+if (require.main === module) {
+  runDistribute();
 }
