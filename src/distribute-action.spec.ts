@@ -165,6 +165,65 @@ describe("runDistribute", () => {
     );
   });
 
+  it("accumulates results across multiple runDistribute invocations", async () => {
+    const response2: DistributeResponse = {
+      ...MOCK_RESPONSE,
+      package_name: "my-lib",
+      package_version: "2.3.1",
+    };
+
+    vi.mocked(core.getInput)
+      .mockImplementationOnce((name: string) => {
+        if (name === "artifacts") return "my-app:1.0.0";
+        if (name === "type") return "generic";
+        return "";
+      })
+      .mockImplementationOnce((name: string) => {
+        if (name === "artifacts") return "my-lib:2.3.1";
+        if (name === "type") return "generic";
+        return "";
+      });
+
+    mockPost
+      .mockResolvedValueOnce({
+        message: { statusCode: 200 },
+        readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
+      })
+      .mockResolvedValueOnce({
+        message: { statusCode: 200 },
+        readBody: () => Promise.resolve(JSON.stringify(response2)),
+      });
+
+    // First invocation — env var is empty, exportVariable should be called with
+    // a single JSON array. Simulate GitHub Actions propagating the exported var
+    // to the next step by copying the exportVariable arg into process.env.
+    await runDistribute();
+    const firstExport = vi.mocked(core.exportVariable).mock
+      .calls[0] as unknown as [string, string];
+    expect(firstExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
+    expect(firstExport[1]).toBe(JSON.stringify([MOCK_RESPONSE]));
+    process.env[ENV_FLY_DISTRIBUTE_RESULTS] = firstExport[1];
+
+    // Second invocation — env var already has the first line; appendDistributeResults
+    // should produce "<existing>\n<new>" so the post step can parse both.
+    await runDistribute();
+    const secondExport = vi.mocked(core.exportVariable).mock
+      .calls[1] as unknown as [string, string];
+    expect(secondExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
+    const expected = `${JSON.stringify([MOCK_RESPONSE])}\n${JSON.stringify([response2])}`;
+    expect(secondExport[1]).toBe(expected);
+
+    // Verify the post-step parser (same logic used by createJobSummary) handles
+    // the accumulated newline-separated JSON arrays.
+    const parsed: DistributeResponse[] = secondExport[1]
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .flatMap((line) => JSON.parse(line) as DistributeResponse[]);
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0].package_name).toBe("my-app");
+    expect(parsed[1].package_name).toBe("my-lib");
+  });
+
   it("defaults package type to generic", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
       if (name === "artifacts") return "my-app:1.0.0";

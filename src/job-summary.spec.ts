@@ -237,6 +237,44 @@ describe("createJobSummary", () => {
     expect(markdownContent).not.toContain("Distributed Artifacts");
   });
 
+  it("should render all rows when env var contains multiple newline-separated JSON arrays (multi-step accumulation)", async () => {
+    const step1: DistributeResponse[] = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
+        download_count: 0,
+      },
+    ];
+    const step2: DistributeResponse[] = [
+      {
+        package_name: "my-lib",
+        package_version: "2.3.1",
+        package_type: "generic",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-lib/2.3.1",
+        download_url:
+          "https://fly.example.com/public/generic/tenant/my-lib/2.3.1/my-lib.tar.gz",
+        download_count: 0,
+      },
+    ];
+    process.env[ENV_FLY_DISTRIBUTE_RESULTS] =
+      `${JSON.stringify(step1)}\n${JSON.stringify(step2)}`;
+
+    await createJobSummary();
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("### 🌐 Distributed Artifacts");
+    expect(markdownContent).toContain("my-app");
+    expect(markdownContent).toContain("my-lib");
+    expect(markdownContent).toContain("1.0.0");
+    expect(markdownContent).toContain("2.3.1");
+  });
+
   it("should warn on malformed distribute results JSON", async () => {
     process.env[ENV_FLY_DISTRIBUTE_RESULTS] = "not valid json";
 
