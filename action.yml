@@ -4,8 +4,8 @@ description: >
   Downloads the Fly CLI automatically from releases.jfrog.io.
   After setup, the fly CLI is available on PATH and FLY_URL / FLY_ACCESS_TOKEN
   are exported for subsequent steps.
-  Use jfrog/fly-action/upload and jfrog/fly-action/download sub-actions
-  to transfer generic artifacts.
+  Use jfrog/fly-action/upload, jfrog/fly-action/download, and
+  jfrog/fly-action/distribute sub-actions for generic artifacts.
 author: 'JFrog'
 
 inputs:

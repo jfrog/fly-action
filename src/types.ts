@@ -33,6 +33,30 @@ export interface EndCiResponse {
   artifacts: CollectedArtifact[];
 }
 
+/** Parsed distribute input entry */
+export interface DistributeEntry {
+  name: string;
+  version: string;
+  type: string;
+}
+
+/** Request body for the Fly distribute endpoint */
+export interface DistributeRequest {
+  package_name: string;
+  package_version: string;
+  package_type: string;
+}
+
+/** Response body from the Fly distribute endpoint */
+export interface DistributeResponse {
+  package_name: string;
+  package_version: string;
+  package_type: string;
+  public_url: string;
+  download_url: string;
+  download_count: number;
+}
+
 /**
  * JSON envelope written to stdout by every fly CLI command.
  * Mirrors Go type: client/internal/output/response.go → Response

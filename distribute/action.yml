@@ -1,0 +1,27 @@
+name: 'Fly Distribute'
+description: 'Make generic artifact versions publicly downloadable. Requires jfrog/fly-action to have run first for authentication.'
+author: 'JFrog'
+
+inputs:
+  artifacts:
+    description: 'Comma-separated list of "name:version" pairs to distribute (e.g., "my-app:1.0.0, my-lib:2.3.1")'
+    required: true
+  type:
+    description: 'Package type for distributed artifacts (default: generic)'
+    required: false
+    default: 'generic'
+
+outputs:
+  results:
+    description: >
+      JSON array of successfully distributed artifacts. On partial failure, this
+      still contains the entries that were distributed — inspect the action's
+      exit status to detect failures. Schema differs from upload/download
+      (which emit FlyClientResult[] = {name, status, message}).
+      Each entry: {package_name, package_version, package_type, public_url,
+      download_url, download_count}.
+
+runs:
+  # node24 for GitHub.com. GHES users: use jfrog/fly-action@v1-node20
+  using: 'node24'
+  main: '../lib/distribute.js'
