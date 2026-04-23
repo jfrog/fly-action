@@ -62,6 +62,7 @@ export const INPUT_VERSION = "version";
 export const INPUT_FILES = "files";
 export const INPUT_EXCLUDE = "exclude";
 export const INPUT_OUTPUT_DIR = "output-dir";
+export const INPUT_PATH = "path";
 
 // Action output names
 export const OUTPUT_RESULTS = "results";
@@ -69,6 +70,7 @@ export const OUTPUT_RESULTS = "results";
 // Fly CLI subcommands
 export const CLI_CMD_UPLOAD = "upload";
 export const CLI_CMD_DOWNLOAD = "download";
+export const CLI_CMD_PUBLISH = "publish";
 export const CLI_CMD_SETUP = "setup";
 export const CLI_CMD_VERSION = "version";
 
