@@ -10,7 +10,7 @@ inputs:
     description: 'Package version'
     required: true
   type:
-    description: 'Package type (default: generic)'
+    description: 'Package type. Currently only "generic" is supported.'
     required: false
     default: 'generic'
 
