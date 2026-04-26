@@ -48,8 +48,8 @@ export const ARCH_MAP: Record<string, string> = {
 
 export const UNIX_EXECUTABLE_MODE = 0o755;
 
-// Action input names for distribute sub-action
-export const INPUT_DISTRIBUTE_ARTIFACTS = "artifacts";
+// Action input name for distribute sub-action package type.
+// Name and version inputs are shared with upload/download (INPUT_NAME, INPUT_VERSION).
 export const INPUT_DISTRIBUTE_TYPE = "type";
 
 // Env var used to accumulate distribute results across sub-action steps.

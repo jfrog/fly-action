@@ -2,9 +2,10 @@
 
 import * as core from "@actions/core";
 import { getAuthEnv } from "./fly-cli";
-import { parseDistributeInput, distributeArtifacts } from "./distribute-core";
+import { distributeArtifact } from "./distribute-core";
 import {
-  INPUT_DISTRIBUTE_ARTIFACTS,
+  INPUT_NAME,
+  INPUT_VERSION,
   INPUT_DISTRIBUTE_TYPE,
   OUTPUT_RESULTS,
   ENV_FLY_DISTRIBUTE_RESULTS,
@@ -14,44 +15,30 @@ import { DistributeResponse } from "./types";
 
 export async function runDistribute(): Promise<void> {
   try {
-    const artifactsInput = core.getInput(INPUT_DISTRIBUTE_ARTIFACTS, {
-      required: true,
-    });
+    const name = core.getInput(INPUT_NAME, { required: true });
+    const version = core.getInput(INPUT_VERSION, { required: true });
     const packageType = core.getInput(INPUT_DISTRIBUTE_TYPE) || "generic";
 
     const { url, token } = getAuthEnv();
     core.setSecret(token);
 
-    const entries = parseDistributeInput(artifactsInput, packageType);
-    if (entries.length === 0) {
-      throw new Error(
-        'No artifacts to distribute. Provide at least one "name:version" pair.',
-      );
-    }
-
-    core.info(`Distributing ${entries.length} artifact(s) publicly...`);
-    const { successes, failures } = await distributeArtifacts(
+    const result = await distributeArtifact(
       url,
       token,
-      entries,
+      name,
+      version,
+      packageType,
     );
 
-    // Always emit partial results before failing. Artifacts in `successes` were
-    // actually made public server-side; downstream steps and the job summary
-    // need to see them even when other entries failed.
-    core.setOutput(OUTPUT_RESULTS, JSON.stringify(successes));
-    appendDistributeResults(successes);
+    // `results` is emitted as a 1-element array so the output shape stays
+    // consistent with upload/download and the post step can accumulate
+    // results across multiple distribute invocations without branching on
+    // per-step cardinality.
+    const results: DistributeResponse[] = [result];
+    core.setOutput(OUTPUT_RESULTS, JSON.stringify(results));
+    appendDistributeResults(results);
 
-    if (failures.length > 0) {
-      const failedList = failures
-        .map((f) => `${f.entry.name}:${f.entry.version} (${f.error})`)
-        .join("; ");
-      throw new Error(
-        `Failed to distribute ${failures.length} of ${entries.length} artifact(s): ${failedList}`,
-      );
-    }
-
-    core.info(`✅ Successfully distributed ${successes.length} artifact(s).`);
+    core.info(`✅ Successfully distributed ${name}:${version}.`);
   } catch (error) {
     core.setFailed(getErrorMessage(error));
   }
