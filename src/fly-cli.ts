@@ -262,6 +262,11 @@ export async function execFlyCLI(
   } catch {
     core.debug(`Full CLI stdout: ${stdout}`);
     core.debug(`Full CLI stderr: ${stderr}`);
+    if (exitCode !== 0 && stderr.trim()) {
+      throw new Error(
+        `Fly CLI failed with exit code ${exitCode}:\n${stderr.trim()}`,
+      );
+    }
     throw new Error(
       `Failed to parse Fly CLI JSON output (exit code ${exitCode}).\n` +
         `stdout: ${truncate(stdout)}\nstderr: ${truncate(stderr)}`,
