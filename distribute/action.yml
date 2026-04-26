@@ -4,13 +4,13 @@ author: 'JFrog'
 
 inputs:
   name:
-    description: 'Package name'
+    description: 'Artifact name'
     required: true
   version:
-    description: 'Package version'
+    description: 'Artifact version'
     required: true
   type:
-    description: 'Package type. Currently only "generic" is supported.'
+    description: 'Artifact type. Currently only "generic" is supported.'
     required: false
     default: 'generic'
 
