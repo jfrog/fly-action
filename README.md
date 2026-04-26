@@ -80,8 +80,8 @@ Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
 | `exclude` | Glob patterns to exclude — one per line | No |
 
 Glob patterns are expanded by the Fly CLI and support recursive matches such as `dist/**`.
-When a glob matches directories or symlinks, they are skipped and only regular files are uploaded.
-For example, `dist/**` uploads files under `dist` recursively without trying to upload `dist` itself or any symlinks inside it.
+Patterns like `dist/**` upload regular files under `dist` recursively.
+Directories and symlinks are not uploaded, and symlinked directories are not traversed.
 Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stored as `app.tar.gz`.
 
 ### Download
