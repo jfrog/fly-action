@@ -4,10 +4,10 @@ author: 'JFrog'
 
 inputs:
   name:
-    description: 'Package name'
+    description: 'Artifact name'
     required: true
   version:
-    description: 'Package version'
+    description: 'Artifact version'
     required: true
   files:
     description: 'Remote filenames to download -- one per line (exact names, no glob expansion)'

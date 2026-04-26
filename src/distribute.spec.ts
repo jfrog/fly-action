@@ -44,6 +44,12 @@ const MOCK_RESPONSE: DistributeResponse = {
   download_count: 0,
 };
 
+function mockInputs(inputs: Record<string, string>): void {
+  vi.mocked(core.getInput).mockImplementation(
+    (name: string) => inputs[name] ?? "",
+  );
+}
+
 describe("runDistribute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,12 +67,8 @@ describe("runDistribute", () => {
     delete process.env[ENV_FLY_DISTRIBUTE_RESULTS];
   });
 
-  it("distributes a single artifact and sets output", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0";
-      if (name === "type") return "generic";
-      return "";
-    });
+  it("distributes a single artifact and emits a 1-element results array", async () => {
+    mockInputs({ name: "my-app", version: "1.0.0", type: "generic" });
 
     mockPost.mockResolvedValue({
       message: { statusCode: 200 },
@@ -87,46 +89,9 @@ describe("runDistribute", () => {
     expect(mockDispose).toHaveBeenCalled();
   });
 
-  it("distributes multiple artifacts", async () => {
-    const response2: DistributeResponse = {
-      ...MOCK_RESPONSE,
-      package_name: "my-lib",
-      package_version: "2.3.1",
-    };
-
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0, my-lib:2.3.1";
-      if (name === "type") return "generic";
-      return "";
-    });
-
-    mockPost
-      .mockResolvedValueOnce({
-        message: { statusCode: 200 },
-        readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
-      })
-      .mockResolvedValueOnce({
-        message: { statusCode: 200 },
-        readBody: () => Promise.resolve(JSON.stringify(response2)),
-      });
-
-    await runDistribute();
-
-    expect(core.setFailed).not.toHaveBeenCalled();
-    expect(mockPost).toHaveBeenCalledTimes(2);
-
-    const outputJson = vi.mocked(core.setOutput).mock.calls[0][1] as string;
-    const outputResults = JSON.parse(outputJson);
-    expect(outputResults).toHaveLength(2);
-  });
-
   it("fails when auth is not configured", async () => {
     delete process.env[ENV_FLY_URL_RUNTIME];
-
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0";
-      return "";
-    });
+    mockInputs({ name: "my-app", version: "1.0.0" });
 
     await runDistribute();
 
@@ -135,25 +100,8 @@ describe("runDistribute", () => {
     );
   });
 
-  it("fails on empty artifacts input", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "";
-      return "";
-    });
-
-    await runDistribute();
-
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining("No artifacts to distribute"),
-    );
-  });
-
   it("fails when API returns non-200", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0";
-      if (name === "type") return "generic";
-      return "";
-    });
+    mockInputs({ name: "my-app", version: "1.0.0", type: "generic" });
 
     mockPost.mockResolvedValue({
       message: { statusCode: 404 },
@@ -165,58 +113,21 @@ describe("runDistribute", () => {
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining("Failed to distribute"),
     );
-    // Even on total failure, output is emitted with the (empty) successes list
-    // so downstream steps see a well-formed value instead of undefined.
-    expect(core.setOutput).toHaveBeenCalledWith("results", "[]");
+    expect(core.setOutput).not.toHaveBeenCalled();
   });
 
-  it("emits partial successes when some entries fail", async () => {
-    const response2: DistributeResponse = {
-      ...MOCK_RESPONSE,
-      package_name: "my-lib",
-      package_version: "2.3.1",
-    };
+  it("defaults package type to generic when the input is empty", async () => {
+    mockInputs({ name: "my-app", version: "1.0.0" });
 
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0, my-lib:2.3.1, bad:0.0.1";
-      if (name === "type") return "generic";
-      return "";
+    mockPost.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
     });
-
-    mockPost
-      .mockResolvedValueOnce({
-        message: { statusCode: 200 },
-        readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
-      })
-      .mockResolvedValueOnce({
-        message: { statusCode: 200 },
-        readBody: () => Promise.resolve(JSON.stringify(response2)),
-      })
-      .mockResolvedValueOnce({
-        message: { statusCode: 500 },
-        readBody: () => Promise.resolve("server error"),
-      });
 
     await runDistribute();
 
-    // Successful artifacts MUST be exposed on the output — they were actually
-    // distributed on the server even though the batch as a whole failed.
-    const outputJson = vi.mocked(core.setOutput).mock.calls[0][1] as string;
-    const outputResults = JSON.parse(outputJson);
-    expect(outputResults).toHaveLength(2);
-    expect(outputResults[0].package_name).toBe("my-app");
-    expect(outputResults[1].package_name).toBe("my-lib");
-
-    // And the env var used by the job summary must reflect them too.
-    expect(core.exportVariable).toHaveBeenCalledWith(
-      ENV_FLY_DISTRIBUTE_RESULTS,
-      JSON.stringify([MOCK_RESPONSE, response2]),
-    );
-
-    // setFailed is called last with a message naming the failed entry.
-    expect(core.setFailed).toHaveBeenCalledWith(
-      expect.stringContaining("bad:0.0.1"),
-    );
+    const body = JSON.parse(mockPost.mock.calls[0][1]);
+    expect(body.package_type).toBe("generic");
   });
 
   it("accumulates results across multiple runDistribute invocations", async () => {
@@ -226,17 +137,14 @@ describe("runDistribute", () => {
       package_version: "2.3.1",
     };
 
-    vi.mocked(core.getInput)
-      .mockImplementationOnce((name: string) => {
-        if (name === "artifacts") return "my-app:1.0.0";
-        if (name === "type") return "generic";
-        return "";
-      })
-      .mockImplementationOnce((name: string) => {
-        if (name === "artifacts") return "my-lib:2.3.1";
-        if (name === "type") return "generic";
-        return "";
-      });
+    let currentInputs: Record<string, string> = {
+      name: "my-app",
+      version: "1.0.0",
+      type: "generic",
+    };
+    vi.mocked(core.getInput).mockImplementation(
+      (n: string) => currentInputs[n] ?? "",
+    );
 
     mockPost
       .mockResolvedValueOnce({
@@ -248,9 +156,9 @@ describe("runDistribute", () => {
         readBody: () => Promise.resolve(JSON.stringify(response2)),
       });
 
-    // First invocation — env var is empty, exportVariable should be called with
-    // a single JSON array. Simulate GitHub Actions propagating the exported var
-    // to the next step by copying the exportVariable arg into process.env.
+    // First invocation — env var empty, exportVariable gets a single JSON array.
+    // Simulate GitHub Actions propagating the exported var to the next step by
+    // copying the exportVariable arg into process.env.
     await runDistribute();
     const firstExport = vi.mocked(core.exportVariable).mock
       .calls[0] as unknown as [string, string];
@@ -260,6 +168,7 @@ describe("runDistribute", () => {
 
     // Second invocation — env var already has the first line; appendDistributeResults
     // should produce "<existing>\n<new>" so the post step can parse both.
+    currentInputs = { name: "my-lib", version: "2.3.1", type: "generic" };
     await runDistribute();
     const secondExport = vi.mocked(core.exportVariable).mock
       .calls[1] as unknown as [string, string];
@@ -276,22 +185,5 @@ describe("runDistribute", () => {
     expect(parsed).toHaveLength(2);
     expect(parsed[0].package_name).toBe("my-app");
     expect(parsed[1].package_name).toBe("my-lib");
-  });
-
-  it("defaults package type to generic", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      if (name === "artifacts") return "my-app:1.0.0";
-      return "";
-    });
-
-    mockPost.mockResolvedValue({
-      message: { statusCode: 200 },
-      readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
-    });
-
-    await runDistribute();
-
-    const body = JSON.parse(mockPost.mock.calls[0][1]);
-    expect(body.package_type).toBe("generic");
   });
 });

@@ -4,10 +4,10 @@ author: 'JFrog'
 
 inputs:
   name:
-    description: 'Package name'
+    description: 'Artifact name'
     required: true
   version:
-    description: 'Package version'
+    description: 'Artifact version'
     required: true
   files:
     description: 'Files to upload -- one per line. Supports glob patterns (*, ?, [], **). Basename is used as remote filename.'

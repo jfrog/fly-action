@@ -33,13 +33,6 @@ export interface EndCiResponse {
   artifacts: CollectedArtifact[];
 }
 
-/** Parsed distribute input entry */
-export interface DistributeEntry {
-  name: string;
-  version: string;
-  type: string;
-}
-
 /** Request body for the Fly distribute endpoint */
 export interface DistributeRequest {
   package_name: string;
