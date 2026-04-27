@@ -130,6 +130,40 @@ describe("runTransfer", () => {
     );
   });
 
+  it("calls setFailed with collision message when CLI reports pre-flight basename collision", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        name: "my-app",
+        version: "1.0.0",
+        files: "dist/**",
+        exclude: "",
+      };
+      return inputs[name] || "";
+    });
+
+    (parseMultilineInput as Mock)
+      .mockReturnValueOnce(["dist/**"])
+      .mockReturnValueOnce([]);
+
+    (execFlyCLI as Mock).mockResolvedValue({
+      command: "upload",
+      results: [
+        {
+          name: "*",
+          status: "error",
+          message:
+            'basename collision — flat uploads require unique filenames:\n  dist/linux/app and dist/macos/app both upload as "app"',
+        },
+      ],
+    });
+
+    await runTransfer(uploadConfig);
+
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining("basename collision"),
+    );
+  });
+
   it("calls setFailed when files have errors", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
       const inputs: Record<string, string> = {
