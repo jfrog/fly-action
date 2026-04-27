@@ -317,6 +317,21 @@ describe("execFlyCLI", () => {
     );
   });
 
+  it("surfaces stderr first when a failed CLI command does not return JSON", async () => {
+    vi.mocked(exec.exec).mockImplementation(async (_cmd, _args, options) => {
+      options?.listeners?.stderr?.(
+        Buffer.from(
+          '2026/04/26 08:21:49 Fly Client Error:\noutput directory ".ci-artifacts/boost" not found',
+        ),
+      );
+      return 1;
+    });
+
+    await expect(execFlyCLI(["download"])).rejects.toThrow(
+      /^Fly CLI failed with exit code 1:\n2026\/04\/26 08:21:49 Fly Client Error:\noutput directory ".ci-artifacts\/boost" not found/,
+    );
+  });
+
   it("logs stderr as info", async () => {
     const jsonResponse = JSON.stringify({
       command: "upload",

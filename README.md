@@ -67,6 +67,7 @@ Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
     files: |
       dist/app.zip
       dist/app.tar.gz
+      dist/**
     exclude: |
       *.log
 ```
@@ -77,6 +78,11 @@ Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
 | `version` | Package version | Yes |
 | `files` | Files to upload — one per line, supports glob patterns | Yes |
 | `exclude` | Glob patterns to exclude — one per line | No |
+
+Glob patterns are expanded by the Fly CLI and support recursive matches such as `dist/**`.
+Patterns like `dist/**` upload regular files under `dist` recursively.
+Directories and symlinks are not uploaded, and symlinked directories are not traversed.
+Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stored as `app.tar.gz`.
 
 ### Download
 
