@@ -30,10 +30,10 @@ export const ENV_FLY_URL_RUNTIME = "FLY_URL";
 export const ENV_FLY_ACCESS_TOKEN_RUNTIME = "FLY_ACCESS_TOKEN";
 export const ENV_FLY_IGNORE_PACKAGE_MANAGERS = "FLY_IGNORE_PACKAGE_MANAGERS";
 
-// Fly CLI binary download from releases.jfrog.io.
-// [RELEASE] is an Artifactory token that resolves to the latest published version.
+// Fly CLI binary download from Fly public generic endpoint.
+// [LATEST] is an Artifactory token that resolves to the latest published version.
 export const FLY_CLI_DOWNLOAD_BASE =
-  "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]";
+  "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]";
 
 export const PLATFORM_MAP: Record<string, string> = {
   darwin: "darwin",

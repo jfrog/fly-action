@@ -20,8 +20,8 @@ describe("constants", () => {
   });
 
   it("should have a valid CLI download base URL", () => {
-    expect(FLY_CLI_DOWNLOAD_BASE).toContain("releases.jfrog.io");
-    expect(FLY_CLI_DOWNLOAD_BASE).toContain("[RELEASE]");
+    expect(FLY_CLI_DOWNLOAD_BASE).toContain("flyjfrog.jfrog.io");
+    expect(FLY_CLI_DOWNLOAD_BASE).toContain("[LATEST]");
   });
 
   it("should have a valid default Fly URL", () => {
