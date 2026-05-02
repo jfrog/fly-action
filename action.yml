@@ -13,7 +13,7 @@ inputs:
     description: 'Fly URL (optional — when omitted, tenant is resolved automatically from GitHub OIDC claims)'
     required: false
   ignore:
-    description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'
+    description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip,uv)'
     required: false
 
 runs:
