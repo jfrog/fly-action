@@ -2,7 +2,7 @@
 
 /**
  * Integration tests for the Fly Client CLI.
- * These tests download the latest fly CLI binary from releases.jfrog.io
+ * These tests download the latest fly CLI binary from Fly public generic
  * and verify that it is functional and accepts expected arguments.
  *
  * Note: These tests require network access to download the binary.
@@ -20,6 +20,7 @@ const SUPPORTED_PACKAGE_MANAGERS = [
   "pip",
   "pipenv",
   "twine",
+  "uv",
   "maven",
   "gradle",
   "dotnet",
@@ -30,7 +31,7 @@ const SUPPORTED_PACKAGE_MANAGERS = [
 let binPath: string;
 
 /**
- * Downloads the fly CLI binary from releases.jfrog.io to a temp directory.
+ * Downloads the fly CLI binary from Fly public generic to a temp directory.
  * Uses the same URL pattern as the action's downloadFlyCLI function.
  */
 async function downloadBinary(): Promise<string> {
@@ -44,7 +45,7 @@ async function downloadBinary(): Promise<string> {
 
   const ext = process.platform === "win32" ? ".exe" : "";
   const binaryName = `fly${ext}`;
-  const url = `${FLY_CLI_DOWNLOAD_BASE}/${osMapped}-${archMapped}/${binaryName}`;
+  const url = `${FLY_CLI_DOWNLOAD_BASE}/fly-${osMapped}-${archMapped}${ext}`;
 
   const tmpDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "fly-integration-test-"),
@@ -353,6 +354,7 @@ describe("Fly Client Integration Tests", () => {
         "pipenv",
         "pnpm",
         "twine",
+        "uv",
         "nuget",
         "docker",
         "helm",

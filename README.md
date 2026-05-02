@@ -228,7 +228,7 @@ The action enforces HTTPS on all custom URLs to prevent OIDC token exfiltration.
 The action supports all package managers that the Fly CLI supports:
 
 - **npm, pnpm, yarn** – Node.js package managers (npm registry)
-- **pip, pipenv, poetry, twine** – Python package managers (PyPI repository)
+- **pip, pipenv, poetry, twine, uv** – Python package managers (PyPI repository)
 - **nuget, dotnet** – .NET package managers (NuGet)
 - **docker, podman** – Container registries (Docker)
 - **helm** – Kubernetes package manager

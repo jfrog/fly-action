@@ -1,7 +1,7 @@
 name: 'Setup Fly Registry'
 description: >
   Authenticates with Fly via GitHub OIDC and configures package managers.
-  Downloads the Fly CLI automatically from releases.jfrog.io.
+  Downloads the Fly CLI automatically from Fly public generic endpoint.
   After setup, the fly CLI is available on PATH and FLY_URL / FLY_ACCESS_TOKEN
   are exported for subsequent steps.
   Use jfrog/fly-action/upload, jfrog/fly-action/download, and
@@ -13,7 +13,7 @@ inputs:
     description: 'Fly URL (optional — when omitted, tenant is resolved automatically from GitHub OIDC claims)'
     required: false
   ignore:
-    description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip)'
+    description: 'Comma-separated list of package managers to ignore when configuring all (e.g., docker,pip,uv)'
     required: false
 
 runs:

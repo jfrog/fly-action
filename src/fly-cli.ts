@@ -24,7 +24,7 @@ const WINDOWS_OS = "windows";
 const FLY_TOOL_NAME = "fly";
 
 /**
- * Maps Node.js process.platform/arch to the Go binary naming used by releases.jfrog.io.
+ * Maps Node.js process.platform/arch to the Go binary naming convention.
  * Throws if the current platform or architecture is unsupported.
  */
 export function resolvePlatformArch(): { os: string; arch: string } {
@@ -48,7 +48,7 @@ export function resolvePlatformArch(): { os: string; arch: string } {
  */
 export function buildDownloadUrl(os: string, arch: string): string {
   const ext = os === WINDOWS_OS ? ".exe" : "";
-  return `${FLY_CLI_DOWNLOAD_BASE}/${os}-${arch}/${FLY_TOOL_NAME}${ext}`;
+  return `${FLY_CLI_DOWNLOAD_BASE}/${FLY_TOOL_NAME}-${os}-${arch}${ext}`;
 }
 
 /**
@@ -102,7 +102,7 @@ export async function resolveVersion(binPath: string): Promise<string> {
 }
 
 /**
- * Downloads the fly CLI binary from releases.jfrog.io and caches it using
+ * Downloads the fly CLI binary from Fly public generic and caches it using
  * @actions/tool-cache. Returns the directory containing the cached binary.
  *
  * On subsequent runs (self-hosted runners), a cached version is reused if available.

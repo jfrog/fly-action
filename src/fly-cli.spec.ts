@@ -97,21 +97,21 @@ describe("buildDownloadUrl", () => {
   it("builds URL for darwin-arm64", () => {
     const url = buildDownloadUrl("darwin", "arm64");
     expect(url).toBe(
-      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/darwin-arm64/fly",
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly-darwin-arm64",
     );
   });
 
   it("builds URL for windows-amd64 with .exe", () => {
     const url = buildDownloadUrl("windows", "amd64");
     expect(url).toBe(
-      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/windows-amd64/fly.exe",
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly-windows-amd64.exe",
     );
   });
 
   it("builds URL for linux-amd64", () => {
     const url = buildDownloadUrl("linux", "amd64");
     expect(url).toBe(
-      "https://releases.jfrog.io/artifactory/fly-client/v1/[RELEASE]/linux-amd64/fly",
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly-linux-amd64",
     );
   });
 });

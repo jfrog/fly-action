@@ -2,7 +2,7 @@
 dist/
 coverage/
 
-# Fly CLI binaries (downloaded at runtime from releases.jfrog.io)
+# Fly CLI binaries (downloaded at runtime from Fly public generic)
 bin/
 
 # Environment variables
