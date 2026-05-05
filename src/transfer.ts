@@ -1,8 +1,9 @@
 // Copyright (c) JFrog Ltd. (2025)
 
+import * as fs from "fs";
+import * as path from "path";
 import * as core from "@actions/core";
-import { HttpClient } from "@actions/http-client";
-import { getErrorMessage, DEFAULT_HTTP_TIMEOUT_MS } from "./utils";
+import { getErrorMessage } from "./utils";
 import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
 import {
   INPUT_NAME,
@@ -26,12 +27,23 @@ export interface TransferConfig {
   command: string;
   extraArgs: string[];
   noFilesMessage: string;
+  // Download only — output directory for files. When the user requests
+  // [LATEST], runTransfer bypasses the fly CLI and downloads directly from
+  // the public endpoint, so it needs to know where to write files itself.
+  outputDir?: string;
 }
 
 /**
  * Shared orchestration for upload and download sub-actions.
- * Reads common inputs, authenticates, builds CLI args, executes
- * the fly CLI, records results for the job summary, and reports errors.
+ *
+ * Routing:
+ *   - upload                       → fly CLI (authenticated endpoint).
+ *   - download + concrete version  → fly CLI (authenticated endpoint).
+ *   - download + [LATEST]          → direct anonymous fetch against the
+ *     public endpoint (`/public/generic/.../[LATEST]/...`). The fly CLI is
+ *     NOT invoked, because the authenticated endpoint is a JPD passthrough
+ *     and does NOT resolve [LATEST] — only the public endpoint does, and
+ *     only for artifacts that have been publicly distributed.
  */
 export async function runTransfer(config: TransferConfig): Promise<void> {
   try {
@@ -51,39 +63,47 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
       throw new Error(config.noFilesMessage);
     }
 
-    const args = [
-      config.command,
-      CLI_FLAG_NAME,
-      name,
-      CLI_FLAG_VERSION,
-      cliVersion,
-      ...config.extraArgs,
-    ];
+    const isLatestDownload =
+      config.type === "download" && isLatestToken(cliVersion);
 
-    const excludes = parseMultilineInput(excludeInput);
-    for (const pattern of excludes) {
-      args.push(CLI_FLAG_EXCLUDE, pattern);
+    let response: { command: string; results: FlyClientResult[] };
+    let displayVersion: string;
+
+    if (isLatestDownload) {
+      // Public-URL path. excludes don't apply because we name files exactly
+      // (download/action.yml says: "Remote filenames to download — exact names,
+      // no glob expansion"). We surface the resolved concrete version for the
+      // job summary by parsing it from the redirected URL of the first
+      // successful download.
+      const outputDir = config.outputDir ?? ".";
+      const result = await runPublicLatestDownload(url, name, files, outputDir);
+      response = { command: result.command, results: result.results };
+      displayVersion = result.resolvedVersion;
+    } else {
+      const args = [
+        config.command,
+        CLI_FLAG_NAME,
+        name,
+        CLI_FLAG_VERSION,
+        cliVersion,
+        ...config.extraArgs,
+      ];
+
+      const excludes = parseMultilineInput(excludeInput);
+      for (const pattern of excludes) {
+        args.push(CLI_FLAG_EXCLUDE, pattern);
+      }
+
+      args.push(...files);
+
+      response = await execFlyCLI(args, {
+        [ENV_FLY_URL_RUNTIME]: url,
+        [ENV_FLY_ACCESS_TOKEN_RUNTIME]: token,
+      });
+      displayVersion = cliVersion;
     }
 
-    args.push(...files);
-
-    const response = await execFlyCLI(args, {
-      [ENV_FLY_URL_RUNTIME]: url,
-      [ENV_FLY_ACCESS_TOKEN_RUNTIME]: token,
-    });
-
     core.setOutput(OUTPUT_RESULTS, JSON.stringify(response.results));
-
-    // For [LATEST] downloads, best-effort-resolve to the concrete version so the
-    // job summary shows a real version string instead of literal "[LATEST]".
-    // The CLI invocation above still uses literal [LATEST]; this is display-only.
-    // On any failure we fall back to displaying the literal token — never block
-    // the download.
-    const displayVersion =
-      config.type === "download" && isLatestToken(cliVersion)
-        ? await resolveLatestVersionForDisplay(url, token, name, files[0])
-        : cliVersion;
-
     appendTransferResults(config.type, name, displayVersion, response.results);
 
     const errors = response.results.filter((r) => r.status === STATUS_ERROR);
@@ -115,67 +135,94 @@ export function isLatestToken(version: string): boolean {
 }
 
 /**
- * Best-effort resolve of [LATEST] to a concrete version string for display in
- * the job summary. Issues a HEAD against the authenticated generic endpoint
- * with redirects disabled, then parses the concrete version from the
- * `Location` header of the 302 response (path shape:
- *   /fly/api/v1/generic/{name}/{concrete}/{file}).
+ * Streams [LATEST] generic files directly from the anonymous public download
+ * endpoint, bypassing the fly CLI entirely.
  *
- * Returns LATEST_VERSION on any failure (404, missing header, network error)
- * — the caller treats the literal token as a graceful fallback so a missing
- * job-summary improvement never blocks an actual download. This intentionally
- * does NOT alter the CLI invocation (the CLI still receives literal [LATEST]
- * and the server resolves it again per file via 302). For multi-file downloads,
- * a new upload landing mid-job could mean the CLI grabs a newer version than
- * what we display here — acceptable trade-off for display-only metadata.
+ * Why the fly CLI is not used here:
+ *   - The authenticated endpoint (/fly/api/v1/generic/...) is a JPD passthrough
+ *     and does NOT resolve [LATEST]. Hitting it with [LATEST] returns 404.
+ *   - The public endpoint (/public/generic/.../[LATEST]/...) DOES resolve it,
+ *     via 302 + Cache-Control: no-store, but only for artifacts that have
+ *     been publicly distributed.
+ *
+ * We follow the redirect, write the file to disk, and parse the resolved
+ * concrete version from the redirect target so the job summary shows a real
+ * version string instead of literal "[LATEST]". A 404 is surfaced as a
+ * "not publicly distributed" hint so the user knows to either distribute
+ * the artifact or pass a concrete version. Exposed for testing.
  */
-export async function resolveLatestVersionForDisplay(
+export async function runPublicLatestDownload(
   flyUrl: string,
-  accessToken: string,
   packageName: string,
-  firstFile: string,
-): Promise<string> {
-  const client = new HttpClient("fly-action", undefined, {
-    socketTimeout: DEFAULT_HTTP_TIMEOUT_MS,
-    allowRedirects: false,
-  });
-  try {
-    const resolveUrl =
-      `${flyUrl.replace(/\/+$/, "")}/fly/api/v1/generic/` +
-      `${encodeURIComponent(packageName)}/${LATEST_VERSION}/${encodeURIComponent(firstFile)}`;
-    const res = await client.head(resolveUrl, {
-      Authorization: `Bearer ${accessToken}`,
-    });
-    if (res.message.statusCode !== 302) {
-      return LATEST_VERSION;
+  files: string[],
+  outputDir: string,
+): Promise<{
+  command: string;
+  results: FlyClientResult[];
+  resolvedVersion: string;
+}> {
+  const baseUrl = flyUrl.replace(/\/+$/, "");
+  await fs.promises.mkdir(outputDir, { recursive: true });
+
+  const results: FlyClientResult[] = [];
+  let resolvedVersion = LATEST_VERSION;
+
+  for (const fileName of files) {
+    const url =
+      `${baseUrl}/public/generic/` +
+      `${encodeURIComponent(packageName)}/` +
+      `${encodeURIComponent(LATEST_VERSION)}/` +
+      `${encodeURIComponent(fileName)}`;
+
+    try {
+      const resp = await fetch(url, { redirect: "follow" });
+      if (!resp.ok) {
+        results.push({
+          name: fileName,
+          status: STATUS_ERROR,
+          message:
+            resp.status === 404
+              ? "not publicly distributed — distribute the artifact first or pass a concrete version"
+              : `${resp.status} ${resp.statusText}`,
+        });
+        continue;
+      }
+
+      if (resolvedVersion === LATEST_VERSION) {
+        const m = resp.url.match(/\/public\/generic\/[^/]+\/([^/]+)\//);
+        if (m && m[1] !== encodeURIComponent(LATEST_VERSION)) {
+          resolvedVersion = decodeURIComponent(m[1]);
+        }
+      }
+
+      const buf = Buffer.from(await resp.arrayBuffer());
+      await fs.promises.writeFile(path.join(outputDir, fileName), buf);
+      results.push({ name: fileName, status: "success" });
+    } catch (err) {
+      results.push({
+        name: fileName,
+        status: STATUS_ERROR,
+        message: getErrorMessage(err),
+      });
     }
-    const headers = res.message.headers;
-    const rawLocation = headers["location"] ?? headers["Location"];
-    const location = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
-    if (typeof location !== "string" || location.length === 0) {
-      return LATEST_VERSION;
-    }
-    const match = location.match(/\/fly\/api\/v1\/generic\/[^/]+\/([^/]+)\//);
-    if (!match) {
-      return LATEST_VERSION;
-    }
-    return decodeURIComponent(match[1]);
-  } catch (err) {
-    core.warning(
-      `Could not resolve [LATEST] for job summary: ${getErrorMessage(err)}`,
-    );
-    return LATEST_VERSION;
-  } finally {
-    client.dispose();
   }
+
+  return {
+    command: `public-download ${packageName}/[LATEST]`,
+    results,
+    resolvedVersion,
+  };
 }
 
 /**
  * Resolves the version input per sub-action type:
- *   - upload   + missing version → user error (server rejects [LATEST] writes anyway,
- *               and download/action.yml's required:false would let an empty value through)
- *   - download + missing version → default to "[LATEST]" (server resolves via 302)
- *   - either   + provided version → pass through unchanged (including explicit "[LATEST]" on download)
+ *   - upload   + missing version → user error (server rejects [LATEST] writes
+ *               anyway, and download/action.yml's required:false would let an
+ *               empty value through)
+ *   - download + missing version → default to "[LATEST]" (the public endpoint
+ *               resolves via 302; routing happens in runTransfer)
+ *   - either   + provided version → pass through unchanged (including explicit
+ *               "[LATEST]" on download)
  *
  * Centralized here so transfer.spec.ts can cover the table without mocking
  * core.getInput's required-flag behavior.

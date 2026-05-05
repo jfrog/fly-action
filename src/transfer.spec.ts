@@ -1,6 +1,9 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import { vi, type Mock } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
 
 vi.mock("@actions/core");
 vi.mock("./fly-cli", () => ({
@@ -9,41 +12,46 @@ vi.mock("./fly-cli", () => ({
   parseMultilineInput: vi.fn(),
 }));
 
-const mockHead = vi.fn();
-const mockDispose = vi.fn();
-vi.mock("@actions/http-client", () => ({
-  HttpClient: vi.fn(() => ({
-    head: mockHead,
-    dispose: mockDispose,
-  })),
-}));
-
 import * as core from "@actions/core";
-import { HttpClient } from "@actions/http-client";
 import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
 import {
   runTransfer,
   appendTransferResults,
   resolveVersion,
-  resolveLatestVersionForDisplay,
+  runPublicLatestDownload,
   isLatestToken,
 } from "./transfer";
 import { ENV_FLY_TRANSFER_RESULTS, LATEST_VERSION } from "./constants";
 
-// Re-applies the HttpClient constructor mock after vi.resetAllMocks() clears it.
-// runTransfer constructs a new HttpClient inside resolveLatestVersionForDisplay,
-// so without this, `new HttpClient()` returns undefined and `client.head()` throws.
-function rewireHttpClientMock(): void {
-  (HttpClient as unknown as Mock).mockImplementation(() => ({
-    head: mockHead,
-    dispose: mockDispose,
-  }));
+// Hand-rolled fetch-Response stub (Node 24 has Response globally, but we
+// don't want to depend on the real constructor in unit tests).
+function fakeResponse(
+  body: Uint8Array | null,
+  init: { status: number; statusText?: string; finalUrl?: string },
+): Response {
+  const buf = body ? body.slice().buffer : new ArrayBuffer(0);
+  return {
+    ok: init.status >= 200 && init.status < 300,
+    status: init.status,
+    statusText: init.statusText ?? "",
+    url: init.finalUrl ?? "",
+    arrayBuffer: async () => buf,
+  } as unknown as Response;
 }
+
+const mockFetch = vi.fn();
+const originalFetch = global.fetch;
+beforeAll(() => {
+  (global as { fetch: typeof fetch }).fetch =
+    mockFetch as unknown as typeof fetch;
+});
+afterAll(() => {
+  global.fetch = originalFetch;
+});
 
 describe("runTransfer", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    rewireHttpClientMock();
     (getAuthEnv as Mock).mockReturnValue({
       url: "https://tenant.jfrog.io",
       token: "test-token",
@@ -61,6 +69,7 @@ describe("runTransfer", () => {
     type: "download" as const,
     command: "download",
     extraArgs: ["--output-dir", "./release"],
+    outputDir: "./release",
     noFilesMessage: "No files specified.",
   };
 
@@ -111,7 +120,7 @@ describe("runTransfer", () => {
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
-  it("includes extraArgs for download", async () => {
+  it("includes extraArgs for concrete-version download (CLI path)", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
       const inputs: Record<string, string> = {
         name: "my-app",
@@ -290,109 +299,6 @@ describe("runTransfer", () => {
     );
   });
 
-  it("defaults version to [LATEST] for download when omitted, resolves concrete version for display (issue #54 item 2)", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "",
-        files: "app.dmg",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["app.dmg"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [{ name: "app.dmg", status: "success" }],
-    });
-
-    mockHead.mockResolvedValue({
-      message: {
-        statusCode: 302,
-        headers: { location: "/fly/api/v1/generic/my-app/2.5.0/app.dmg" },
-      },
-    });
-
-    await runTransfer(downloadConfig);
-
-    // CLI invocation still uses literal [LATEST] — the server resolves it via 302.
-    expect(execFlyCLI).toHaveBeenCalledWith(
-      expect.arrayContaining(["--version", "[LATEST]"]),
-      expect.any(Object),
-    );
-    // Job summary records the concrete version, not literal "[LATEST]".
-    expect(core.exportVariable).toHaveBeenCalledWith(
-      ENV_FLY_TRANSFER_RESULTS,
-      expect.stringContaining('"version":"2.5.0"'),
-    );
-    expect(core.setFailed).not.toHaveBeenCalled();
-  });
-
-  it("falls back to literal [LATEST] in display when server returns 404 (no version uploaded)", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "",
-        files: "app.dmg",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["app.dmg"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [{ name: "app.dmg", status: "success" }],
-    });
-
-    mockHead.mockResolvedValue({
-      message: { statusCode: 404, headers: {} },
-    });
-
-    await runTransfer(downloadConfig);
-
-    expect(core.exportVariable).toHaveBeenCalledWith(
-      ENV_FLY_TRANSFER_RESULTS,
-      expect.stringContaining('"version":"[LATEST]"'),
-    );
-  });
-
-  it("does not call resolver when an explicit concrete version is provided on download", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "1.2.3",
-        files: "app.dmg",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["app.dmg"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [{ name: "app.dmg", status: "success" }],
-    });
-
-    await runTransfer(downloadConfig);
-
-    expect(mockHead).not.toHaveBeenCalled();
-    expect(core.exportVariable).toHaveBeenCalledWith(
-      ENV_FLY_TRANSFER_RESULTS,
-      expect.stringContaining('"version":"1.2.3"'),
-    );
-  });
-
   it("rejects upload with empty version (defense in depth — YAML required:true is the primary gate)", async () => {
     vi.mocked(core.getInput).mockImplementation((name: string) => {
       const inputs: Record<string, string> = {
@@ -413,34 +319,6 @@ describe("runTransfer", () => {
     expect(execFlyCLI).not.toHaveBeenCalled();
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining("version is required for upload"),
-    );
-  });
-
-  it("passes [LATEST] through unchanged when explicitly set on download", async () => {
-    vi.mocked(core.getInput).mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
-        name: "my-app",
-        version: "[LATEST]",
-        files: "app.dmg",
-        exclude: "",
-      };
-      return inputs[name] || "";
-    });
-
-    (parseMultilineInput as Mock)
-      .mockReturnValueOnce(["app.dmg"])
-      .mockReturnValueOnce([]);
-
-    (execFlyCLI as Mock).mockResolvedValue({
-      command: "download",
-      results: [{ name: "app.dmg", status: "success" }],
-    });
-
-    await runTransfer(downloadConfig);
-
-    expect(execFlyCLI).toHaveBeenCalledWith(
-      expect.arrayContaining(["--version", "[LATEST]"]),
-      expect.any(Object),
     );
   });
 
@@ -470,6 +348,176 @@ describe("runTransfer", () => {
     expect(core.exportVariable).toHaveBeenCalledWith(
       ENV_FLY_TRANSFER_RESULTS,
       expect.stringContaining('"type":"upload"'),
+    );
+  });
+});
+
+// runTransfer: [LATEST] download routes via the anonymous public endpoint and
+// MUST NOT invoke the fly CLI. Use a fresh tmp dir so the fetch implementation
+// in runPublicLatestDownload can actually write files.
+describe("runTransfer — [LATEST] download routes via public URL", () => {
+  let tmpDir: string;
+  let downloadConfig: {
+    type: "download";
+    command: string;
+    extraArgs: string[];
+    outputDir: string;
+    noFilesMessage: string;
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    (getAuthEnv as Mock).mockReturnValue({
+      url: "https://tenant.jfrog.io",
+      token: "test-token",
+    });
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fly-action-test-"));
+    downloadConfig = {
+      type: "download",
+      command: "download",
+      extraArgs: ["--output-dir", tmpDir],
+      outputDir: tmpDir,
+      noFilesMessage: "No files specified.",
+    };
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("fetches the public URL and writes the file to outputDir when version is omitted (defaults to [LATEST])", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        name: "my-app",
+        version: "",
+        files: "app.dmg",
+        exclude: "",
+      };
+      return inputs[name] || "";
+    });
+
+    (parseMultilineInput as Mock)
+      .mockReturnValueOnce(["app.dmg"])
+      .mockReturnValueOnce([]);
+
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0xde, 0xad, 0xbe, 0xef]), {
+        status: 200,
+        finalUrl: "https://tenant.jfrog.io/public/generic/my-app/2.5.0/app.dmg",
+      }),
+    );
+
+    await runTransfer(downloadConfig);
+
+    expect(execFlyCLI).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://tenant.jfrog.io/public/generic/my-app/%5BLATEST%5D/app.dmg",
+      { redirect: "follow" },
+    );
+
+    const written = fs.readFileSync(path.join(tmpDir, "app.dmg"));
+    expect(Array.from(written)).toEqual([0xde, 0xad, 0xbe, 0xef]);
+
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_TRANSFER_RESULTS,
+      expect.stringContaining('"version":"2.5.0"'),
+    );
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it("treats explicit [LATEST] (and case variants) the same as the default", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        name: "my-app",
+        version: "[latest]",
+        files: "app.dmg",
+        exclude: "",
+      };
+      return inputs[name] || "";
+    });
+
+    (parseMultilineInput as Mock)
+      .mockReturnValueOnce(["app.dmg"])
+      .mockReturnValueOnce([]);
+
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0x68]), {
+        status: 200,
+        finalUrl: "https://tenant.jfrog.io/public/generic/my-app/3.0.0/app.dmg",
+      }),
+    );
+
+    await runTransfer(downloadConfig);
+
+    expect(execFlyCLI).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://tenant.jfrog.io/public/generic/my-app/%5BLATEST%5D/app.dmg",
+      { redirect: "follow" },
+    );
+  });
+
+  it("reports a 404 with a 'not publicly distributed' hint and fails the action", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        name: "my-app",
+        version: "[LATEST]",
+        files: "app.dmg",
+        exclude: "",
+      };
+      return inputs[name] || "";
+    });
+
+    (parseMultilineInput as Mock)
+      .mockReturnValueOnce(["app.dmg"])
+      .mockReturnValueOnce([]);
+
+    mockFetch.mockResolvedValue(
+      fakeResponse(null, { status: 404, statusText: "Not Found" }),
+    );
+
+    await runTransfer(downloadConfig);
+
+    expect(execFlyCLI).not.toHaveBeenCalled();
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining("not publicly distributed"),
+    );
+    // Display version stays as [LATEST] because we never resolved a concrete one.
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_TRANSFER_RESULTS,
+      expect.stringContaining('"version":"[LATEST]"'),
+    );
+  });
+
+  it("does NOT call fetch when an explicit concrete version is provided on download (CLI path)", async () => {
+    vi.mocked(core.getInput).mockImplementation((name: string) => {
+      const inputs: Record<string, string> = {
+        name: "my-app",
+        version: "1.2.3",
+        files: "app.dmg",
+        exclude: "",
+      };
+      return inputs[name] || "";
+    });
+
+    (parseMultilineInput as Mock)
+      .mockReturnValueOnce(["app.dmg"])
+      .mockReturnValueOnce([]);
+
+    (execFlyCLI as Mock).mockResolvedValue({
+      command: "download",
+      results: [{ name: "app.dmg", status: "success" }],
+    });
+
+    await runTransfer(downloadConfig);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(execFlyCLI).toHaveBeenCalledWith(
+      expect.arrayContaining(["--version", "1.2.3"]),
+      expect.any(Object),
+    );
+    expect(core.exportVariable).toHaveBeenCalledWith(
+      ENV_FLY_TRANSFER_RESULTS,
+      expect.stringContaining('"version":"1.2.3"'),
     );
   });
 });
@@ -556,140 +604,172 @@ describe("isLatestToken", () => {
   });
 });
 
-describe("resolveLatestVersionForDisplay (issue #54 item 2)", () => {
+describe("runPublicLatestDownload", () => {
+  let tmpDir: string;
+
   beforeEach(() => {
     vi.resetAllMocks();
-    rewireHttpClientMock();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "fly-action-public-"));
   });
 
-  it("extracts the concrete version from a 302 Location header", async () => {
-    mockHead.mockResolvedValue({
-      message: {
-        statusCode: 302,
-        headers: { location: "/fly/api/v1/generic/my-app/1.4.2/installer.dmg" },
-      },
-    });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 
-    const result = await resolveLatestVersionForDisplay(
+  it("writes each file to outputDir and returns the resolved concrete version", async () => {
+    mockFetch.mockResolvedValueOnce(
+      fakeResponse(new Uint8Array([0x01]), {
+        status: 200,
+        finalUrl: "https://tenant.jfrog.io/public/generic/pkg/1.4.2/a.bin",
+      }),
+    );
+    mockFetch.mockResolvedValueOnce(
+      fakeResponse(new Uint8Array([0x02]), {
+        status: 200,
+        finalUrl: "https://tenant.jfrog.io/public/generic/pkg/1.4.2/b.bin",
+      }),
+    );
+
+    const result = await runPublicLatestDownload(
       "https://tenant.jfrog.io",
-      "tok",
-      "my-app",
-      "installer.dmg",
+      "pkg",
+      ["a.bin", "b.bin"],
+      tmpDir,
     );
 
-    expect(result).toBe("1.4.2");
-    expect(mockHead).toHaveBeenCalledWith(
-      "https://tenant.jfrog.io/fly/api/v1/generic/my-app/[LATEST]/installer.dmg",
-      { Authorization: "Bearer tok" },
-    );
-    expect(mockDispose).toHaveBeenCalled();
+    expect(result.resolvedVersion).toBe("1.4.2");
+    expect(result.results.every((r) => r.status === "success")).toBe(true);
+    expect(fs.readFileSync(path.join(tmpDir, "a.bin"))[0]).toBe(0x01);
+    expect(fs.readFileSync(path.join(tmpDir, "b.bin"))[0]).toBe(0x02);
   });
 
-  it("decodes percent-encoded versions in the Location header", async () => {
-    mockHead.mockResolvedValue({
-      message: {
-        statusCode: 302,
-        headers: {
-          location: "/fly/api/v1/generic/my-app/v1.0.0%2Bbuild.5/file",
-        },
-      },
-    });
-
-    const result = await resolveLatestVersionForDisplay(
-      "https://tenant.jfrog.io",
-      "tok",
-      "my-app",
-      "file",
+  it("strips trailing slashes from flyUrl before composing the public URL", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0x68]), {
+        status: 200,
+        finalUrl: "https://tenant.jfrog.io/public/generic/pkg/1.0.0/x",
+      }),
     );
 
-    expect(result).toBe("v1.0.0+build.5");
-  });
-
-  it("strips a trailing slash from flyUrl before composing the resolve URL", async () => {
-    mockHead.mockResolvedValue({
-      message: {
-        statusCode: 302,
-        headers: { location: "/fly/api/v1/generic/my-app/1.0.0/file" },
-      },
-    });
-
-    await resolveLatestVersionForDisplay(
+    await runPublicLatestDownload(
       "https://tenant.jfrog.io///",
-      "tok",
-      "my-app",
-      "file",
+      "pkg",
+      ["x"],
+      tmpDir,
     );
 
-    expect(mockHead).toHaveBeenCalledWith(
-      "https://tenant.jfrog.io/fly/api/v1/generic/my-app/[LATEST]/file",
-      expect.any(Object),
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://tenant.jfrog.io/public/generic/pkg/%5BLATEST%5D/x",
+      { redirect: "follow" },
     );
   });
 
-  it("falls back to literal [LATEST] on non-302 status (e.g. 404 empty package)", async () => {
-    mockHead.mockResolvedValue({
-      message: { statusCode: 404, headers: {} },
-    });
-
-    const result = await resolveLatestVersionForDisplay(
-      "https://tenant.jfrog.io",
-      "tok",
-      "missing",
-      "file",
+  it("decodes percent-encoded versions in the redirect target URL", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0x68]), {
+        status: 200,
+        finalUrl:
+          "https://tenant.jfrog.io/public/generic/pkg/v1.0.0%2Bbuild.5/file",
+      }),
     );
 
-    expect(result).toBe(LATEST_VERSION);
-    expect(mockDispose).toHaveBeenCalled();
+    const result = await runPublicLatestDownload(
+      "https://tenant.jfrog.io",
+      "pkg",
+      ["file"],
+      tmpDir,
+    );
+
+    expect(result.resolvedVersion).toBe("v1.0.0+build.5");
   });
 
-  it("falls back when Location header is missing on a 302", async () => {
-    mockHead.mockResolvedValue({
-      message: { statusCode: 302, headers: {} },
-    });
-
-    const result = await resolveLatestVersionForDisplay(
-      "https://tenant.jfrog.io",
-      "tok",
-      "my-app",
-      "file",
+  it("falls back to literal [LATEST] when the redirect URL does not match the expected shape", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0x68]), {
+        status: 200,
+        finalUrl: "https://some-cdn.example.com/served-by-cdn",
+      }),
     );
 
-    expect(result).toBe(LATEST_VERSION);
+    const result = await runPublicLatestDownload(
+      "https://tenant.jfrog.io",
+      "pkg",
+      ["file"],
+      tmpDir,
+    );
+
+    expect(result.resolvedVersion).toBe(LATEST_VERSION);
   });
 
-  it("falls back when Location header points to an unexpected path shape", async () => {
-    mockHead.mockResolvedValue({
-      message: {
-        statusCode: 302,
-        headers: { location: "/some/other/path" },
-      },
-    });
-
-    const result = await resolveLatestVersionForDisplay(
-      "https://tenant.jfrog.io",
-      "tok",
-      "my-app",
-      "file",
+  it("surfaces 404 as 'not publicly distributed' and skips the file", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(null, { status: 404, statusText: "Not Found" }),
     );
 
-    expect(result).toBe(LATEST_VERSION);
+    const result = await runPublicLatestDownload(
+      "https://tenant.jfrog.io",
+      "pkg",
+      ["file"],
+      tmpDir,
+    );
+
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].status).toBe("error");
+    expect(result.results[0].message).toContain("not publicly distributed");
+    expect(fs.existsSync(path.join(tmpDir, "file"))).toBe(false);
   });
 
-  it("falls back and emits a warning when the HTTP request throws", async () => {
-    mockHead.mockRejectedValue(new Error("network down"));
+  it("surfaces non-404 HTTP errors with status text", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(null, { status: 500, statusText: "Internal Server Error" }),
+    );
 
-    const result = await resolveLatestVersionForDisplay(
+    const result = await runPublicLatestDownload(
       "https://tenant.jfrog.io",
-      "tok",
-      "my-app",
-      "file",
+      "pkg",
+      ["file"],
+      tmpDir,
     );
 
-    expect(result).toBe(LATEST_VERSION);
-    expect(core.warning).toHaveBeenCalledWith(
-      expect.stringContaining("network down"),
+    expect(result.results[0].status).toBe("error");
+    expect(result.results[0].message).toContain("500");
+    expect(result.results[0].message).toContain("Internal Server Error");
+  });
+
+  it("surfaces network failures as a per-file error", async () => {
+    mockFetch.mockRejectedValue(new Error("ECONNREFUSED"));
+
+    const result = await runPublicLatestDownload(
+      "https://tenant.jfrog.io",
+      "pkg",
+      ["file"],
+      tmpDir,
     );
-    expect(mockDispose).toHaveBeenCalled();
+
+    expect(result.results[0].status).toBe("error");
+    expect(result.results[0].message).toContain("ECONNREFUSED");
+  });
+
+  it("encodes special characters in package name and filename", async () => {
+    mockFetch.mockResolvedValue(
+      fakeResponse(new Uint8Array([0x68]), {
+        status: 200,
+        finalUrl:
+          "https://tenant.jfrog.io/public/generic/com.example.app/1.0.0/my%20file.txt",
+      }),
+    );
+
+    await runPublicLatestDownload(
+      "https://tenant.jfrog.io",
+      "com.example.app",
+      ["my file.txt"],
+      tmpDir,
+    );
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://tenant.jfrog.io/public/generic/com.example.app/%5BLATEST%5D/my%20file.txt",
+      { redirect: "follow" },
+    );
   });
 });
 
@@ -717,7 +797,7 @@ describe("resolveVersion (issue #54 item 2)", () => {
     );
   });
 
-  it("preserves explicit [LATEST] on download (case-sensitive pass-through; server handles case)", () => {
+  it("preserves explicit [LATEST] on download (case-sensitive pass-through; routing handles case)", () => {
     expect(resolveVersion("download", "[LATEST]")).toBe("[LATEST]");
     expect(resolveVersion("download", "[latest]")).toBe("[latest]");
   });

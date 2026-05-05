@@ -7,7 +7,7 @@ inputs:
     description: 'Artifact name'
     required: true
   version:
-    description: 'Artifact version. Optional — when omitted, defaults to "[LATEST]" and the Fly server resolves to the most recently uploaded version (case-insensitive, also accepts "[latest]", "[Latest]"). Pass "[LATEST]" explicitly to be explicit.'
+    description: 'Artifact version. Optional — when omitted, defaults to "[LATEST]" (case-insensitive: also "[latest]", "[Latest]"). [LATEST] is supported ONLY for artifacts that have been publicly distributed via jfrog/fly-action/distribute@v1; in that case the action downloads anonymously from the public endpoint, which 302-redirects to the newest concrete version. For private/authenticated downloads, you MUST pass a concrete version (e.g. "1.0.0") — the authenticated endpoint is a JPD passthrough and does not resolve [LATEST].'
     required: false
   files:
     description: 'Remote filenames to download -- one per line (exact names, no glob expansion)'
