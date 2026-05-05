@@ -15,9 +15,6 @@ export async function runDownload(): Promise<void> {
     type: "download",
     command: CLI_CMD_DOWNLOAD,
     extraArgs: [CLI_FLAG_OUTPUT_DIR, outputDir],
-    // Used by the [LATEST] public-URL fetch path inside runTransfer, which
-    // bypasses the fly CLI and writes files itself.
-    outputDir,
     noFilesMessage: "No files specified. Provide at least one remote filename.",
   });
 }

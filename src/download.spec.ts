@@ -25,7 +25,6 @@ describe("runDownload", () => {
       type: "download",
       command: "download",
       extraArgs: ["--output-dir", "."],
-      outputDir: ".",
       noFilesMessage: expect.stringContaining("remote filename"),
     });
   });
@@ -40,7 +39,6 @@ describe("runDownload", () => {
 
     const config = (runTransfer as Mock).mock.calls[0][0];
     expect(config.extraArgs).toEqual(["--output-dir", "./release"]);
-    expect(config.outputDir).toBe("./release");
   });
 
   it("falls back to default output-dir when input is empty", async () => {
@@ -50,6 +48,5 @@ describe("runDownload", () => {
 
     const config = (runTransfer as Mock).mock.calls[0][0];
     expect(config.extraArgs).toEqual(["--output-dir", "."]);
-    expect(config.outputDir).toBe(".");
   });
 });

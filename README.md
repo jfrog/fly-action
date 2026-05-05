@@ -16,7 +16,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions (download supports `[LATEST]` for publicly distributed artifacts via the public endpoint)
+- ✅ Upload and download generic artifacts via sub-actions (download supports `[LATEST]` for "give me the newest")
 - ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
 - ✅ Publish Go modules to Fly Go registry
 - ✅ OIDC authentication only
@@ -97,10 +97,7 @@ Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stor
       app.zip
     output-dir: ./downloads
 
-- name: Download the latest publicly distributed version (omit version)
-  # Requires: my-app must already be publicly distributed via
-  # jfrog/fly-action/distribute@v1. Private/authenticated downloads need a
-  # concrete version (the auth endpoint does not resolve [LATEST]).
+- name: Download the latest version (omit version)
   uses: jfrog/fly-action/download@v1
   with:
     name: my-app
@@ -112,18 +109,16 @@ Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stor
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `name` | Package name | Yes | |
-| `version` | Package version. Omit to fetch the latest publicly distributed version (see `[LATEST]` resolution below). | No | `[LATEST]` |
+| `version` | Package version. Omit to fetch the latest. | No | `[LATEST]` |
 | `files` | Remote filenames to download — one per line | Yes | |
 | `output-dir` | Directory to save downloaded files | No | `.` |
 | `exclude` | Glob patterns to exclude — one per line | No | |
 
-#### `[LATEST]` resolution (public-only)
+#### `[LATEST]` resolution
 
-When `version` is omitted (or set explicitly to `[LATEST]`, `[latest]`, or `[Latest]`), the action **bypasses the fly CLI and fetches anonymously from the public download endpoint** (`/public/generic/{name}/[LATEST]/{file}`). The Fly server `302`-redirects to the most recently distributed concrete version, with `Cache-Control: no-store` so a CDN never serves a stale `[LATEST]` — while the concrete version URL it redirects to remains independently cacheable.
+When `version` is omitted (or set explicitly to `[LATEST]`, `[latest]`, or `[Latest]`), the Fly server resolves it to the most recently uploaded version and serves the file via a `302` redirect to the concrete version URL. The redirect response carries `Cache-Control: no-store` so a CDN never serves a stale `[LATEST]`, while the concrete version URL it redirects to remains independently cacheable.
 
-This means `[LATEST]` works **only for artifacts that have already been publicly distributed via `jfrog/fly-action/distribute@v1`**. The authenticated generic endpoint is a JPD passthrough and does **not** resolve `[LATEST]`. If you try `[LATEST]` on an artifact that has not been distributed publicly, the download fails with `not publicly distributed — distribute the artifact first or pass a concrete version`.
-
-Use `[LATEST]` for "give me whatever the most recent published build is" workflows (e.g., consumers in another repo pulling a public release). Pin a concrete version when you need reproducibility (debugging an old release, regression testing) or when downloading a private artifact.
+Use `[LATEST]` for "give me whatever the most recent build is" workflows (e.g., consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
 
 `[LATEST]` is **download-only** — passing it to `upload` or `distribute` is rejected on the server.
 
@@ -155,7 +150,7 @@ curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
 curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
 ```
 
-The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. `[LATEST]` works **only on the public path** (the authenticated path is a JPD passthrough and does not resolve `[LATEST]`) and is served with `Cache-Control: no-store` so consumers always see the latest published version.
+The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. `[LATEST]` works on the public path the same way it works on the authenticated path — and is also served with `Cache-Control: no-store` so consumers always see the latest published version.
 
 The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count}`. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
 
