@@ -16,7 +16,8 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions
+- ✅ Upload and download generic artifacts via sub-actions (download supports `[LATEST]` for "give me the newest")
+- ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
 - ✅ Publish Go modules to Fly Go registry
 - ✅ OIDC authentication only
 - ✅ Allows ignoring specific package managers
@@ -52,9 +53,9 @@ jobs:
           docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }}
 ```
 
-## Upload & Download Sub-Actions
+## Generic Artifact Sub-Actions
 
-Transfer generic artifacts to and from Fly storage using dedicated sub-actions.
+Transfer and publish generic artifacts (binaries, archives, build outputs) using dedicated sub-actions: `upload`, `download`, and `distribute`.
 
 ### Upload
 
@@ -87,11 +88,19 @@ Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stor
 ### Download
 
 ```yaml
-- name: Download artifacts
+- name: Download a specific version
   uses: jfrog/fly-action/download@v1
   with:
     name: my-app
     version: '1.0.0'
+    files: |
+      app.zip
+    output-dir: ./downloads
+
+- name: Download the latest version (omit version)
+  uses: jfrog/fly-action/download@v1
+  with:
+    name: my-app
     files: |
       app.zip
     output-dir: ./downloads
@@ -100,10 +109,50 @@ Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stor
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `name` | Package name | Yes | |
-| `version` | Package version | Yes | |
+| `version` | Package version. Omit to fetch the latest. | No | `[LATEST]` |
 | `files` | Remote filenames to download — one per line | Yes | |
 | `output-dir` | Directory to save downloaded files | No | `.` |
 | `exclude` | Glob patterns to exclude — one per line | No | |
+
+#### `[LATEST]` resolution
+
+When `version` is omitted (or set explicitly to `[LATEST]`, `[latest]`, or `[Latest]`), the Fly server resolves it to the most recently uploaded version and serves the file via a `302` redirect to the concrete version URL. The redirect response carries `Cache-Control: no-store` so a CDN never serves a stale `[LATEST]`, while the concrete version URL it redirects to remains independently cacheable.
+
+Use `[LATEST]` for "give me whatever the most recent build is" workflows (e.g., consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
+
+`[LATEST]` is **download-only** — passing it to `upload` or `distribute` is rejected on the server.
+
+### Distribute
+
+Make a generic artifact version publicly downloadable — anyone with the link can grab it without a Fly account. Idempotent: calling again returns the same public URL.
+
+```yaml
+- name: Distribute the artifact
+  uses: jfrog/fly-action/distribute@v1
+  with:
+    name: my-app
+    version: '1.0.0'
+```
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `name` | Package name | Yes | |
+| `version` | Package version to make public (concrete; `[LATEST]` not supported here) | Yes | |
+| `type` | Artifact type. Currently only `generic` is supported. | No | `generic` |
+
+After distribute succeeds, consumers can fetch the file anonymously:
+
+```bash
+# Specific version
+curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
+
+# Latest version (server 302-redirects to the newest distributed version)
+curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
+```
+
+The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. `[LATEST]` works on the public path the same way it works on the authenticated path — and is also served with `Cache-Control: no-store` so consumers always see the latest published version.
+
+The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count}`. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
 
 ### Go Publish
 
@@ -130,7 +179,7 @@ Publish Go modules to the Fly Go registry.
 >
 > Replace `example.com/myorg` with your module path prefix (typically the first two segments of the module path).
 
-Both sub-actions output a `results` JSON array with per-file status:
+All three generic sub-actions (`upload`, `download`, `distribute`) output a `results` JSON array — per-file status for upload/download, and a single distributed-artifact entry for distribute:
 
 ```yaml
 - name: Upload

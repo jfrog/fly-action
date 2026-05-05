@@ -7,7 +7,7 @@ inputs:
     description: 'Artifact name'
     required: true
   version:
-    description: 'Artifact version'
+    description: 'Artifact version. Required — pass a concrete version like "1.0.0" or "nightly-2025-03-26". The reserved token "[LATEST]" is download-only and is rejected on upload.'
     required: true
   files:
     description: 'Files to upload -- one per line. Supports glob patterns (*, ?, [], **). Basename is used as remote filename.'

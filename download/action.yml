@@ -7,8 +7,8 @@ inputs:
     description: 'Artifact name'
     required: true
   version:
-    description: 'Artifact version'
-    required: true
+    description: 'Artifact version. Optional — when omitted, defaults to "[LATEST]" and the Fly server resolves to the most recently uploaded version (case-insensitive, also accepts "[latest]", "[Latest]"). Pass "[LATEST]" explicitly to be explicit.'
+    required: false
   files:
     description: 'Remote filenames to download -- one per line (exact names, no glob expansion)'
     required: true

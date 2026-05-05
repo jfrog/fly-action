@@ -64,6 +64,12 @@ export const INPUT_EXCLUDE = "exclude";
 export const INPUT_OUTPUT_DIR = "output-dir";
 export const INPUT_PATH = "path";
 
+// Reserved version token. The fly server resolves `[LATEST]` to the most
+// recently uploaded version on download via a 302 redirect (case-insensitive,
+// also accepts `[latest]`, `[Latest]`). Reserved on write — the server
+// rejects upload requests where `version=[LATEST]`.
+export const LATEST_VERSION = "[LATEST]";
+
 // Action output names
 export const OUTPUT_RESULTS = "results";
 

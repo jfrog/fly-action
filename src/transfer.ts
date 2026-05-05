@@ -1,7 +1,8 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
-import { getErrorMessage } from "./utils";
+import { HttpClient } from "@actions/http-client";
+import { getErrorMessage, DEFAULT_HTTP_TIMEOUT_MS } from "./utils";
 import { execFlyCLI, getAuthEnv, parseMultilineInput } from "./fly-cli";
 import {
   INPUT_NAME,
@@ -16,6 +17,7 @@ import {
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
   ENV_FLY_TRANSFER_RESULTS,
   STATUS_ERROR,
+  LATEST_VERSION,
 } from "./constants";
 import { FlyClientResult, TransferSummaryEntry } from "./types";
 
@@ -34,7 +36,10 @@ export interface TransferConfig {
 export async function runTransfer(config: TransferConfig): Promise<void> {
   try {
     const name = core.getInput(INPUT_NAME, { required: true });
-    const version = core.getInput(INPUT_VERSION, { required: true });
+    const cliVersion = resolveVersion(
+      config.type,
+      core.getInput(INPUT_VERSION),
+    );
     const filesInput = core.getInput(INPUT_FILES, { required: true });
     const excludeInput = core.getInput(INPUT_EXCLUDE);
 
@@ -51,7 +56,7 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
       CLI_FLAG_NAME,
       name,
       CLI_FLAG_VERSION,
-      version,
+      cliVersion,
       ...config.extraArgs,
     ];
 
@@ -68,7 +73,18 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
     });
 
     core.setOutput(OUTPUT_RESULTS, JSON.stringify(response.results));
-    appendTransferResults(config.type, name, version, response.results);
+
+    // For [LATEST] downloads, best-effort-resolve to the concrete version so the
+    // job summary shows a real version string instead of literal "[LATEST]".
+    // The CLI invocation above still uses literal [LATEST]; this is display-only.
+    // On any failure we fall back to displaying the literal token — never block
+    // the download.
+    const displayVersion =
+      config.type === "download" && isLatestToken(cliVersion)
+        ? await resolveLatestVersionForDisplay(url, token, name, files[0])
+        : cliVersion;
+
+    appendTransferResults(config.type, name, displayVersion, response.results);
 
     const errors = response.results.filter((r) => r.status === STATUS_ERROR);
     if (errors.length > 0) {
@@ -78,7 +94,7 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
       );
     } else {
       core.info(
-        `Successfully ${config.type === "upload" ? "uploaded" : "downloaded"} ${response.results.length} file(s) ${config.type === "upload" ? "to" : "from"} ${name}@${version}`,
+        `Successfully ${config.type === "upload" ? "uploaded" : "downloaded"} ${response.results.length} file(s) ${config.type === "upload" ? "to" : "from"} ${name}@${displayVersion}`,
       );
     }
   } catch (error) {
@@ -88,6 +104,97 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Returns true if `version` is the case-insensitive [LATEST] sentinel.
+ * Mirrors fly-service's isLatestToken (case-insensitive on read).
+ */
+export function isLatestToken(version: string): boolean {
+  return version.trim().toUpperCase() === LATEST_VERSION;
+}
+
+/**
+ * Best-effort resolve of [LATEST] to a concrete version string for display in
+ * the job summary. Issues a HEAD against the authenticated generic endpoint
+ * with redirects disabled, then parses the concrete version from the
+ * `Location` header of the 302 response (path shape:
+ *   /fly/api/v1/generic/{name}/{concrete}/{file}).
+ *
+ * Returns LATEST_VERSION on any failure (404, missing header, network error)
+ * — the caller treats the literal token as a graceful fallback so a missing
+ * job-summary improvement never blocks an actual download. This intentionally
+ * does NOT alter the CLI invocation (the CLI still receives literal [LATEST]
+ * and the server resolves it again per file via 302). For multi-file downloads,
+ * a new upload landing mid-job could mean the CLI grabs a newer version than
+ * what we display here — acceptable trade-off for display-only metadata.
+ */
+export async function resolveLatestVersionForDisplay(
+  flyUrl: string,
+  accessToken: string,
+  packageName: string,
+  firstFile: string,
+): Promise<string> {
+  const client = new HttpClient("fly-action", undefined, {
+    socketTimeout: DEFAULT_HTTP_TIMEOUT_MS,
+    allowRedirects: false,
+  });
+  try {
+    const resolveUrl =
+      `${flyUrl.replace(/\/+$/, "")}/fly/api/v1/generic/` +
+      `${encodeURIComponent(packageName)}/${LATEST_VERSION}/${encodeURIComponent(firstFile)}`;
+    const res = await client.head(resolveUrl, {
+      Authorization: `Bearer ${accessToken}`,
+    });
+    if (res.message.statusCode !== 302) {
+      return LATEST_VERSION;
+    }
+    const headers = res.message.headers;
+    const rawLocation = headers["location"] ?? headers["Location"];
+    const location = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
+    if (typeof location !== "string" || location.length === 0) {
+      return LATEST_VERSION;
+    }
+    const match = location.match(/\/fly\/api\/v1\/generic\/[^/]+\/([^/]+)\//);
+    if (!match) {
+      return LATEST_VERSION;
+    }
+    return decodeURIComponent(match[1]);
+  } catch (err) {
+    core.warning(
+      `Could not resolve [LATEST] for job summary: ${getErrorMessage(err)}`,
+    );
+    return LATEST_VERSION;
+  } finally {
+    client.dispose();
+  }
+}
+
+/**
+ * Resolves the version input per sub-action type:
+ *   - upload   + missing version → user error (server rejects [LATEST] writes anyway,
+ *               and download/action.yml's required:false would let an empty value through)
+ *   - download + missing version → default to "[LATEST]" (server resolves via 302)
+ *   - either   + provided version → pass through unchanged (including explicit "[LATEST]" on download)
+ *
+ * Centralized here so transfer.spec.ts can cover the table without mocking
+ * core.getInput's required-flag behavior.
+ */
+export function resolveVersion(
+  type: "upload" | "download",
+  rawVersion: string,
+): string {
+  const trimmed = rawVersion?.trim() ?? "";
+  if (trimmed.length > 0) {
+    return trimmed;
+  }
+  if (type === "upload") {
+    throw new Error(
+      'version is required for upload — pass a concrete version (e.g. "1.0.0", "nightly-2025-03-26"). ' +
+        '"[LATEST]" is reserved for download and is rejected on write.',
+    );
+  }
+  return LATEST_VERSION;
 }
 
 /**
