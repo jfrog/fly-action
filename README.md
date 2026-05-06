@@ -16,7 +16,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions (download supports `[LATEST]` for "give me the newest")
+- ✅ Upload and download generic artifacts via sub-actions (`[LATEST]` resolves on the public URL after distribute; auth-side resolution coming in `fly-service` #1104 item 2)
 - ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
 - ✅ Publish Go modules to Fly Go registry
 - ✅ OIDC authentication only
@@ -116,11 +116,18 @@ Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stor
 
 #### `[LATEST]` resolution
 
-When `version` is omitted (or set explicitly to `[LATEST]`, `[latest]`, or `[Latest]`), the Fly server resolves it to the most recently uploaded version and serves the file via a `302` redirect to the concrete version URL. The redirect response carries `Cache-Control: no-store` so a CDN never serves a stale `[LATEST]`, while the concrete version URL it redirects to remains independently cacheable.
+`[LATEST]` is the case-insensitive sentinel for "the most recently published version" (`[LATEST]`, `[latest]`, `[Latest]` all accepted). Where it resolves depends on the path:
 
-Use `[LATEST]` for "give me whatever the most recent build is" workflows (e.g., consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
+| Path | `[LATEST]` resolved? | How |
+|---|---|---|
+| **Public URL** — `https://{tenant}.jfrog.io/public/generic/{name}/[LATEST]/{file}` (after a `distribute` step) | Yes (today) | `fly-service` returns `302 Found` + `Location: …/{concrete}/{file}` + `Cache-Control: no-store`. The redirect is never CDN-cached, so changes to "latest" are visible immediately; the concrete URL it redirects to is independently cacheable as immutable artifact data. |
+| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Not yet | Tracked in `fly-service` [#1104](https://github.com/jfrog/fly-service/issues/1104) item 2. Until that ships, omitting `version` (or passing `[LATEST]`) returns an actionable error from the Fly CLI: pass a concrete version, or — if the artifact has been distributed — fetch it from the public URL above. |
 
-`[LATEST]` is **download-only** — passing it to `upload` or `distribute` is rejected on the server.
+The action defaults `version` to `[LATEST]` for `download` so the same workflow keeps working with no edits the moment auth-side resolution lands.
+
+Use `[LATEST]` for "give me whatever the most recent build is" workflows (consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
+
+`[LATEST]` is **download-only**. The Fly server rejects it with `400 Bad Request` on `upload` (PUT/POST) and `distribute` so a literal `[LATEST]`-named folder can never poison future resolution.
 
 ### Distribute
 
@@ -150,7 +157,7 @@ curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
 curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
 ```
 
-The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. `[LATEST]` works on the public path the same way it works on the authenticated path — and is also served with `Cache-Control: no-store` so consumers always see the latest published version.
+The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. On the public path `[LATEST]` is resolved server-side via `302` + `Cache-Control: no-store`, so consumers always see the latest published version (CDN never serves a stale resolution). The authenticated `download` sub-action does not yet resolve `[LATEST]` — see [`[LATEST]` resolution](#latest-resolution) above.
 
 The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count}`. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
 

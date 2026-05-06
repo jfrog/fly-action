@@ -149,8 +149,10 @@ export async function resolveLatestVersionForDisplay(
     if (res.message.statusCode !== 302) {
       return LATEST_VERSION;
     }
-    const headers = res.message.headers;
-    const rawLocation = headers["location"] ?? headers["Location"];
+    // Node lowercases incoming HTTP/1 header names per RFC 7230 §3.2 — only
+    // `headers["location"]` is ever populated, regardless of how the server
+    // cased the wire bytes.
+    const rawLocation = res.message.headers["location"];
     const location = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
     if (typeof location !== "string" || location.length === 0) {
       return LATEST_VERSION;
