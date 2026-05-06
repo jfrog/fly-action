@@ -73,17 +73,35 @@ Transfer and publish generic artifacts (binaries, archives, build outputs) using
       *.log
 ```
 
-| Input | Description | Required |
-| --- | --- | --- |
-| `name` | Package name | Yes |
-| `version` | Package version | Yes |
-| `files` | Files to upload — one per line, supports glob patterns | Yes |
-| `exclude` | Glob patterns to exclude — one per line | No |
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `name` | Package name | Yes | |
+| `version` | Package version | Yes | |
+| `files` | Files to upload — one per line, supports glob patterns | Yes | |
+| `exclude` | Glob patterns to exclude — one per line | No | |
+| `if-no-files-found` | Behavior when the `files` glob matches nothing after applying excludes. One of `error` (fail the step), `warn` (log a warning, continue), `ignore` (silent no-op). | No | `error` |
 
 Glob patterns are expanded by the Fly CLI and support recursive matches such as `dist/**`.
 Patterns like `dist/**` upload regular files under `dist` recursively.
 Directories and symlinks are not uploaded, and symlinked directories are not traversed.
 Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stored as `app.tar.gz`.
+
+#### Zero-match glob handling
+
+By default, `files` patterns that match nothing fail the step (`error`). For optional artifacts — for example, a build that may or may not produce a debug bundle — set `if-no-files-found` to `warn` (log + continue) or `ignore` (silent no-op):
+
+```yaml
+- name: Upload optional debug bundle
+  uses: jfrog/fly-action/upload@v1
+  with:
+    name: my-app
+    version: '1.0.0'
+    files: |
+      dist/debug-*.zip
+    if-no-files-found: warn
+```
+
+The action validates the value before invoking the Fly CLI. Anything other than `error` / `warn` / `ignore` (case-sensitive) fails the step with an explicit message.
 
 ### Download
 

@@ -15,6 +15,9 @@ inputs:
   exclude:
     description: 'Glob patterns to exclude -- one per line (e.g. *.log). Matched against basename only.'
     required: false
+  if-no-files-found:
+    description: 'Behavior when the files glob matches nothing after applying excludes. One of "error" (fail the step), "warn" (log a warning, continue), or "ignore" (silent no-op). Defaults to "error" when omitted, matching the Fly CLI default.'
+    required: false
 
 outputs:
   results:
