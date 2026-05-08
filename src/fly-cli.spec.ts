@@ -5,6 +5,17 @@ import { vi, type Mock } from "vitest";
 vi.mock("@actions/core");
 vi.mock("@actions/exec");
 vi.mock("@actions/tool-cache");
+vi.mock("@actions/http-client", () => {
+  return {
+    HttpClient: vi.fn().mockImplementation(() => ({
+      get: vi.fn().mockResolvedValue({
+        message: { statusCode: 200, headers: {} },
+        readBody: vi.fn().mockResolvedValue(""),
+      }),
+      dispose: vi.fn(),
+    })),
+  };
+});
 vi.mock("fs", async () => {
   const actual = await vi.importActual<typeof import("fs")>("fs");
   return { ...actual, chmodSync: vi.fn(), readFileSync: vi.fn() };
@@ -12,6 +23,7 @@ vi.mock("fs", async () => {
 
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
+import * as httpm from "@actions/http-client";
 import * as tc from "@actions/tool-cache";
 import * as fs from "fs";
 import {
@@ -19,6 +31,7 @@ import {
   buildDownloadUrl,
   getBinaryName,
   resolveVersion,
+  resolveLatestRedirect,
   downloadFlyCLI,
   execFlyCLI,
   getAuthEnv,
@@ -202,10 +215,103 @@ describe("resolveVersion", () => {
   });
 });
 
+describe("resolveLatestRedirect", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("resolves an absolute redirect Location", async () => {
+    const get = vi.fn().mockResolvedValue({
+      message: {
+        statusCode: 302,
+        headers: {
+          location: "https://other.host.example/public/fly-client/1.2.3/fly",
+        },
+      },
+      readBody: vi.fn().mockResolvedValue(""),
+    });
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    const resolved = await resolveLatestRedirect(
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly",
+    );
+    expect(resolved).toBe(
+      "https://other.host.example/public/fly-client/1.2.3/fly",
+    );
+  });
+
+  it("resolves a relative redirect Location against the request URL", async () => {
+    const get = vi.fn().mockResolvedValue({
+      message: {
+        statusCode: 302,
+        headers: {
+          location: "/public/generic/fly-client/1.4.7/fly-linux-arm64",
+        },
+      },
+      readBody: vi.fn().mockResolvedValue(""),
+    });
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    const resolved = await resolveLatestRedirect(
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly-linux-arm64",
+    );
+    expect(resolved).toBe(
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/1.4.7/fly-linux-arm64",
+    );
+  });
+
+  it("returns the input URL when the server responds 200", async () => {
+    const get = vi.fn().mockResolvedValue({
+      message: { statusCode: 200, headers: {} },
+      readBody: vi.fn().mockResolvedValue(""),
+    });
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    const url =
+      "https://flyjfrog.jfrog.io/public/generic/fly-client/1.4.7/fly-linux-arm64";
+    const resolved = await resolveLatestRedirect(url);
+    expect(resolved).toBe(url);
+  });
+
+  it("throws when redirect has no Location header", async () => {
+    const get = vi.fn().mockResolvedValue({
+      message: { statusCode: 302, headers: {} },
+      readBody: vi.fn().mockResolvedValue(""),
+    });
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    await expect(
+      resolveLatestRedirect(
+        "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly",
+      ),
+    ).rejects.toThrow(/without a Location header/);
+  });
+});
+
 describe("downloadFlyCLI", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     (tc.find as Mock).mockReturnValue("");
+    // Default: server treats the URL as already-resolved (200)
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get: vi.fn().mockResolvedValue({
+        message: { statusCode: 200, headers: {} },
+        readBody: vi.fn().mockResolvedValue(""),
+      }),
+      dispose: vi.fn(),
+    }));
     // Checksum sidecar not available by default — logs debug and proceeds
     (tc.downloadTool as Mock).mockImplementation(async (url: string) => {
       if (url.endsWith(".sha256")) throw new Error("404 Not Found");
