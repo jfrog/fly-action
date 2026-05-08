@@ -117,6 +117,20 @@ vi.mock("@actions/tool-cache", () => ({
   find: vi.fn().mockReturnValue(""),
 }));
 
+// --- Mock @actions/http-client so resolveLatestRedirect doesn't make real HTTP calls ---
+vi.mock("@actions/http-client", () => ({
+  HttpClient: vi.fn().mockImplementation(() => ({
+    get: vi.fn().mockResolvedValue({
+      message: {
+        statusCode: 302,
+        headers: { location: "/public/generic/fly-client/1.2.0/fly-linux-x64" },
+      },
+      readBody: vi.fn().mockResolvedValue(""),
+    }),
+    dispose: vi.fn(),
+  })),
+}));
+
 // --- Mock OIDC auth ---
 vi.mock("../oidc", () => ({
   authenticateOidc: vi.fn().mockResolvedValue({
