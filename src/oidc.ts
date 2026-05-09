@@ -68,7 +68,9 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     ? { ...parsedJson, access_token: "***" }
     : parsedJson;
   const statusCode = rawResponse.message.statusCode;
-  const isSuccess = statusCode === http.HttpCodes.OK || statusCode === 201;
+  const HTTP_CREATED = 201; // not in HttpCodes enum
+  const isSuccess =
+    statusCode === http.HttpCodes.OK || statusCode === HTTP_CREATED;
 
   core.debug(
     `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
@@ -93,7 +95,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     }
 
     if (
-      statusCode === 403 &&
+      statusCode === http.HttpCodes.Forbidden &&
       (jsonParseFailed || Object.keys(parsedJson).length === 0)
     ) {
       core.error(

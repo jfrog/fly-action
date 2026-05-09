@@ -1,6 +1,7 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import * as core from "@actions/core";
+import { HttpCodes, Headers, MediaTypes } from "@actions/http-client";
 import { createHttpClient, truncate } from "./utils";
 import { DistributeRequest, DistributeResponse } from "./types";
 
@@ -39,14 +40,14 @@ export async function distributeArtifact(
 
     const response = await httpClient.post(url, JSON.stringify(payload), {
       Authorization: `Bearer ${accessToken}`,
-      "content-type": "application/json",
+      [Headers.ContentType]: MediaTypes.ApplicationJson,
       "X-JFROG-FLY-TENANT-HOST": tenantHost,
     });
 
     const statusCode = response.message.statusCode ?? 0;
     const responseBody = await response.readBody();
 
-    if (statusCode !== 200) {
+    if (statusCode !== HttpCodes.OK) {
       throw new Error(
         `Failed to distribute ${name}:${version}. ` +
           `Status: ${statusCode}. Body: ${truncate(responseBody)}`,
