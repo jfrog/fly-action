@@ -167,28 +167,28 @@ describe("runPost", () => {
   });
 
   it("should re-throw errors after all retry attempts fail", async () => {
-    mockHttpClientPost.mockRejectedValue(new Error("Network error"));
+    const err = new Error("socket hang up");
+    mockHttpClientPost.mockRejectedValue(err);
 
-    await expect(runPost()).rejects.toThrow("Network error");
-    // Should have tried 3 times (MAX_RETRIES)
+    await expect(runPost()).rejects.toThrow("socket hang up");
     expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
   }, 15000);
 
-  it("should succeed on retry after initial failure", async () => {
-    // First call fails, second succeeds
+  it("should succeed on retry after initial transient failure", async () => {
     const fakeResponse: HttpClientResponse = {
       message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
       readBody: async () => END_CI_RESPONSE_EMPTY,
     } as unknown as HttpClientResponse;
+    const err = new Error("socket timeout");
     mockHttpClientPost
-      .mockRejectedValueOnce(new Error("Timeout"))
+      .mockRejectedValueOnce(err)
       .mockResolvedValueOnce(fakeResponse);
 
     await runPost();
 
     expect(mockHttpClientPost).toHaveBeenCalledTimes(2);
     expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining("Request failed (attempt 1/3)"),
+      expect.stringContaining("ci/end failed (attempt 1/3)"),
     );
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
@@ -202,15 +202,13 @@ describe("runPost", () => {
     } as unknown as HttpClientResponse;
     mockHttpClientPost.mockResolvedValue(fakeErrorResponse);
 
-    await expect(runPost()).rejects.toThrow(
-      "Failed to send CI end notification. Status: 500. Body: Server error",
-    );
+    await expect(runPost()).rejects.toThrow("Server error 500");
     expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
     expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining("Request failed (attempt 1/3)"),
+      expect.stringContaining("ci/end failed (attempt 1/3)"),
     );
     expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining("Request failed (attempt 2/3)"),
+      expect.stringContaining("ci/end failed (attempt 2/3)"),
     );
   }, 15000);
 
@@ -231,7 +229,7 @@ describe("runPost", () => {
 
     expect(mockHttpClientPost).toHaveBeenCalledTimes(2);
     expect(mockCore.warning).toHaveBeenCalledWith(
-      expect.stringContaining("Request failed (attempt 1/3)"),
+      expect.stringContaining("ci/end failed (attempt 1/3)"),
     );
     expect(mockCore.info).toHaveBeenCalledWith(
       "✅ CI end notification completed successfully",
@@ -307,26 +305,22 @@ describe("runPostScriptLogic", () => {
   });
 
   it("should call runPost and setFailed on error after all retries", async () => {
-    const errorMessage = "Test error from runPost";
-    // Reject all retry attempts
-    mockHttpClientPost.mockRejectedValue(new Error(errorMessage));
+    const err = new Error("socket hang up");
+    mockHttpClientPost.mockRejectedValue(err);
 
     await runPostScriptLogic();
 
-    // Should have tried 3 times (MAX_RETRIES)
     expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
-    expect(core.setFailed).toHaveBeenCalledWith(errorMessage);
+    expect(core.setFailed).toHaveBeenCalledWith("socket hang up");
   }, 15000);
 
-  it("should handle non-Error objects thrown by runPost after all retries", async () => {
-    const errorString = "Just a string error";
-    // Reject all retry attempts
-    mockHttpClientPost.mockRejectedValue(errorString);
+  it("should call setFailed on non-retryable error without retry", async () => {
+    const errorMessage = "Just a string error";
+    mockHttpClientPost.mockRejectedValue(errorMessage);
 
     await runPostScriptLogic();
 
-    // Should have tried 3 times (MAX_RETRIES)
-    expect(mockHttpClientPost).toHaveBeenCalledTimes(3);
-    expect(core.setFailed).toHaveBeenCalledWith(errorString);
+    expect(mockHttpClientPost).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledWith(errorMessage);
   }, 15000);
 });

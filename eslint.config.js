@@ -23,6 +23,8 @@ module.exports = [
         exports: 'readonly',
         global: 'readonly',
         console: 'readonly',
+        setTimeout: 'readonly',
+        NodeJS: 'readonly',
         // Jest environment
         jest: 'readonly',
         describe: 'readonly',
@@ -43,6 +45,6 @@ module.exports = [
     },
   },
   {
-    ignores: ['dist/', 'node_modules/'],
+    ignores: ['dist/', 'lib/', 'node_modules/', 'coverage/', 'flyfrog-action/', 'eslint.config.js'],
   },
 ];

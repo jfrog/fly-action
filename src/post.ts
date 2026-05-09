@@ -6,79 +6,13 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PLATFORM_URL,
 } from "./constants";
-import {
-  HttpClient,
-  HttpClientResponse,
-  HttpCodes,
-  Headers,
-  MediaTypes,
-} from "@actions/http-client";
+import { HttpCodes, Headers, MediaTypes } from "@actions/http-client";
 import { EndCiResponse, CollectedArtifact } from "./types";
 import { createHttpClient, getErrorMessage, truncate } from "./utils";
 import { createJobSummary } from "./job-summary";
+import { executeWithRetry, isTransientHttpError } from "./retry";
 
-// Retry configuration
-const MAX_RETRIES = 3;
-const INITIAL_RETRY_DELAY_MS = 1000; // 1 second
-const REQUEST_TIMEOUT_MS = 10000; // 10 seconds (ci/end is a fast Redis lookup)
-
-/**
- * Sleep for a given number of milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Execute an HTTP POST request with retry logic and exponential backoff
- */
-async function postWithRetry(
-  httpClient: HttpClient,
-  url: string,
-  body: string,
-  headers: Record<string, string>,
-): Promise<HttpClientResponse> {
-  let lastError: Error = new Error("Request failed after retries");
-  let lastResponse: HttpClientResponse | undefined;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      core.info(
-        `[${new Date().toISOString()}] Attempt ${attempt}/${MAX_RETRIES} - Sending request to ${url}`,
-      );
-
-      const response = await httpClient.post(url, body, headers);
-      const statusCode = response.message.statusCode ?? 0;
-
-      if (statusCode < HttpCodes.InternalServerError) {
-        return response;
-      }
-
-      lastResponse = response;
-      lastError = new Error(`Server error ${statusCode}`);
-    } catch (error: unknown) {
-      lastError =
-        error instanceof Error ? error : new Error(getErrorMessage(error));
-    }
-
-    if (attempt < MAX_RETRIES) {
-      const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
-      core.warning(
-        `Request failed (attempt ${attempt}/${MAX_RETRIES}): ${lastError.message}. Retrying in ${delayMs}ms...`,
-      );
-      await sleep(delayMs);
-    } else {
-      core.error(
-        `Request failed after ${MAX_RETRIES} attempts: ${lastError.message}`,
-      );
-    }
-  }
-
-  if (lastResponse) {
-    return lastResponse;
-  }
-  throw lastError;
-}
+const REQUEST_TIMEOUT_MS = 10000;
 
 export async function runPost(): Promise<void> {
   const flyUrl = core.getState(STATE_FLY_URL);
@@ -102,14 +36,28 @@ export async function runPost(): Promise<void> {
     `[${new Date().toISOString()}] Attempting to send CI end notification to Fly...`,
   );
 
+  const url = `${flyUrl}/fly/api/v1/ci/end`;
   try {
-    const response = await postWithRetry(
-      httpClient,
-      `${flyUrl}/fly/api/v1/ci/end`,
-      "{}",
+    const response = await executeWithRetry(
+      async () => {
+        const res = await httpClient.post(url, "{}", {
+          Authorization: `Bearer ${accessToken}`,
+          [Headers.ContentType]: MediaTypes.ApplicationJson,
+        });
+        const statusCode = res.message.statusCode ?? 0;
+        if (isTransientHttpError(null, statusCode)) {
+          throw new Error(`Server error ${statusCode}`);
+        }
+        return res;
+      },
       {
-        Authorization: `Bearer ${accessToken}`,
-        [Headers.ContentType]: MediaTypes.ApplicationJson,
+        isRetryable: (err) => {
+          const match = err.message.match(/\bServer error (\d+)\b/);
+          const code = match ? parseInt(match[1], 10) : undefined;
+          return isTransientHttpError(err, code);
+        },
+        initialDelayMs: 1000,
+        label: "ci/end",
       },
     );
 
