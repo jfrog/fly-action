@@ -5,8 +5,12 @@ import { vi, type Mock } from "vitest";
 vi.mock("@actions/core");
 vi.mock("@actions/exec");
 vi.mock("@actions/tool-cache");
-vi.mock("@actions/http-client", () => {
+vi.mock("@actions/http-client", async () => {
+  const actual = await vi.importActual<typeof import("@actions/http-client")>(
+    "@actions/http-client",
+  );
   return {
+    ...actual,
     HttpClient: vi.fn().mockImplementation(() => ({
       get: vi.fn().mockResolvedValue({
         message: { statusCode: 200, headers: {} },

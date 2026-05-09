@@ -74,11 +74,11 @@ export async function resolveLatestRedirect(url: string): Promise<string> {
     await res.readBody();
     const status = res.message.statusCode ?? 0;
     const isRedirect =
-      status === 301 ||
-      status === 302 ||
-      status === 303 ||
-      status === 307 ||
-      status === 308;
+      status === httpm.HttpCodes.MovedPermanently ||
+      status === httpm.HttpCodes.ResourceMoved ||
+      status === httpm.HttpCodes.SeeOther ||
+      status === httpm.HttpCodes.TemporaryRedirect ||
+      status === httpm.HttpCodes.PermanentRedirect;
     if (isRedirect) {
       const location = res.message.headers["location"];
       if (!location) {
@@ -90,7 +90,7 @@ export async function resolveLatestRedirect(url: string): Promise<string> {
       // `new URL(location, base)` resolves both absolute and relative Locations.
       return new URL(locStr, url).href;
     }
-    if (status === 200) {
+    if (status === httpm.HttpCodes.OK) {
       return url;
     }
     throw new Error(
