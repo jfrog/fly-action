@@ -28,6 +28,7 @@ const TRANSIENT_PROCESS_PATTERNS = [
   "connection reset",
   "unreachable",
   "i/o timeout",
+  "login failed",
 ];
 
 /**

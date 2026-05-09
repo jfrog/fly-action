@@ -321,6 +321,59 @@ describe("run", () => {
   });
 });
 
+describe("run retry behavior", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    delete process.env[ENV_FLY_ACTION_CONFIGURED];
+    (downloadFlyCLI as Mock).mockResolvedValue("/cached/fly");
+    vi.mocked(core.getInput).mockImplementation((name: string) =>
+      name === "url" ? "https://fly.test.io" : "",
+    );
+    (authenticateOidc as Mock).mockResolvedValue({
+      accessToken: "t",
+      flyTenantUrl: "https://tenant.jfrog.io",
+    });
+  });
+
+  it("retries fly setup on transient stderr and succeeds", async () => {
+    let callCount = 0;
+    vi.mocked(exec.exec).mockImplementation(
+      async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
+        callCount++;
+        if (callCount === 1) {
+          options?.listeners?.stderr?.(Buffer.from("connection refused"));
+          return 1;
+        }
+        return 0;
+      },
+    );
+
+    await run();
+
+    expect(exec.exec).toHaveBeenCalledTimes(2);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("fly setup failed (attempt 1/3)"),
+    );
+    expect(core.setFailed).not.toHaveBeenCalled();
+  }, 30000);
+
+  it("does not retry fly setup on permanent stderr", async () => {
+    vi.mocked(exec.exec).mockImplementation(
+      async (_bin: string, _args?: string[], options?: exec.ExecOptions) => {
+        options?.listeners?.stderr?.(Buffer.from("invalid credentials"));
+        return 1;
+      },
+    );
+
+    await run();
+
+    expect(exec.exec).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining("invalid credentials"),
+    );
+  });
+});
+
 describe("run error branches", () => {
   beforeEach(() => {
     vi.resetAllMocks();

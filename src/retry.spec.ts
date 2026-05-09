@@ -101,6 +101,8 @@ describe("isTransientProcessError", () => {
     "network is unreachable",
     "i/o timeout",
     "Client.Timeout exceeded while awaiting headers",
+    "docker login failed for: flyjfrog.jfrog.io",
+    "failed to login to container registry: login failed",
   ])('returns true for stderr containing "%s"', (stderr) => {
     expect(isTransientProcessError(stderr)).toBe(true);
   });

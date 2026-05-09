@@ -95,6 +95,89 @@ describe("authenticateOidc", () => {
     );
   });
 
+  it("should retry on transient network error and succeed", async () => {
+    (core.getIDToken as Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+
+    const networkError = new Error("connect ETIMEDOUT 1.2.3.4:443");
+    (networkError as NodeJS.ErrnoException).code = "ETIMEDOUT";
+
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () =>
+        JSON.stringify({
+          access_token: "tokval", // jfrog-ignore — fake test credential
+          fly_tenant_url: "https://tenant.jfrog.io",
+        }),
+    } as unknown as HttpClientResponse;
+
+    mockPost
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(fakeResponse);
+
+    const result = await authenticateOidc("https://fly");
+
+    expect(result.accessToken).toBe("tokval"); // jfrog-ignore — fake test credential
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("OIDC auth failed (attempt 1/3)"),
+    );
+  }, 15000);
+
+  it("should retry on 5xx OIDC response and succeed", async () => {
+    (core.getIDToken as Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+
+    const fake500Response: HttpClientResponse = {
+      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
+      readBody: async () => '{"error":"internal server error"}',
+    } as unknown as HttpClientResponse;
+    const fakeOkResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () =>
+        JSON.stringify({
+          access_token: "tokval", // jfrog-ignore — fake test credential
+          fly_tenant_url: "https://tenant.jfrog.io",
+        }),
+    } as unknown as HttpClientResponse;
+
+    mockPost
+      .mockResolvedValueOnce(fake500Response)
+      .mockResolvedValueOnce(fakeOkResponse);
+
+    const result = await authenticateOidc("https://fly");
+
+    expect(result.accessToken).toBe("tokval"); // jfrog-ignore — fake test credential
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("OIDC auth failed (attempt 1/3)"),
+    );
+  }, 15000);
+
+  it("should not retry on 4xx OIDC response", async () => {
+    (core.getIDToken as Mock).mockResolvedValue(
+      "h." +
+        Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
+        ".sig",
+    );
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 401, headers: {} as IncomingHttpHeaders },
+      readBody: async () => '{"error":"unauthorized"}',
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    await expect(authenticateOidc("https://fly")).rejects.toThrow(
+      /OIDC failed 401/,
+    );
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
   it("should throw if OIDC response does not contain fly_tenant_url", async () => {
     (core.getIDToken as Mock).mockResolvedValue(
       "h." +

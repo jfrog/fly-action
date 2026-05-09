@@ -45,6 +45,6 @@ module.exports = [
     },
   },
   {
-    ignores: ['dist/', 'node_modules/', 'coverage/', 'flyfrog-action/'],
+    ignores: ['dist/', 'lib/', 'node_modules/', 'coverage/', 'flyfrog-action/', 'eslint.config.js'],
   },
 ];
