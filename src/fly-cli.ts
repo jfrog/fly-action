@@ -3,6 +3,7 @@
 import * as core from "@actions/core";
 import * as crypto from "crypto";
 import * as exec from "@actions/exec";
+import * as httpm from "@actions/http-client";
 import * as tc from "@actions/tool-cache";
 import * as fs from "fs";
 import * as path from "path";
@@ -49,6 +50,55 @@ export function resolvePlatformArch(): { os: string; arch: string } {
 export function buildDownloadUrl(os: string, arch: string): string {
   const ext = os === WINDOWS_OS ? ".exe" : "";
   return `${FLY_CLI_DOWNLOAD_BASE}/${FLY_TOOL_NAME}-${os}-${arch}${ext}`;
+}
+
+/**
+ * Resolves the [LATEST] redirect manually so we don't depend on
+ * `@actions/http-client`'s built-in redirect follower. The server may return
+ * a relative Location header (e.g. `/public/generic/fly-client/1.4.7/...`),
+ * and http-client calls `new URL(location)` without a base, which throws
+ * `TypeError: Invalid URL` for relative paths.
+ *
+ * We disable auto-redirect, read the Location header, and resolve it against
+ * the request URL ourselves. If the response is not a redirect (already
+ * absolute), the original URL is returned unchanged.
+ */
+export async function resolveLatestRedirect(url: string): Promise<string> {
+  const client = new httpm.HttpClient("jfrog-fly-action", [], {
+    allowRedirects: false,
+    allowRetries: true,
+    maxRetries: 2,
+  });
+  try {
+    const res = await client.get(url);
+    await res.readBody();
+    const status = res.message.statusCode ?? 0;
+    const isRedirect =
+      status === httpm.HttpCodes.MovedPermanently ||
+      status === httpm.HttpCodes.ResourceMoved ||
+      status === httpm.HttpCodes.SeeOther ||
+      status === httpm.HttpCodes.TemporaryRedirect ||
+      status === httpm.HttpCodes.PermanentRedirect;
+    if (isRedirect) {
+      const location = res.message.headers["location"];
+      if (!location) {
+        throw new Error(
+          `Fly CLI [LATEST] resolution returned ${status} without a Location header`,
+        );
+      }
+      const locStr = Array.isArray(location) ? location[0] : location;
+      // `new URL(location, base)` resolves both absolute and relative Locations.
+      return new URL(locStr, url).href;
+    }
+    if (status === httpm.HttpCodes.OK) {
+      return url;
+    }
+    throw new Error(
+      `Fly CLI [LATEST] resolution returned unexpected status ${status}`,
+    );
+  } finally {
+    client.dispose();
+  }
 }
 
 /**
@@ -162,7 +212,16 @@ function fileContentHash(filePath: string): string {
 
 export async function downloadFlyCLI(): Promise<string> {
   const { os, arch } = resolvePlatformArch();
-  const url = buildDownloadUrl(os, arch);
+  const latestUrl = buildDownloadUrl(os, arch);
+
+  // Resolve [LATEST] -> versioned URL ourselves so we tolerate relative
+  // Location headers (which @actions/http-client mishandles).
+  core.debug(`Resolving Fly CLI download URL from ${latestUrl}`);
+  const url = await resolveLatestRedirect(latestUrl);
+  if (url !== latestUrl) {
+    core.debug(`Resolved Fly CLI URL: ${url}`);
+  }
+
   const binaryName = getBinaryName();
 
   core.info(`Downloading Fly CLI from ${url}`);

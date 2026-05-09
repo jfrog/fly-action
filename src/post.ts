@@ -6,7 +6,13 @@ import {
   STATE_FLY_ACCESS_TOKEN,
   STATE_FLY_PLATFORM_URL,
 } from "./constants";
-import { HttpClient, HttpClientResponse } from "@actions/http-client";
+import {
+  HttpClient,
+  HttpClientResponse,
+  HttpCodes,
+  Headers,
+  MediaTypes,
+} from "@actions/http-client";
 import { EndCiResponse, CollectedArtifact } from "./types";
 import { createHttpClient, getErrorMessage, truncate } from "./utils";
 import { createJobSummary } from "./job-summary";
@@ -44,7 +50,7 @@ async function postWithRetry(
       const response = await httpClient.post(url, body, headers);
       const statusCode = response.message.statusCode ?? 0;
 
-      if (statusCode < 500) {
+      if (statusCode < HttpCodes.InternalServerError) {
         return response;
       }
 
@@ -103,14 +109,14 @@ export async function runPost(): Promise<void> {
       "{}",
       {
         Authorization: `Bearer ${accessToken}`,
-        "content-type": "application/json",
+        [Headers.ContentType]: MediaTypes.ApplicationJson,
       },
     );
 
     core.info(
       `[${new Date().toISOString()}] Received response with status code: ${response.message.statusCode}`,
     );
-    if (response.message.statusCode === 200) {
+    if (response.message.statusCode === HttpCodes.OK) {
       core.info("✅ CI end notification completed successfully");
 
       let artifacts: CollectedArtifact[] = [];
