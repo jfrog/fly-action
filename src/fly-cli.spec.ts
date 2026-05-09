@@ -282,6 +282,37 @@ describe("resolveLatestRedirect", () => {
     expect(resolved).toBe(url);
   });
 
+  it("throws on unexpected status code", async () => {
+    const get = vi.fn().mockResolvedValue({
+      message: { statusCode: 500, headers: {} },
+      readBody: vi.fn().mockResolvedValue(""),
+    });
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    await expect(
+      resolveLatestRedirect(
+        "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly",
+      ),
+    ).rejects.toThrow(/unexpected status 500/);
+  });
+
+  it("propagates network errors from the HTTP client", async () => {
+    const get = vi.fn().mockRejectedValue(new Error("getaddrinfo ENOTFOUND"));
+    (httpm.HttpClient as unknown as Mock).mockImplementation(() => ({
+      get,
+      dispose: vi.fn(),
+    }));
+
+    await expect(
+      resolveLatestRedirect(
+        "https://flyjfrog.jfrog.io/public/generic/fly-client/[LATEST]/fly",
+      ),
+    ).rejects.toThrow(/ENOTFOUND/);
+  });
+
   it("throws when redirect has no Location header", async () => {
     const get = vi.fn().mockResolvedValue({
       message: { statusCode: 302, headers: {} },

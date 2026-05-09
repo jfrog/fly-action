@@ -73,7 +73,13 @@ export async function resolveLatestRedirect(url: string): Promise<string> {
     const res = await client.get(url);
     await res.readBody();
     const status = res.message.statusCode ?? 0;
-    if (status >= 300 && status < 400) {
+    const isRedirect =
+      status === 301 ||
+      status === 302 ||
+      status === 303 ||
+      status === 307 ||
+      status === 308;
+    if (isRedirect) {
       const location = res.message.headers["location"];
       if (!location) {
         throw new Error(
