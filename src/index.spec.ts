@@ -248,7 +248,9 @@ describe("run", () => {
       "https://tenant.jfrog.io",
     );
     expect(core.saveState).toHaveBeenCalledWith("fly-access-token", "t");
-    expect(core.setFailed).toHaveBeenCalledWith("Fly setup command failed");
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining("Fly setup failed (exit 1)"),
+    );
   });
 
   it("calls setFailed on exception", async () => {

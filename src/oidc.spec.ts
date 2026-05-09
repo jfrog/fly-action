@@ -82,16 +82,16 @@ describe("authenticateOidc", () => {
     (core.getIDToken as Mock).mockResolvedValue(
       "h." +
         Buffer.from(JSON.stringify({ sub: "owner/name" })).toString("base64") +
-        ".sig", // Still need a valid-looking token for mocks even if not parsing user
+        ".sig",
     );
     const fakeResponse: HttpClientResponse = {
-      message: { statusCode: 500, headers: {} as IncomingHttpHeaders },
-      readBody: async () => "error body",
+      message: { statusCode: 400, headers: {} as IncomingHttpHeaders },
+      readBody: async () => '{"error":"bad request"}',
     } as unknown as HttpClientResponse;
     mockPost.mockResolvedValue(fakeResponse);
 
     await expect(authenticateOidc("https://fly")).rejects.toThrow(
-      /OIDC failed 500/,
+      /OIDC failed 400/,
     );
   });
 
