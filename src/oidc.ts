@@ -68,9 +68,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     ? { ...parsedJson, access_token: "***" }
     : parsedJson;
   const statusCode = rawResponse.message.statusCode;
-  const HTTP_CREATED = 201; // not in HttpCodes enum
-  const isSuccess =
-    statusCode === http.HttpCodes.OK || statusCode === HTTP_CREATED;
+  const isSuccess = statusCode === http.HttpCodes.OK || statusCode === 201; // 201 Created missing from HttpCodes enum
 
   core.debug(
     `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
