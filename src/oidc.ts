@@ -5,6 +5,7 @@ import * as http from "@actions/http-client";
 import { OidcAuthResult, FlyOidcRequest, FlyOidcResponse } from "./types";
 import { OutgoingHttpHeaders } from "http";
 import { createHttpClient, getErrorMessage, truncate } from "./utils";
+import { executeWithRetry, isTransientHttpError } from "./retry";
 
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
@@ -47,80 +48,95 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
     [http.Headers.Accept]: http.MediaTypes.ApplicationJson,
   };
 
-  const rawResponse = await client.post(
-    oidcUrl,
-    JSON.stringify(payload),
-    headers,
-  );
-  const body = await rawResponse.readBody();
-  let parsedJson: TokenJson;
-  let jsonParseFailed = false;
-  try {
-    parsedJson = JSON.parse(body);
-    if (parsedJson.access_token) {
-      core.setSecret(parsedJson.access_token);
-    }
-  } catch {
-    parsedJson = {};
-    jsonParseFailed = true;
+  function extractStatusCode(err: Error): number | undefined {
+    const match = err.message.match(/\bfailed (\d{3})\b/);
+    return match ? parseInt(match[1], 10) : undefined;
   }
-  const maskedResponse = parsedJson.access_token
-    ? { ...parsedJson, access_token: "***" }
-    : parsedJson;
-  const statusCode = rawResponse.message.statusCode;
-  const isSuccess = statusCode === http.HttpCodes.OK || statusCode === 201;
 
-  core.debug(
-    `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
-  );
-
-  if (isSuccess) {
-    core.debug(`OIDC authentication successful`);
-    core.debug(`OIDC response body: ${JSON.stringify(maskedResponse)}`);
-  } else {
-    const server =
-      rawResponse.message.headers["server"] ||
-      rawResponse.message.headers["x-cache"] ||
-      "unknown";
-    core.error(`OIDC failed ${statusCode} from server: ${server}`);
-
-    if (jsonParseFailed) {
-      core.error(
-        `Response is not JSON — possible infrastructure error page. Raw body: ${truncate(body, 500)}`,
+  return executeWithRetry(
+    async () => {
+      const rawResponse = await client.post(
+        oidcUrl,
+        JSON.stringify(payload),
+        headers,
       );
-    } else {
-      core.error(`Response body: ${JSON.stringify(maskedResponse)}`);
-    }
+      const body = await rawResponse.readBody();
+      let parsedJson: TokenJson;
+      let jsonParseFailed = false;
+      try {
+        parsedJson = JSON.parse(body);
+        if (parsedJson.access_token) {
+          core.setSecret(parsedJson.access_token);
+        }
+      } catch {
+        parsedJson = {};
+        jsonParseFailed = true;
+      }
+      const maskedResponse = parsedJson.access_token
+        ? { ...parsedJson, access_token: "***" }
+        : parsedJson;
+      const statusCode = rawResponse.message.statusCode;
+      const isSuccess = statusCode === http.HttpCodes.OK || statusCode === 201;
 
-    if (
-      statusCode === 403 &&
-      (jsonParseFailed || Object.keys(parsedJson).length === 0)
-    ) {
-      core.error(
-        "Hint: a 403 with a non-JSON body usually means a CDN/WAF blocked the request " +
-          "before it reached the Fly service. If you are using self-hosted runners, " +
-          "ensure their outbound IP is allowlisted. " +
-          "Contact JFrog support if the issue persists.",
+      core.debug(
+        `OIDC response headers: ${JSON.stringify(rawResponse.message.headers)}`,
       );
-    }
 
-    throw new Error(
-      `OIDC failed ${statusCode}: ${jsonParseFailed ? truncate(body, 200) : JSON.stringify(maskedResponse)}`,
-    );
-  }
-  const parsed = parsedJson as Partial<FlyOidcResponse>;
-  if (!parsed || !parsed.access_token) {
-    throw new Error(
-      `OIDC response did not contain an access token, body: ${JSON.stringify(maskedResponse)}`,
-    );
-  }
-  if (!parsed.fly_tenant_url) {
-    throw new Error(
-      `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${JSON.stringify(maskedResponse)}`,
-    );
-  }
-  return {
-    accessToken: parsed.access_token,
-    flyTenantUrl: parsed.fly_tenant_url,
-  };
+      if (isSuccess) {
+        core.debug(`OIDC authentication successful`);
+        core.debug(`OIDC response body: ${JSON.stringify(maskedResponse)}`);
+      } else {
+        const server =
+          rawResponse.message.headers["server"] ||
+          rawResponse.message.headers["x-cache"] ||
+          "unknown";
+        core.error(`OIDC failed ${statusCode} from server: ${server}`);
+
+        if (jsonParseFailed) {
+          core.error(
+            `Response is not JSON — possible infrastructure error page. Raw body: ${truncate(body, 500)}`,
+          );
+        } else {
+          core.error(`Response body: ${JSON.stringify(maskedResponse)}`);
+        }
+
+        if (
+          statusCode === http.HttpCodes.Forbidden &&
+          (jsonParseFailed || Object.keys(parsedJson).length === 0)
+        ) {
+          core.error(
+            "Hint: a 403 with a non-JSON body usually means a CDN/WAF blocked the request " +
+              "before it reached the Fly service. If you are using self-hosted runners, " +
+              "ensure their outbound IP is allowlisted. " +
+              "Contact JFrog support if the issue persists.",
+          );
+        }
+
+        throw new Error(
+          `OIDC failed ${statusCode}: ${jsonParseFailed ? truncate(body, 200) : JSON.stringify(maskedResponse)}`,
+        );
+      }
+      const parsed = parsedJson as Partial<FlyOidcResponse>;
+      if (!parsed || !parsed.access_token) {
+        throw new Error(
+          `OIDC response did not contain an access token, body: ${JSON.stringify(maskedResponse)}`,
+        );
+      }
+      if (!parsed.fly_tenant_url) {
+        throw new Error(
+          `OIDC response did not contain fly_tenant_url — server may not support tenant resolution yet, body: ${JSON.stringify(maskedResponse)}`,
+        );
+      }
+      return {
+        accessToken: parsed.access_token,
+        flyTenantUrl: parsed.fly_tenant_url,
+      };
+    },
+    {
+      isRetryable: (err) =>
+        isTransientHttpError(err) ||
+        isTransientHttpError(null, extractStatusCode(err)),
+      label: "OIDC auth",
+    },
+  );
 }

@@ -21,6 +21,7 @@ import {
   STATE_FLY_PLATFORM_URL,
 } from "./constants";
 import { getErrorMessage } from "./utils";
+import { executeWithRetry, isTransientProcessError } from "./retry";
 
 /**
  * Determines the Fly OIDC endpoint URL. Resolution order:
@@ -139,12 +140,32 @@ export async function run(): Promise<void> {
 
     core.info("Executing Fly CLI setup");
     const args = [CLI_CMD_SETUP];
-    const exitCode = await exec.exec(binPath, args, options);
-
-    if (exitCode !== 0) {
-      core.error("Fly setup command failed with non-zero exit code.");
-      throw new Error("Fly setup command failed");
-    }
+    await executeWithRetry(
+      async () => {
+        let stderr = "";
+        const execOptions: exec.ExecOptions = {
+          ...options,
+          ignoreReturnCode: true,
+          listeners: {
+            stderr: (data: Buffer) => {
+              stderr += data.toString();
+            },
+          },
+        };
+        const exitCode = await exec.exec(binPath, args, execOptions);
+        if (exitCode !== 0) {
+          throw new Error(
+            `Fly setup failed (exit ${exitCode}): ${stderr.trim() || "no stderr"}`,
+          );
+        }
+      },
+      {
+        isRetryable: (err) => isTransientProcessError(err.message),
+        maxAttempts: 3,
+        initialDelayMs: 5000,
+        label: "fly setup",
+      },
+    );
     core.info("Fly CLI setup command completed successfully.");
 
     // Mark action as configured to prevent duplicate runs in same job
