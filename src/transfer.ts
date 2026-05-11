@@ -76,9 +76,10 @@ export async function runTransfer(config: TransferConfig): Promise<void> {
 
     // For [LATEST] downloads, best-effort-resolve to the concrete version so the
     // job summary shows a real version string instead of literal "[LATEST]".
-    // The CLI invocation above still uses literal [LATEST]; this is display-only.
-    // On any failure we fall back to displaying the literal token — never block
-    // the download.
+    // The CLI invocation above still uses literal [LATEST] — fly-service resolves
+    // it server-side and proxies the file inline. This call is display-only;
+    // on any failure (including the current inline-proxy 200 response) we fall
+    // back to displaying the literal token — the download is never blocked.
     const displayVersion =
       config.type === "download" && isLatestToken(cliVersion)
         ? await resolveLatestVersionForDisplay(url, token, name, files[0])
@@ -117,17 +118,19 @@ export function isLatestToken(version: string): boolean {
 /**
  * Best-effort resolve of [LATEST] to a concrete version string for display in
  * the job summary. Issues a HEAD against the authenticated generic endpoint
- * with redirects disabled, then parses the concrete version from the
- * `Location` header of the 302 response (path shape:
- *   /fly/api/v1/generic/{name}/{concrete}/{file}).
+ * with redirects disabled, then attempts to parse the concrete version.
  *
- * Returns LATEST_VERSION on any failure (404, missing header, network error)
- * — the caller treats the literal token as a graceful fallback so a missing
- * job-summary improvement never blocks an actual download. This intentionally
- * does NOT alter the CLI invocation (the CLI still receives literal [LATEST]
- * and the server resolves it again per file via 302). For multi-file downloads,
- * a new upload landing mid-job could mean the CLI grabs a newer version than
- * what we display here — acceptable trade-off for display-only metadata.
+ * NOTE: fly-service resolves [LATEST] via inline proxying (returns 200 with
+ * file content), not a 302 redirect. The 302-check below therefore always
+ * falls through, and this function always returns LATEST_VERSION as the
+ * display string. The job summary shows the literal "[LATEST]" token rather
+ * than the concrete version — download correctness is unaffected.
+ *
+ * If fly-service later emits an X-Fly-Resolved-Version response header, this
+ * function can be updated to read it and show the concrete version.
+ *
+ * Returns LATEST_VERSION on any response that isn't a 302 (including the
+ * current inline-proxy 200), and on any network error.
  */
 export async function resolveLatestVersionForDisplay(
   flyUrl: string,

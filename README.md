@@ -16,7 +16,7 @@ For more information about JFrog Fly, see the [official documentation](https://d
 - ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
 - ✅ Supports all package managers available in Fly CLI
 - ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions (`[LATEST]` resolves on the public URL after distribute; auth-side resolution coming in `fly-service` #1104 item 2)
+- ✅ Upload and download generic artifacts via sub-actions (`[LATEST]` resolves on both authenticated and public paths — fly-service resolves it server-side via AQL on the auth path, 302 redirect on the public path)
 - ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
 - ✅ Publish Go modules to Fly Go registry
 - ✅ OIDC authentication only
@@ -139,9 +139,9 @@ The action validates the value before invoking the Fly CLI. Anything other than 
 | Path | `[LATEST]` resolved? | How |
 |---|---|---|
 | **Public URL** — `https://{tenant}.jfrog.io/public/generic/{name}/[LATEST]/{file}` (after a `distribute` step) | Yes (today) | `fly-service` returns `302 Found` + `Location: …/{concrete}/{file}` + `Cache-Control: no-store`. The redirect is never CDN-cached, so changes to "latest" are visible immediately; the concrete URL it redirects to is independently cacheable as immutable artifact data. |
-| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Not yet | Tracked in `fly-service` [#1104](https://github.com/jfrog/fly-service/issues/1104) item 2. Until that ships, omitting `version` (or passing `[LATEST]`) returns an actionable error from the Fly CLI: pass a concrete version, or — if the artifact has been distributed — fetch it from the public URL above. |
+| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Yes | fly-service resolves `[LATEST]` server-side via AQL (most recently created version wins) and proxies the file inline — no redirect is issued. The job summary shows the literal `[LATEST]` token rather than the concrete version (display-only limitation; download correctness is unaffected). |
 
-The action defaults `version` to `[LATEST]` for `download` so the same workflow keeps working with no edits the moment auth-side resolution lands.
+The action defaults `version` to `[LATEST]` for `download` so workflows that omit the version automatically get the latest build.
 
 Use `[LATEST]` for "give me whatever the most recent build is" workflows (consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
 
