@@ -63,6 +63,13 @@ export const INPUT_FILES = "files";
 export const INPUT_EXCLUDE = "exclude";
 export const INPUT_OUTPUT_DIR = "output-dir";
 export const INPUT_PATH = "path";
+export const INPUT_IF_NO_FILES_FOUND = "if-no-files-found";
+
+// Reserved version token. The fly server resolves `[LATEST]` to the most
+// recently uploaded version on download via a 302 redirect (case-insensitive,
+// also accepts `[latest]`, `[Latest]`). Reserved on write — the server
+// rejects upload requests where `version=[LATEST]`.
+export const LATEST_VERSION = "[LATEST]";
 
 // Action output names
 export const OUTPUT_RESULTS = "results";
@@ -79,6 +86,13 @@ export const CLI_FLAG_NAME = "--name";
 export const CLI_FLAG_VERSION = "--version";
 export const CLI_FLAG_EXCLUDE = "--exclude";
 export const CLI_FLAG_OUTPUT_DIR = "--output-dir";
+export const CLI_FLAG_IF_NO_FILES_FOUND = "--if-no-files-found";
+
+// Allowed values for the upload `if-no-files-found` input. Mirrors the Fly CLI
+// (client/internal/constants/constants.go: IfNoFilesFoundError/Warn/Ignore).
+// "error" is the CLI default; we leave the action input empty by default and
+// only forward the flag when the user provides a value.
+export const IF_NO_FILES_FOUND_VALUES = ["error", "warn", "ignore"] as const;
 
 // CLI response status values
 export const STATUS_ERROR = "error";

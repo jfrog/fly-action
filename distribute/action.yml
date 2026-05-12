@@ -1,5 +1,5 @@
 name: 'Fly Distribute'
-description: 'Make a generic artifact version publicly downloadable. Requires jfrog/fly-action to have run first for authentication.'
+description: 'Make a generic artifact version publicly downloadable. After distribute, anyone can fetch the file at https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file} (no auth). Use [LATEST] in the public URL to always get the newest distributed version. Requires jfrog/fly-action to have run first for authentication.'
 author: 'JFrog'
 
 inputs:
