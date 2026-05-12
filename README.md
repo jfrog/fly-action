@@ -139,7 +139,7 @@ The action validates the value before invoking the Fly CLI. Anything other than 
 | Path | `[LATEST]` resolved? | How |
 |---|---|---|
 | **Public URL** — `https://{tenant}.jfrog.io/public/generic/{name}/[LATEST]/{file}` (after a `distribute` step) | Yes (today) | `fly-service` returns `302 Found` + `Location: …/{concrete}/{file}` + `Cache-Control: no-store`. The redirect is never CDN-cached, so changes to "latest" are visible immediately; the concrete URL it redirects to is independently cacheable as immutable artifact data. |
-| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Yes | fly-service resolves `[LATEST]` server-side via AQL (most recently created version wins) and proxies the file inline — no redirect is issued. The job summary shows the literal `[LATEST]` token rather than the concrete version (display-only limitation; download correctness is unaffected). |
+| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Yes | fly-service resolves `[LATEST]` server-side via AQL (most recently created version wins) and proxies the file inline with `Cache-Control: no-store` — no redirect is issued. Inline proxying lets fly-service intercept Artifactory 404s and return a Fly-owned message naming the resolved version, so CI workflows can spot upload gaps. The job summary shows the literal `[LATEST]` token rather than the concrete version (display-only limitation; download correctness is unaffected). |
 
 The action defaults `version` to `[LATEST]` for `download` so workflows that omit the version automatically get the latest build.
 
@@ -175,7 +175,7 @@ curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
 curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
 ```
 
-The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. On the public path `[LATEST]` is resolved server-side via `302` + `Cache-Control: no-store`, so consumers always see the latest published version (CDN never serves a stale resolution). The authenticated `download` sub-action does not yet resolve `[LATEST]` — see [`[LATEST]` resolution](#latest-resolution) above.
+The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. On the public path `[LATEST]` is resolved server-side via `302` + `Cache-Control: no-store`, so consumers always see the latest published version (CDN never serves a stale resolution). The authenticated `download` sub-action also resolves `[LATEST]` — via inline proxy (no redirect) — see [`[LATEST]` resolution](#latest-resolution) above.
 
 The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count}`. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
 
