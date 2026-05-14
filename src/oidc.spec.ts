@@ -71,10 +71,12 @@ describe("authenticateOidc", () => {
     expect(result.flyTenantUrl).toBe("https://tenant.jfrog.io");
   });
 
-  it("should throw if getIDToken fails", async () => {
-    (core.getIDToken as Mock).mockResolvedValue(undefined);
+  it("should throw an actionable error when id-token permission is missing", async () => {
+    (core.getIDToken as Mock).mockRejectedValue(
+      new Error("Unable to get ACTIONS_ID_TOKEN_REQUEST_URL env variable"),
+    );
     await expect(authenticateOidc("url")).rejects.toThrow(
-      "Failed to obtain OIDC token",
+      "'id-token: write' permission",
     );
   });
 
