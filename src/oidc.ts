@@ -11,16 +11,27 @@ import { executeWithRetry, isTransientHttpError } from "./retry";
 type TokenJson = { access_token?: string; [key: string]: unknown };
 
 /**
- * Gets an OIDC token from the GitHub Actions runtime
- * @returns The OIDC token or undefined if the request failed
+ * Gets an OIDC token from the GitHub Actions runtime.
+ * Throws a detailed, actionable error if the token cannot be obtained — typically
+ * because the job is missing the `id-token: write` permission.
  */
-async function getIDToken(): Promise<string | undefined> {
+async function getIDToken(): Promise<string> {
+  core.debug("Fetching OIDC token from GitHub");
   try {
-    core.debug("Fetching OIDC token from GitHub");
     return await core.getIDToken();
   } catch (error) {
-    core.warning(`Failed to get OIDC token: ${getErrorMessage(error)}`);
-    return undefined;
+    const wrapped = new Error(
+      `Failed to get OIDC token: ${getErrorMessage(error)}.\n` +
+        "This almost always means the job is missing the 'id-token: write' permission, " +
+        "which is required for Fly to authenticate via GitHub OIDC.\n" +
+        "Fix: add the following to your workflow (at the workflow or job level):\n" +
+        "  permissions:\n" +
+        "    id-token: write\n" +
+        "    contents: read\n" +
+        "See https://docs.github.com/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings for details.",
+    );
+    (wrapped as Error & { cause?: unknown }).cause = error;
+    throw wrapped;
   }
 }
 
@@ -30,7 +41,6 @@ async function getIDToken(): Promise<string | undefined> {
  */
 export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
   const idToken = await getIDToken();
-  if (!idToken) throw new Error("Failed to obtain OIDC token");
   // Mask the raw ID token in logs
   core.setSecret(idToken);
 
