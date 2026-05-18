@@ -14,6 +14,7 @@ import {
   ENV_FLY_REGISTRY_SUBDOMAIN,
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
+  ENV_FLY_USER_RUNTIME,
   ENV_FLY_IGNORE_PACKAGE_MANAGERS,
   DEFAULT_FLY_URL,
   ENV_FLY_URL,
@@ -101,7 +102,8 @@ export async function run(): Promise<void> {
     core.info(`Ignore Package Managers: ${ignorePackageManagers || "none"}`);
 
     core.info("Attempting OIDC authentication...");
-    const { accessToken, flyTenantUrl } = await authenticateOidc(oidcUrl);
+    const { accessToken, flyTenantUrl, username } =
+      await authenticateOidc(oidcUrl);
     core.info(`OIDC authentication successful.`);
     core.setSecret(accessToken);
 
@@ -116,6 +118,9 @@ export async function run(): Promise<void> {
     // and user run: steps can use the fly CLI.
     core.exportVariable(ENV_FLY_URL_RUNTIME, flyTenantUrl);
     core.exportVariable(ENV_FLY_ACCESS_TOKEN_RUNTIME, accessToken);
+    if (username) {
+      core.exportVariable(ENV_FLY_USER_RUNTIME, username);
+    }
 
     core.saveState(STATE_FLY_URL, flyTenantUrl);
     core.saveState(STATE_FLY_ACCESS_TOKEN, accessToken);
@@ -132,6 +137,7 @@ export async function run(): Promise<void> {
       [ENV_FLY_URL_RUNTIME]: flyTenantUrl,
       [ENV_FLY_ACCESS_TOKEN_RUNTIME]: accessToken,
       [ENV_FLY_IGNORE_PACKAGE_MANAGERS]: ignorePackageManagers,
+      ...(username ? { [ENV_FLY_USER_RUNTIME]: username } : {}),
     };
 
     const options = {

@@ -217,7 +217,8 @@ describe("Fly Client Integration Tests", () => {
     it("should display setup help", () => {
       const result = execBinary(["setup", "--help"]);
       expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain("Setup Fly configuration");
+      expect(result.stdout).toContain("fly setup");
+      expect(result.stdout).toContain("Configure package managers");
       expect(result.stdout).toContain("PACKAGE_MANAGER");
     });
 

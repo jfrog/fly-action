@@ -140,6 +140,7 @@ export async function authenticateOidc(url: string): Promise<OidcAuthResult> {
       return {
         accessToken: parsed.access_token,
         flyTenantUrl: parsed.fly_tenant_url,
+        username: parsed.username,
       };
     },
     {
