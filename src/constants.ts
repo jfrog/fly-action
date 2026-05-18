@@ -28,6 +28,7 @@ export const ENV_FLY_REGISTRY_SUBDOMAIN = "FLY_REGISTRY_SUBDOMAIN";
 // sub-actions (upload/download) and user run: steps can use the fly CLI.
 export const ENV_FLY_URL_RUNTIME = "FLY_URL";
 export const ENV_FLY_ACCESS_TOKEN_RUNTIME = "FLY_ACCESS_TOKEN";
+export const ENV_FLY_USER_RUNTIME = "FLY_USER";
 export const ENV_FLY_IGNORE_PACKAGE_MANAGERS = "FLY_IGNORE_PACKAGE_MANAGERS";
 
 // Fly CLI binary download from Fly public generic endpoint.

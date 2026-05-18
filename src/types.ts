@@ -5,6 +5,8 @@ export interface OidcAuthResult {
   accessToken: string;
   /** Tenant-specific subdomain URL resolved from OIDC claims (e.g. "https://flyjfrog.jfrog.io") */
   flyTenantUrl: string;
+  /** Username from the OIDC token exchange (e.g. "fly-team+912@jfrog.com"). Used by fly-client for docker/helm login. */
+  username?: string;
 }
 
 /** Payload for Fly OIDC authentication request */
@@ -17,6 +19,8 @@ export interface FlyOidcResponse {
   access_token: string;
   /** Tenant subdomain URL resolved from OIDC claims — used for EndCi and fly-client so nginx injects tenant headers */
   fly_tenant_url: string;
+  /** Username associated with the exchanged token — needed by fly-client for docker/helm login with reference tokens */
+  username?: string;
 }
 
 /** A single artifact collected during the CI workflow */
