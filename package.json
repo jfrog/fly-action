@@ -1,6 +1,6 @@
 {
   "name": "@jfrog/fly-action",
-  "version": "1.6.8",
+  "version": "1.6.9",
   "description": "GitHub Action to setup Fly CLI",
   "main": "lib/index.js",
   "post": "lib/post.js",
