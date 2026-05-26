@@ -130,6 +130,60 @@ describe("runDistribute", () => {
     expect(body.package_type).toBe("generic");
   });
 
+  it("distributes a docker image and logs the pull command", async () => {
+    mockInputs({ name: "myorg/my-image", version: "1.0.0", type: "docker" });
+
+    const dockerResponse: DistributeResponse = {
+      package_name: "myorg/my-image",
+      package_version: "1.0.0",
+      package_type: "docker",
+      public_url: "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image",
+      download_url:
+        "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image/manifests/1.0.0",
+      download_count: 0,
+      files: [
+        {
+          package_name: "myorg/my-image",
+          package_version: "1.0.0",
+          file_name: "manifest.json",
+          sha256: "abcd",
+          download_count: 0,
+        },
+      ],
+    };
+
+    mockPost.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify(dockerResponse)),
+    });
+
+    await runDistribute();
+
+    expect(core.setFailed).not.toHaveBeenCalled();
+    // Payload carries package_type=docker through to the backend unchanged.
+    const body = JSON.parse(mockPost.mock.calls[0][1]);
+    expect(body.package_type).toBe("docker");
+    // Pull command is derived from public_url + version, with `/v2/` stripped
+    // so consumers can paste it into a shell.
+    expect(core.info).toHaveBeenCalledWith(
+      "   Pull:       docker pull flyjfrog.jfrog.io/docker-public/myorg/my-image:1.0.0",
+    );
+  });
+
+  it("does not log a pull command for non-docker distributions", async () => {
+    mockInputs({ name: "my-app", version: "1.0.0", type: "generic" });
+
+    mockPost.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify(MOCK_RESPONSE)),
+    });
+
+    await runDistribute();
+
+    const infoCalls = vi.mocked(core.info).mock.calls.map((c) => c[0]);
+    expect(infoCalls.some((line) => line.includes("Pull:"))).toBe(false);
+  });
+
   it("accumulates results across multiple runDistribute invocations", async () => {
     const response2: DistributeResponse = {
       ...MOCK_RESPONSE,

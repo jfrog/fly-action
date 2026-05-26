@@ -44,14 +44,42 @@ export interface DistributeRequest {
   package_type: string;
 }
 
+/**
+ * One file within a distributed artifact version. Generic distributions have
+ * one entry per uploaded file; Docker distributions have one entry per file
+ * under the image tag (manifest + per-layer blobs).
+ */
+export interface DistributeResponseFile {
+  package_name: string;
+  package_version: string;
+  file_name: string;
+  /** Hex-encoded sha256 — omitted by the server when unavailable. */
+  sha256?: string;
+  download_count: number;
+}
+
 /** Response body from the Fly distribute endpoint */
 export interface DistributeResponse {
   package_name: string;
   package_version: string;
   package_type: string;
+  /**
+   * Public namespace for the distribution. Generic:
+   * `https://{tenant}/public/generic/{name}/{version}`. Docker:
+   * `https://{tenant}/v2/docker-public/{image}`.
+   */
   public_url: string;
+  /**
+   * Concrete pull URL. Generic: the first file under the version. Docker:
+   * the manifest URL `https://{tenant}/v2/docker-public/{image}/manifests/{tag}`.
+   */
   download_url: string;
   download_count: number;
+  /**
+   * Per-file breakdown. Optional for backward compatibility with older
+   * fly-service revisions that did not emit this field.
+   */
+  files?: DistributeResponseFile[];
 }
 
 /**
