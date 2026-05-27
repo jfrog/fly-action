@@ -9,7 +9,49 @@
 
 This GitHub Action downloads the Fly CLI and configures package managers to use Fly as a registry for dependencies.
 
-For more information about JFrog Fly, see the [official documentation](https://docs.fly.jfrog.com).
+## What is JFrog Fly?
+
+JFrog Fly is a release management platform for software teams. Every build your
+CI produces becomes a tracked release — linked to its commits, PRs, and artifacts,
+searchable by content from your IDE and available for your coding agents.
+
+> **Not affiliated with Fly.io** (the application deployment platform).
+
+**From your coding agent you can:**
+- Find any release by what it contains: *"Find the release that fixed the login bug"*
+- Configure CI end-to-end: *"Start working with Fly"*
+- Deploy to Kubernetes: *"Deploy the latest staging release to production"*
+- Track what's running: *"Is the login fix live in production?"*
+
+Works with Cursor, Claude Code, VS Code (Copilot), and OpenCode.
+
+## Install JFrog Fly
+
+Fly Desktop installs in seconds and automatically configures your coding agent
+and package managers.
+
+**macOS / Linux**
+```bash
+curl -fsSL https://fly.jfrog.ai/download/desktop | bash
+```
+
+**Windows**
+```powershell
+powershell -c "irm https://fly.jfrog.ai/download/desktop | iex"
+```
+
+The app opens and walks you through sign-up. Once installed, open your IDE and ask:
+
+```
+Start working with Fly
+```
+
+Your agent connects your GitHub repo, configures CI authentication, and opens a
+verified PR — no manual steps.
+
+→ [Full getting-started guide](https://docs.fly.jfrog.com/getting-started/)
+
+---
 
 ## Features
 
