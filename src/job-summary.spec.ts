@@ -485,6 +485,61 @@ describe("buildDistributedTable", () => {
     expect(table).toContain("my\\|app");
     expect(table).toContain("1\\|0");
   });
+
+  it("renders docker rows with a `docker pull …` command instead of the manifest URL", () => {
+    const manifestUrl =
+      "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image/manifests/1.0.0";
+    const results: DistributeResponse[] = [
+      {
+        package_name: "myorg/my-image",
+        package_version: "1.0.0",
+        package_type: "docker",
+        public_url: "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image",
+        download_url: manifestUrl,
+        download_count: 0,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    // Inline-code pull command derived from public_url + version. Backticks
+    // signal "command, not URL" in the rendered markdown table.
+    expect(table).toContain(
+      "`docker pull flyjfrog.jfrog.io/docker-public/myorg/my-image:1.0.0`",
+    );
+    // Manifest URL must not leak into the cell — clicking it returns JSON.
+    expect(table).not.toContain(`[${manifestUrl}](${manifestUrl})`);
+  });
+
+  it("mixes generic and docker rows: each renders its own cell shape", () => {
+    const genericDownload =
+      "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz";
+    const results: DistributeResponse[] = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url: genericDownload,
+        download_count: 0,
+      },
+      {
+        package_name: "myorg/my-image",
+        package_version: "2.0.0",
+        package_type: "docker",
+        public_url: "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image",
+        download_url:
+          "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image/manifests/2.0.0",
+        download_count: 0,
+      },
+    ];
+
+    const table = buildDistributedTable(results);
+    expect(table).toContain(`[${genericDownload}](${genericDownload})`);
+    expect(table).toContain(
+      "`docker pull flyjfrog.jfrog.io/docker-public/myorg/my-image:2.0.0`",
+    );
+  });
 });
 
 describe("buildArtifactsTable", () => {

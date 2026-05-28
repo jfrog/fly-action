@@ -191,7 +191,9 @@ Use `[LATEST]` for "give me whatever the most recent build is" workflows (consum
 
 ### Distribute
 
-Make a generic artifact version publicly downloadable — anyone with the link can grab it without a Fly account. Idempotent: calling again returns the same public URL.
+Make an artifact version publicly downloadable — anyone with the link can grab it without a Fly account. Idempotent: calling again returns the same public URL. Supported package types: **generic**, **docker**.
+
+#### Generic
 
 ```yaml
 - name: Distribute the artifact
@@ -201,13 +203,7 @@ Make a generic artifact version publicly downloadable — anyone with the link c
     version: '1.0.0'
 ```
 
-| Input | Description | Required | Default |
-| --- | --- | --- | --- |
-| `name` | Package name | Yes | |
-| `version` | Package version to make public (concrete; `[LATEST]` not supported here) | Yes | |
-| `type` | Artifact type. Currently only `generic` is supported. | No | `generic` |
-
-After distribute succeeds, consumers can fetch the file anonymously:
+After distribute succeeds, consumers fetch the file anonymously:
 
 ```bash
 # Specific version
@@ -217,9 +213,50 @@ curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
 curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
 ```
 
-The public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`. On the public path `[LATEST]` is resolved server-side via `302` + `Cache-Control: no-store`, so consumers always see the latest published version (CDN never serves a stale resolution). The authenticated `download` sub-action also resolves `[LATEST]` — via inline proxy (no redirect) — see [`[LATEST]` resolution](#latest-resolution) above.
+The generic public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`.
 
-The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count}`. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
+#### Docker
+
+The image must already have been pushed to the tenant's `docker-local` repo (via `docker push {tenant}.jfrog.io/docker/...` after `jfrog/fly-action` configured the registry). The distribute step copies the manifest and layer blobs into the `{tenant}-docker-public` repo so anonymous pulls can resolve them.
+
+```yaml
+- name: Distribute the docker image
+  uses: jfrog/fly-action/distribute@v1
+  with:
+    name: myorg/my-image      # image name without registry host or `docker-public/` prefix
+    version: '1.0.0'          # image tag
+    type: docker
+```
+
+After distribute succeeds, consumers pull the image anonymously:
+
+```bash
+# Specific tag
+docker pull {tenant}.jfrog.io/docker-public/myorg/my-image:1.0.0
+
+# Latest tag (server 302-redirects to the newest distributed tag)
+docker pull {tenant}.jfrog.io/docker-public/myorg/my-image:[LATEST]
+```
+
+The docker public URL pattern is `https://{tenant}.jfrog.io/v2/docker-public/{image}/manifests/{tag}` (OCI registry API). The `/v2/docker-public/*` namespace is read-only — pushes always go through the authenticated distribute step above, never anonymously.
+
+#### Distribute inputs
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `name` | Package name (for docker, the image name without the registry host or `docker-public/` prefix; nested repos like `myorg/myimg` are supported) | Yes | |
+| `version` | Package version to make public (for docker, the image tag). Concrete only — `[LATEST]` is not accepted here. | Yes | |
+| `type` | Artifact type. Supported values: `generic`, `docker`. | No | `generic` |
+
+#### `[LATEST]` on the public path
+
+`[LATEST]` is resolved server-side on **both** public URL shapes (generic `/public/generic/...` and docker `/v2/docker-public/...`) via `302 Found` + `Cache-Control: no-store`, so consumers always see the latest distributed version and the CDN never pins a stale resolution. The authenticated `download` sub-action also resolves `[LATEST]` — via inline proxy, no redirect — see [`[LATEST]` resolution](#latest-resolution) above.
+
+`[LATEST]` is **download-only**. The Fly server rejects it with `400 Bad Request` on `distribute` (and `upload`) so a literal `[LATEST]`-named folder or tag can never poison future resolution.
+
+#### Distribute outputs
+
+The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count, files?}`. Docker distributions also surface a `Pull:` line in the step logs with the ready-to-paste `docker pull …` command. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
 
 ### Go Publish
 

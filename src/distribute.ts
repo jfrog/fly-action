@@ -17,6 +17,11 @@ export async function runDistribute(): Promise<void> {
   try {
     const name = core.getInput(INPUT_NAME, { required: true });
     const version = core.getInput(INPUT_VERSION, { required: true });
+    // NOTE: `type` is forwarded to fly-service without a client-side allowlist
+    // check on purpose — the backend is the single source of truth for which
+    // package types are publicly distributable and returns a typed 400 for
+    // unsupported values. Keeping the allowlist server-side prevents the
+    // action and fly-service from drifting (e.g. when Phase 3 wires helm).
     const packageType = core.getInput(INPUT_DISTRIBUTE_TYPE) || "generic";
 
     const { url, token } = getAuthEnv();

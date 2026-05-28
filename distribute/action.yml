@@ -1,16 +1,16 @@
 name: 'Fly Distribute'
-description: 'Make a generic artifact version publicly downloadable. After distribute, anyone can fetch the file at https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file} (no auth). Use [LATEST] in the public URL to always get the newest distributed version. Requires jfrog/fly-action to have run first for authentication.'
+description: 'Make an artifact version publicly downloadable. After distribute, consumers can fetch generic artifacts at https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file} (no auth) or pull docker images with `docker pull {tenant}.jfrog.io/docker-public/{image}:{tag}` (no auth). Use [LATEST] in either URL shape to always get the newest distributed version. Requires jfrog/fly-action to have run first for authentication.'
 author: 'JFrog'
 
 inputs:
   name:
-    description: 'Artifact name'
+    description: 'Artifact name (for docker, the image name without the registry host or `docker-public/` prefix; nested repos like `myorg/myimg` are supported)'
     required: true
   version:
-    description: 'Artifact version'
+    description: 'Artifact version (for docker, the image tag)'
     required: true
   type:
-    description: 'Artifact type. Currently only "generic" is supported.'
+    description: 'Artifact type. Supported values: `generic`, `docker`.'
     required: false
     default: 'generic'
 

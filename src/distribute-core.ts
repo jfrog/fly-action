@@ -61,9 +61,46 @@ export async function distributeArtifact(
     );
     core.info(`   Public URL: ${parsed.public_url}`);
     core.info(`   Download:   ${parsed.download_url}`);
+    const pullCommand = buildDockerPullCommand(parsed);
+    if (pullCommand) {
+      core.info(`   Pull:       ${pullCommand}`);
+    }
 
     return parsed;
   } finally {
     httpClient.dispose();
   }
+}
+
+/**
+ * Returns the `docker pull …` reference for a Docker distribution, or `null`
+ * for non-Docker types or when `public_url` doesn't match the expected
+ * `/v2/{repo}/{image}` shape. Surfacing the pull command is the most useful
+ * line for a Docker consumer — `public_url` alone is the OCI namespace, not a
+ * command they can paste, and `download_url` resolves to the JSON manifest.
+ *
+ * Exported so the job-summary renderer can reuse the same derivation and
+ * stay consistent with the step log line (no drift between sources).
+ */
+export function buildDockerPullCommand(
+  response: DistributeResponse,
+): string | null {
+  if (response.package_type !== "docker") {
+    return null;
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(response.public_url);
+  } catch {
+    return null;
+  }
+  // public_url is `/v2/{repo}/{image}` per the Fly OCI public namespace
+  // contract. Strip the OCI `/v2/` prefix so the result is the docker
+  // reference `{host}/{repo}/{image}:{tag}`. If the prefix is missing the
+  // backend changed shape — skip rather than emit a misleading command.
+  const pathWithoutV2 = parsedUrl.pathname.replace(/^\/v2\//, "/");
+  if (pathWithoutV2 === parsedUrl.pathname) {
+    return null;
+  }
+  return `docker pull ${parsedUrl.host}${pathWithoutV2}:${response.package_version}`;
 }
