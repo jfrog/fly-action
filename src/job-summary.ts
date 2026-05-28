@@ -15,6 +15,7 @@ import {
 } from "./constants";
 import { getErrorMessage } from "./utils";
 import { resolveAndDedup, resolveArtifact, dedupKey } from "./artifact-path";
+import { buildDockerPullCommand } from "./distribute-core";
 
 const escPipe = (s: string): string => s.replace(/\|/g, "\\|");
 
@@ -108,9 +109,24 @@ export function buildDistributedTable(results: DistributeResponse[]): string {
   const header = "| Package | Version | Download URL |\n| --- | --- | --- |";
   const rows = results.map(
     (r) =>
-      `| ${escPipe(r.package_name)} | ${escPipe(r.package_version)} | [${escPipe(r.download_url)}](${r.download_url}) |`,
+      `| ${escPipe(r.package_name)} | ${escPipe(r.package_version)} | ${renderDistributedDownloadCell(r)} |`,
   );
   return `\n### 🌐 Distributed Artifacts\n\n${header}\n${rows.join("\n")}\n`;
+}
+
+/**
+ * Builds the third-column cell for a distributed-artifacts row. Generic rows
+ * show a clickable link to the file. Docker rows show the `docker pull …`
+ * command in inline code: the raw `download_url` for docker points at the
+ * OCI manifest JSON, which is useless to skim in a job summary — consumers
+ * actually need a paste-ready pull command.
+ */
+function renderDistributedDownloadCell(r: DistributeResponse): string {
+  const pullCommand = buildDockerPullCommand(r);
+  if (pullCommand) {
+    return `\`${escPipe(pullCommand)}\``;
+  }
+  return `[${escPipe(r.download_url)}](${r.download_url})`;
 }
 
 export function buildTransfersTable(entries: TransferSummaryEntry[]): string {

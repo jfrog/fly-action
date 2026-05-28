@@ -77,9 +77,14 @@ export async function distributeArtifact(
  * for non-Docker types or when `public_url` doesn't match the expected
  * `/v2/{repo}/{image}` shape. Surfacing the pull command is the most useful
  * line for a Docker consumer — `public_url` alone is the OCI namespace, not a
- * command they can paste.
+ * command they can paste, and `download_url` resolves to the JSON manifest.
+ *
+ * Exported so the job-summary renderer can reuse the same derivation and
+ * stay consistent with the step log line (no drift between sources).
  */
-function buildDockerPullCommand(response: DistributeResponse): string | null {
+export function buildDockerPullCommand(
+  response: DistributeResponse,
+): string | null {
   if (response.package_type !== "docker") {
     return null;
   }
