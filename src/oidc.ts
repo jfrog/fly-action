@@ -10,29 +10,62 @@ import { executeWithRetry, isTransientHttpError } from "./retry";
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
 
+// GitHub injects this env var only when the job has `id-token: write`. Its
+// absence is a deterministic permission problem; its presence means any token
+// fetch failure is a transient runtime/OIDC-provider hiccup worth retrying.
+const ID_TOKEN_REQUEST_URL_ENV = "ACTIONS_ID_TOKEN_REQUEST_URL";
+
+const MISSING_PERMISSION_HINT =
+  "This almost always means the job is missing the 'id-token: write' permission, " +
+  "which is required for Fly to authenticate via GitHub OIDC.\n" +
+  "Fix: add the following to your workflow (at the workflow or job level):\n" +
+  "  permissions:\n" +
+  "    id-token: write\n" +
+  "    contents: read\n" +
+  "See https://docs.github.com/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings for details.";
+
 /**
  * Gets an OIDC token from the GitHub Actions runtime.
- * Throws a detailed, actionable error if the token cannot be obtained — typically
- * because the job is missing the `id-token: write` permission.
+ *
+ * Distinguishes two failure modes that the action used to conflate:
+ *  - Missing `id-token: write` permission — deterministic, not retryable.
+ *    Detected up front via the absence of `ACTIONS_ID_TOKEN_REQUEST_URL`,
+ *    which GitHub only injects when the permission is granted.
+ *  - Transient OIDC-provider hiccup (network blip, 5xx, socket hang up) —
+ *    when the permission IS present, the token fetch is retried with backoff
+ *    instead of failing the whole job on the first attempt.
  */
 async function getIDToken(): Promise<string> {
   core.debug("Fetching OIDC token from GitHub");
-  try {
-    return await core.getIDToken();
-  } catch (error) {
-    const wrapped = new Error(
-      `Failed to get OIDC token: ${getErrorMessage(error)}.\n` +
-        "This almost always means the job is missing the 'id-token: write' permission, " +
-        "which is required for Fly to authenticate via GitHub OIDC.\n" +
-        "Fix: add the following to your workflow (at the workflow or job level):\n" +
-        "  permissions:\n" +
-        "    id-token: write\n" +
-        "    contents: read\n" +
-        "See https://docs.github.com/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings for details.",
+
+  // No OIDC runtime injected → the job lacks `id-token: write`. Retrying cannot
+  // help, so fail fast with the actionable permission hint.
+  if (!process.env[ID_TOKEN_REQUEST_URL_ENV]) {
+    throw new Error(
+      `Failed to get OIDC token: ${ID_TOKEN_REQUEST_URL_ENV} is not set.\n` +
+        MISSING_PERMISSION_HINT,
     );
-    (wrapped as Error & { cause?: unknown }).cause = error;
-    throw wrapped;
   }
+
+  // Permission is granted, so any failure here is a transient GitHub OIDC
+  // issue. Retry with backoff rather than aborting the job on a one-off blip.
+  return executeWithRetry(
+    async () => {
+      try {
+        return await core.getIDToken();
+      } catch (error) {
+        const wrapped = new Error(
+          `Failed to get OIDC token from GitHub: ${getErrorMessage(error)}`,
+        );
+        (wrapped as Error & { cause?: unknown }).cause = error;
+        throw wrapped;
+      }
+    },
+    {
+      isRetryable: () => true,
+      label: "GitHub OIDC token",
+    },
+  );
 }
 
 /**
