@@ -71,14 +71,48 @@ describe("authenticateOidc", () => {
     expect(result.flyTenantUrl).toBe("https://tenant.jfrog.io");
   });
 
-  it("should throw an actionable error when id-token permission is missing", async () => {
+  it("should retry the GitHub OIDC token fetch on transient failure and succeed", async () => {
+    (core.getIDToken as Mock)
+      .mockRejectedValueOnce(new Error("Error message: socket hang up"))
+      .mockResolvedValueOnce(
+        "h." +
+          Buffer.from(JSON.stringify({ sub: "owner/name" })).toString(
+            "base64",
+          ) +
+          ".sig",
+      );
+    const fakeResponse: HttpClientResponse = {
+      message: { statusCode: 200, headers: {} as IncomingHttpHeaders },
+      readBody: async () =>
+        JSON.stringify({
+          access_token: "tokval", // jfrog-ignore — fake test credential
+          fly_tenant_url: "https://tenant.jfrog.io",
+        }),
+    } as unknown as HttpClientResponse;
+    mockPost.mockResolvedValue(fakeResponse);
+
+    const result = await authenticateOidc("https://fly");
+
+    expect(result.accessToken).toBe("tokval"); // jfrog-ignore — fake test credential
+    expect(core.getIDToken).toHaveBeenCalledTimes(2);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining("GitHub OIDC token failed (attempt 1/3)"),
+    );
+  }, 15000);
+
+  it("should exhaust retries and surface the underlying error when the token fetch keeps failing", async () => {
     (core.getIDToken as Mock).mockRejectedValue(
-      new Error("Unable to get ACTIONS_ID_TOKEN_REQUEST_URL env variable"),
+      new Error("Error message: socket hang up"),
     );
-    await expect(authenticateOidc("url")).rejects.toThrow(
-      "'id-token: write' permission",
-    );
-  });
+
+    let captured: Error | undefined;
+    await authenticateOidc("https://fly").catch((e) => (captured = e));
+
+    expect(captured).toBeDefined();
+    expect(captured?.message).toContain("Failed to get OIDC token from GitHub");
+    expect(captured?.message).toContain("socket hang up");
+    expect(core.getIDToken).toHaveBeenCalledTimes(3);
+  }, 20000);
 
   it("should throw if Fly OIDC returns non-200 status", async () => {
     (core.getIDToken as Mock).mockResolvedValue(

@@ -11,28 +11,31 @@ import { executeWithRetry, isTransientHttpError } from "./retry";
 type TokenJson = { access_token?: string; [key: string]: unknown };
 
 /**
- * Gets an OIDC token from the GitHub Actions runtime.
- * Throws a detailed, actionable error if the token cannot be obtained — typically
- * because the job is missing the `id-token: write` permission.
+ * Gets an OIDC token from the GitHub Actions runtime, retrying transient
+ * failures (network blips, 5xx, socket hang up) with backoff instead of
+ * aborting the job on a one-off hiccup. A missing `id-token: write` permission
+ * surfaces as a deterministic error from `core.getIDToken()` and exhausts the
+ * retries.
  */
 async function getIDToken(): Promise<string> {
   core.debug("Fetching OIDC token from GitHub");
-  try {
-    return await core.getIDToken();
-  } catch (error) {
-    const wrapped = new Error(
-      `Failed to get OIDC token: ${getErrorMessage(error)}.\n` +
-        "This almost always means the job is missing the 'id-token: write' permission, " +
-        "which is required for Fly to authenticate via GitHub OIDC.\n" +
-        "Fix: add the following to your workflow (at the workflow or job level):\n" +
-        "  permissions:\n" +
-        "    id-token: write\n" +
-        "    contents: read\n" +
-        "See https://docs.github.com/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings for details.",
-    );
-    (wrapped as Error & { cause?: unknown }).cause = error;
-    throw wrapped;
-  }
+  return executeWithRetry(
+    async () => {
+      try {
+        return await core.getIDToken();
+      } catch (error) {
+        const wrapped = new Error(
+          `Failed to get OIDC token from GitHub: ${getErrorMessage(error)}`,
+        );
+        (wrapped as Error & { cause?: unknown }).cause = error;
+        throw wrapped;
+      }
+    },
+    {
+      isRetryable: () => true,
+      label: "GitHub OIDC token",
+    },
+  );
 }
 
 /**
