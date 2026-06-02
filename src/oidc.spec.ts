@@ -18,21 +18,12 @@ vi.mock("@actions/core", () => ({
 
 describe("authenticateOidc", () => {
   let mockPost: Mock;
-  const ORIGINAL_OIDC_URL = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
   beforeEach(() => {
     mockPost = vi.fn();
     vi.spyOn(HttpClient.prototype, "post").mockImplementation(mockPost);
-    // A job with `id-token: write` gets this env var injected by GitHub.
-    process.env.ACTIONS_ID_TOKEN_REQUEST_URL =
-      "https://pipelines.actions.githubusercontent.com/token";
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    if (ORIGINAL_OIDC_URL === undefined) {
-      delete process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
-    } else {
-      process.env.ACTIONS_ID_TOKEN_REQUEST_URL = ORIGINAL_OIDC_URL;
-    }
   });
   it("should authenticate and return accessToken", async () => {
     // Mock getIDToken
@@ -80,16 +71,6 @@ describe("authenticateOidc", () => {
     expect(result.flyTenantUrl).toBe("https://tenant.jfrog.io");
   });
 
-  it("should throw an actionable error when id-token permission is missing", async () => {
-    // No OIDC env injected = the job lacks `id-token: write`. Deterministic —
-    // fail fast with the permission hint and never call getIDToken.
-    delete process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
-    await expect(authenticateOidc("url")).rejects.toThrow(
-      "'id-token: write' permission",
-    );
-    expect(core.getIDToken).not.toHaveBeenCalled();
-  });
-
   it("should retry the GitHub OIDC token fetch on transient failure and succeed", async () => {
     (core.getIDToken as Mock)
       .mockRejectedValueOnce(new Error("Error message: socket hang up"))
@@ -119,8 +100,7 @@ describe("authenticateOidc", () => {
     );
   }, 15000);
 
-  it("should not blame missing permission when the token fetch fails transiently with permission present", async () => {
-    // Permission IS granted (env var set), but the fetch keeps failing.
+  it("should exhaust retries and surface the underlying error when the token fetch keeps failing", async () => {
     (core.getIDToken as Mock).mockRejectedValue(
       new Error("Error message: socket hang up"),
     );
@@ -129,7 +109,8 @@ describe("authenticateOidc", () => {
     await authenticateOidc("https://fly").catch((e) => (captured = e));
 
     expect(captured).toBeDefined();
-    expect(captured?.message).not.toContain("id-token: write");
+    expect(captured?.message).toContain("Failed to get OIDC token from GitHub");
+    expect(captured?.message).toContain("socket hang up");
     expect(core.getIDToken).toHaveBeenCalledTimes(3);
   }, 20000);
 

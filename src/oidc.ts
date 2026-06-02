@@ -10,45 +10,15 @@ import { executeWithRetry, isTransientHttpError } from "./retry";
 // Represents the JSON body of the token exchange response
 type TokenJson = { access_token?: string; [key: string]: unknown };
 
-// GitHub injects this env var only when the job has `id-token: write`. Its
-// absence is a deterministic permission problem; its presence means any token
-// fetch failure is a transient runtime/OIDC-provider hiccup worth retrying.
-const ID_TOKEN_REQUEST_URL_ENV = "ACTIONS_ID_TOKEN_REQUEST_URL";
-
-const MISSING_PERMISSION_HINT =
-  "This almost always means the job is missing the 'id-token: write' permission, " +
-  "which is required for Fly to authenticate via GitHub OIDC.\n" +
-  "Fix: add the following to your workflow (at the workflow or job level):\n" +
-  "  permissions:\n" +
-  "    id-token: write\n" +
-  "    contents: read\n" +
-  "See https://docs.github.com/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#adding-permissions-settings for details.";
-
 /**
- * Gets an OIDC token from the GitHub Actions runtime.
- *
- * Distinguishes two failure modes that the action used to conflate:
- *  - Missing `id-token: write` permission — deterministic, not retryable.
- *    Detected up front via the absence of `ACTIONS_ID_TOKEN_REQUEST_URL`,
- *    which GitHub only injects when the permission is granted.
- *  - Transient OIDC-provider hiccup (network blip, 5xx, socket hang up) —
- *    when the permission IS present, the token fetch is retried with backoff
- *    instead of failing the whole job on the first attempt.
+ * Gets an OIDC token from the GitHub Actions runtime, retrying transient
+ * failures (network blips, 5xx, socket hang up) with backoff instead of
+ * aborting the job on a one-off hiccup. A missing `id-token: write` permission
+ * surfaces as a deterministic error from `core.getIDToken()` and exhausts the
+ * retries.
  */
 async function getIDToken(): Promise<string> {
   core.debug("Fetching OIDC token from GitHub");
-
-  // No OIDC runtime injected → the job lacks `id-token: write`. Retrying cannot
-  // help, so fail fast with the actionable permission hint.
-  if (!process.env[ID_TOKEN_REQUEST_URL_ENV]) {
-    throw new Error(
-      `Failed to get OIDC token: ${ID_TOKEN_REQUEST_URL_ENV} is not set.\n` +
-        MISSING_PERMISSION_HINT,
-    );
-  }
-
-  // Permission is granted, so any failure here is a transient GitHub OIDC
-  // issue. Retry with backoff rather than aborting the job on a one-off blip.
   return executeWithRetry(
     async () => {
       try {
