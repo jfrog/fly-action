@@ -55,17 +55,13 @@ verified PR — no manual steps.
 
 ## Features
 
-- ✅ Zero-configuration — tenant resolved automatically from GitHub OIDC token
-- ✅ Supports all package managers available in Fly CLI
+- ✅ Zero-configuration authentication — no tokens or secrets to manage
+- ✅ Supports all package managers available in Fly
 - ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions (`[LATEST]` resolves on both authenticated and public paths — fly-service resolves it server-side via AQL on the auth path, 302 redirect on the public path)
+- ✅ Upload and download generic artifacts via sub-actions
 - ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
 - ✅ Publish Go modules to Fly Go registry
-- ✅ OIDC authentication only
-- ✅ Allows ignoring specific package managers
-- ✅ Automatic CI session end notification to the Fly server
-- ✅ Retry mechanism with exponential backoff for CI notifications
-- ✅ Exports tenant registry hostname as `FLY_REGISTRY_SUBDOMAIN` environment variable for subsequent steps
+- ✅ Ignore specific package managers when configuring
 - ✅ Job summary with collected artifacts and transfer results
 
 ## Quick Start
