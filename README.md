@@ -1,23 +1,32 @@
 <div align="center">
 
-# Fly Action
+<img src="images/fly.jpg" alt="JFrog Fly" width="480" />
+
+# JFrog Fly — GitHub Action
+
+**Seamlessly integrate JFrog Fly, the AI-native registry, into your build and release pipelines.**
 
 [![Scanned by Frogbot](https://raw.githubusercontent.com/jfrog/frogbot/refs/heads/master/images/frogbot-badge.svg)](https://docs.jfrog-applications.jfrog.io/jfrog-applications/frogbot)
 [![docs](https://img.shields.io/badge/Docs-%F0%9F%93%96-blue)](https://docs.fly.jfrog.com)
 
 </div>
 
-This GitHub Action downloads the Fly CLI and configures package managers to use Fly as a registry for dependencies.
+This action authenticates with JFrog Fly and configures your package managers — npm, pip, Maven, Go, Docker, and more — so they resolve and publish through Fly automatically. No tokens, no secrets, no manual setup.
+
+```yaml
+- uses: jfrog/fly-action@v1
+```
+
+That's it. Every package manager on the runner is now wired to Fly.
 
 ## What is JFrog Fly?
 
-JFrog Fly is a release management platform for software teams. Every build your
-CI produces becomes a tracked release — linked to its commits, PRs, and artifacts,
-searchable by content from your IDE and available for your coding agents.
+JFrog Fly is a release management platform for software teams. Every build your CI produces becomes a tracked release — linked to its commits, PRs, and artifacts, searchable by content from your IDE and available for your coding agents.
 
 > **Not affiliated with Fly.io** (the application deployment platform).
 
 **From your coding agent you can:**
+
 - Find any release by what it contains: *"Find the release that fixed the login bug"*
 - Configure CI end-to-end: *"Start working with Fly"*
 - Deploy to Kubernetes: *"Deploy the latest staging release to production"*
@@ -27,15 +36,16 @@ Works with Cursor, Claude Code, VS Code (Copilot), and OpenCode.
 
 ## Install JFrog Fly
 
-Fly Desktop installs in seconds and automatically configures your coding agent
-and package managers.
+Fly Desktop installs in seconds and automatically configures your coding agent and package managers.
 
 **macOS / Linux**
+
 ```bash
 curl -fsSL https://fly.jfrog.ai/download/desktop | bash
 ```
 
 **Windows**
+
 ```powershell
 powershell -c "irm https://fly.jfrog.ai/download/desktop | iex"
 ```
@@ -46,54 +56,74 @@ The app opens and walks you through sign-up. Once installed, open your IDE and a
 Start working with Fly
 ```
 
-Your agent connects your GitHub repo, configures CI authentication, and opens a
-verified PR — no manual steps.
+Your agent connects your GitHub repo, configures CI authentication, and opens a verified PR — no manual steps.
 
-→ [Full getting-started guide](https://docs.fly.jfrog.com/getting-started/)
+→ [Full getting-started guide](https://docs.fly.jfrog.com/getting-started)
 
----
+## Why use it
 
-## Features
-
-- ✅ Zero-configuration authentication — no tokens or secrets to manage
-- ✅ Supports all package managers available in Fly
-- ✅ Configures all detected package managers with a single command
-- ✅ Upload and download generic artifacts via sub-actions
-- ✅ Distribute generic artifacts publicly via sub-action — share with anyone, no Fly account required
-- ✅ Publish Go modules to Fly Go registry
-- ✅ Ignore specific package managers when configuring
-- ✅ Job summary with collected artifacts and transfer results
+- **Zero-configuration authentication** — no tokens or secrets to manage; auth is derived from your workflow's GitHub OIDC identity.
+- **Every package manager, one step** — all detected package managers are configured automatically.
+- **Artifact transfer built in** — upload, download, and publicly distribute artifacts via dedicated sub-actions.
+- **Public sharing** — distribute generic artifacts or Docker images so anyone can pull them, no Fly account required.
+- **Go module publishing** — publish modules straight to the Fly Go registry.
+- **Visible results** — a job summary lists collected artifacts and transfer results.
 
 ## Quick Start
 
 ```yaml
-name: Build with Fly Registry
+name: Build with Fly
 on: [push]
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write   # required — Fly authenticates via GitHub OIDC
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      # Setup Fly registry — tenant is resolved automatically from OIDC
-      - name: Setup Fly Registry
-        uses: jfrog/fly-action@v1
 
-      # FLY_REGISTRY_SUBDOMAIN is now available for Docker, Helm, or any registry operation
+      # Authenticate and configure all package managers
+      - uses: jfrog/fly-action@v1
+
+      # FLY_REGISTRY_SUBDOMAIN is now ready for Docker, Helm, or any registry op
       - name: Build and push Docker image
         run: |
           docker build -t ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }} .
           docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:${{ github.sha }}
 ```
 
-## Generic Artifact Sub-Actions
+> **`id-token: write` is required.** Fly uses your workflow's GitHub OIDC identity to authenticate — there are no secrets to configure. See [Authentication](#authentication) for details.
 
-Transfer and publish generic artifacts (binaries, archives, build outputs) using dedicated sub-actions: `upload`, `download`, and `distribute`.
+## Common Use Cases
+
+After the action runs, three environment variables are available to every later step — most commonly `FLY_REGISTRY_SUBDOMAIN` for tagging images and charts. See [Environment Variables](#environment-variables) for the full list.
+
+**Push a Docker image**
+
+```yaml
+- run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:latest
+```
+
+**Push a Helm chart (OCI)**
+
+```yaml
+- run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
+```
+
+**Skip specific package managers**
+
+```yaml
+- uses: jfrog/fly-action@v1
+  with:
+    ignore: docker,pip,uv   # configure everything except these
+```
+
+## Artifact Sub-Actions
+
+Transfer and publish generic artifacts (binaries, archives, build outputs) using dedicated sub-actions. Each requires the main `jfrog/fly-action@v1` step to have run earlier in the job.
 
 ### Upload
 
@@ -117,35 +147,17 @@ Transfer and publish generic artifacts (binaries, archives, build outputs) using
 | `version` | Package version | Yes | |
 | `files` | Files to upload — one per line, supports glob patterns | Yes | |
 | `exclude` | Glob patterns to exclude — one per line | No | |
-| `if-no-files-found` | Behavior when the `files` glob matches nothing after applying excludes. One of `error` (fail the step), `warn` (log a warning, continue), `ignore` (silent no-op). | No | `error` |
+| `if-no-files-found` | What to do when `files` matches nothing: `error` (fail), `warn` (log and continue), or `ignore` (silent no-op) | No | `error` |
 
-Glob patterns are expanded by the Fly CLI and support recursive matches such as `dist/**`.
-Patterns like `dist/**` upload regular files under `dist` recursively.
-Directories and symlinks are not uploaded, and symlinked directories are not traversed.
-Files are uploaded flat using their basename, so `dist/linux/app.tar.gz` is stored as `app.tar.gz`.
+**File handling:** glob patterns like `dist/**` match regular files recursively. Directories and symlinks are skipped. Files are stored flat by basename, so `dist/linux/app.tar.gz` is uploaded as `app.tar.gz`.
 
-#### Zero-match glob handling
-
-By default, `files` patterns that match nothing fail the step (`error`). For optional artifacts — for example, a build that may or may not produce a debug bundle — set `if-no-files-found` to `warn` (log + continue) or `ignore` (silent no-op):
-
-```yaml
-- name: Upload optional debug bundle
-  uses: jfrog/fly-action/upload@v1
-  with:
-    name: my-app
-    version: '1.0.0'
-    files: |
-      dist/debug-*.zip
-    if-no-files-found: warn
-```
-
-The action validates the value before invoking the Fly CLI. Anything other than `error` / `warn` / `ignore` (case-sensitive) fails the step with an explicit message.
+For optional artifacts that may not exist (e.g. a debug bundle), set `if-no-files-found: warn` or `ignore` so a zero-match doesn't fail the build.
 
 ### Download
 
 ```yaml
-- name: Download a specific version
-  uses: jfrog/fly-action/download@v1
+# Download a specific version
+- uses: jfrog/fly-action/download@v1
   with:
     name: my-app
     version: '1.0.0'
@@ -153,8 +165,8 @@ The action validates the value before invoking the Fly CLI. Anything other than 
       app.zip
     output-dir: ./downloads
 
-- name: Download the latest version (omit version)
-  uses: jfrog/fly-action/download@v1
+# Download the latest version — omit version
+- uses: jfrog/fly-action/download@v1
   with:
     name: my-app
     files: |
@@ -170,99 +182,71 @@ The action validates the value before invoking the Fly CLI. Anything other than 
 | `output-dir` | Directory to save downloaded files | No | `.` |
 | `exclude` | Glob patterns to exclude — one per line | No | |
 
-#### `[LATEST]` resolution
-
-`[LATEST]` is the case-insensitive sentinel for "the most recently published version" (`[LATEST]`, `[latest]`, `[Latest]` all accepted). Where it resolves depends on the path:
-
-| Path | `[LATEST]` resolved? | How |
-|---|---|---|
-| **Public URL** — `https://{tenant}.jfrog.io/public/generic/{name}/[LATEST]/{file}` (after a `distribute` step) | Yes (today) | `fly-service` returns `302 Found` + `Location: …/{concrete}/{file}` + `Cache-Control: no-store`. The redirect is never CDN-cached, so changes to "latest" are visible immediately; the concrete URL it redirects to is independently cacheable as immutable artifact data. |
-| **Authenticated** — `download` sub-action (this is what the action invokes via the Fly CLI) | Yes | fly-service resolves `[LATEST]` server-side via AQL (most recently created version wins) and proxies the file inline with `Cache-Control: no-store` — no redirect is issued. Inline proxying lets fly-service intercept Artifactory 404s and return a Fly-owned message naming the resolved version, so CI workflows can spot upload gaps. The job summary shows the literal `[LATEST]` token rather than the concrete version (display-only limitation; download correctness is unaffected). |
-
-The action defaults `version` to `[LATEST]` for `download` so workflows that omit the version automatically get the latest build.
-
-Use `[LATEST]` for "give me whatever the most recent build is" workflows (consumers in another repo). Pin a concrete version when you need reproducibility (debugging an old release, regression testing).
-
-`[LATEST]` is **download-only**. The Fly server rejects it with `400 Bad Request` on `upload` (PUT/POST) and `distribute` so a literal `[LATEST]`-named folder can never poison future resolution.
+**Latest version:** omit `version` (or pass the case-insensitive `[LATEST]`) to always fetch the most recently published version. Pin a concrete version when you need reproducibility, such as debugging an old release. `[LATEST]` works for downloads only — it cannot be used when uploading or distributing.
 
 ### Distribute
 
-Make an artifact version publicly downloadable — anyone with the link can grab it without a Fly account. Idempotent: calling again returns the same public URL. Supported package types: **generic**, **docker**.
+Make an artifact version publicly downloadable — anyone with the link can grab it without a Fly account. The call is idempotent: running it again returns the same public URL. Supported types: **generic** and **docker**.
 
-#### Generic
+**Generic**
 
 ```yaml
-- name: Distribute the artifact
-  uses: jfrog/fly-action/distribute@v1
+- uses: jfrog/fly-action/distribute@v1
   with:
     name: my-app
     version: '1.0.0'
 ```
 
-After distribute succeeds, consumers fetch the file anonymously:
+Consumers then fetch the file anonymously:
 
 ```bash
 # Specific version
 curl -O https://{tenant}.jfrog.io/public/generic/my-app/1.0.0/app.zip
 
-# Latest version (server 302-redirects to the newest distributed version)
+# Latest version
 curl -LO https://{tenant}.jfrog.io/public/generic/my-app/[LATEST]/app.zip
 ```
 
-The generic public URL pattern is `https://{tenant}.jfrog.io/public/generic/{name}/{version}/{file}`.
+**Docker**
 
-#### Docker
-
-The image must already have been pushed to the tenant's `docker-local` repo (via `docker push {tenant}.jfrog.io/docker/...` after `jfrog/fly-action` configured the registry). The distribute step copies the manifest and layer blobs into the `{tenant}-docker-public` repo so anonymous pulls can resolve them.
+The image must already be pushed to your Fly registry (`docker push {tenant}.jfrog.io/docker/...` after the main action configured Docker). Distribute then makes it publicly pullable.
 
 ```yaml
-- name: Distribute the docker image
-  uses: jfrog/fly-action/distribute@v1
+- uses: jfrog/fly-action/distribute@v1
   with:
-    name: myorg/my-image      # image name without registry host or `docker-public/` prefix
+    name: myorg/my-image      # image name, without registry host or prefix
     version: '1.0.0'          # image tag
     type: docker
 ```
 
-After distribute succeeds, consumers pull the image anonymously:
+Consumers then pull anonymously:
 
 ```bash
 # Specific tag
 docker pull {tenant}.jfrog.io/docker-public/myorg/my-image:1.0.0
 
-# Latest tag (server 302-redirects to the newest distributed tag)
+# Latest tag
 docker pull {tenant}.jfrog.io/docker-public/myorg/my-image:[LATEST]
 ```
 
-The docker public URL pattern is `https://{tenant}.jfrog.io/v2/docker-public/{image}/manifests/{tag}` (OCI registry API). The `/v2/docker-public/*` namespace is read-only — pushes always go through the authenticated distribute step above, never anonymously.
-
-#### Distribute inputs
-
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
-| `name` | Package name (for docker, the image name without the registry host or `docker-public/` prefix; nested repos like `myorg/myimg` are supported) | Yes | |
-| `version` | Package version to make public (for docker, the image tag). Concrete only — `[LATEST]` is not accepted here. | Yes | |
-| `type` | Artifact type. Supported values: `generic`, `docker`. | No | `generic` |
+| `name` | Package name. For Docker, the image name without the registry host or `docker-public/` prefix; nested names like `myorg/myimg` are supported. | Yes | |
+| `version` | Version to make public (for Docker, the image tag). Must be a concrete version — `[LATEST]` is not accepted. | Yes | |
+| `type` | Artifact type: `generic` or `docker`. | No | `generic` |
 
-#### `[LATEST]` on the public path
+**Latest on public URLs:** consumers can use `[LATEST]` on both the generic and Docker public URLs to always resolve the newest distributed version. Updates are reflected immediately.
 
-`[LATEST]` is resolved server-side on **both** public URL shapes (generic `/public/generic/...` and docker `/v2/docker-public/...`) via `302 Found` + `Cache-Control: no-store`, so consumers always see the latest distributed version and the CDN never pins a stale resolution. The authenticated `download` sub-action also resolves `[LATEST]` — via inline proxy, no redirect — see [`[LATEST]` resolution](#latest-resolution) above.
-
-`[LATEST]` is **download-only**. The Fly server rejects it with `400 Bad Request` on `distribute` (and `upload`) so a literal `[LATEST]`-named folder or tag can never poison future resolution.
-
-#### Distribute outputs
-
-The `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count, files?}`. Docker distributions also surface a `Pull:` line in the step logs with the ready-to-paste `docker pull …` command. Multiple distribute steps in one job accumulate in the job summary's _Distributed Artifacts_ table.
+**Output:** the `results` output is a JSON array with one entry: `{package_name, package_version, package_type, public_url, download_url, download_count, files?}`. Docker distributions also print a ready-to-paste `docker pull …` command in the step logs. Multiple distribute steps accumulate in the job summary's _Distributed Artifacts_ table.
 
 ### Go Publish
 
 Publish Go modules to the Fly Go registry.
 
 ```yaml
-- name: Publish Go module
-  uses: jfrog/fly-action/go-publish@v1
+- uses: jfrog/fly-action/go-publish@v1
   with:
-    path: ./libs/mylib   # optional — defaults to repository root
+    path: ./libs/mylib   # optional — defaults to the repository root
     version: v1.2.3      # optional — auto-detected from git tags if omitted
 ```
 
@@ -271,7 +255,7 @@ Publish Go modules to the Fly Go registry.
 | `path` | Path to the module directory containing `go.mod` | No | `.` |
 | `version` | Module version to publish | No | Auto-detected from git tags |
 
-> **Note**: Consumers of modules published to Fly need to configure Go to skip the public checksum database, since privately published modules are not registered on `sum.golang.org`:
+> **Consuming privately published modules:** because they aren't registered on `sum.golang.org`, consumers must tell Go to skip the public checksum database:
 >
 > ```bash
 > go env -w GONOSUMDB=example.com/myorg/* GONOSUMCHECK=example.com/myorg/*
@@ -279,7 +263,9 @@ Publish Go modules to the Fly Go registry.
 >
 > Replace `example.com/myorg` with your module path prefix (typically the first two segments of the module path).
 
-All three generic sub-actions (`upload`, `download`, `distribute`) output a `results` JSON array — per-file status for upload/download, and a single distributed-artifact entry for distribute:
+### Reading sub-action results
+
+The `upload`, `download`, and `distribute` sub-actions all expose a `results` JSON output — per-file status for upload/download, and a single artifact entry for distribute:
 
 ```yaml
 - name: Upload
@@ -294,101 +280,64 @@ All three generic sub-actions (`upload`, `download`, `distribute`) output a `res
   run: echo '${{ steps.upload.outputs.results }}'
 ```
 
-## OIDC Authentication (Required)
+## Configuration Reference
 
-This action requires OIDC authentication. The OIDC token is used to track uploads and downloads on the Fly server. You must set `permissions: id-token: write` in your workflow file.
+### Inputs
+
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `ignore` | Comma-separated list of package managers to skip. By default, all detected package managers are configured. | No | None |
+
+### Environment Variables
+
+After the action runs, these variables are available in all subsequent steps:
+
+| Variable | Description |
+| --- | --- |
+| `FLY_REGISTRY_SUBDOMAIN` | Your Fly registry hostname (e.g. `acmecorp.jfrog.io`). Use it for Docker image tags, Helm OCI refs, etc. |
+| `FLY_URL` | Full Fly URL (e.g. `https://acmecorp.jfrog.io`). Used by the Fly CLI and sub-actions. |
+| `FLY_ACCESS_TOKEN` | Short-lived access token derived from OIDC. Used by the Fly CLI and sub-actions. Masked in logs. |
+
+## Authentication
+
+This action authenticates using **GitHub OIDC** — there are no secrets to create or rotate. You only need to grant the workflow permission to request an OIDC token:
 
 ```yaml
 permissions:
   contents: read
-  id-token: write # Required for OIDC authentication
+  id-token: write   # required for OIDC authentication
 ```
 
-When using OIDC authentication:
+With that in place, the action requests an OIDC token, exchanges it for a short-lived Fly access token, and uses it to configure your package managers. It also notifies Fly automatically when the CI session ends, via a post-job step.
 
-1. You need to set `permissions: id-token: write` in your workflow file
-2. The action will:
-   - Request an OIDC token from GitHub Actions
-   - Resolve the Fly tenant automatically from the OIDC token's `repository_owner_id` claim
-   - Exchange it for a Fly access token
-   - Use the resulting token to authenticate with Fly
-   - Automatically notify the Fly server when the CI session ends (using GitHub Actions post-job mechanism)
+> **Note:** the end-of-session notification runs as a post-job step so it executes even if the main action fails. If that notification step itself errors, the workflow is marked as failed.
 
-> **Note**: The CI end notification runs automatically as a post-job step. This ensures it executes even if the main action fails, for proper session management on the Fly server. If the CI end notification step itself encounters an error, it will cause the overall workflow to be marked as failed.
+### Trust model
 
-## Inputs
+`FLY_ACCESS_TOKEN` is exported to the job environment so sub-actions and `run:` steps can use the Fly CLI. This means **any later step in the same job — including third-party actions — can read it.** The token is:
 
-| Input | Description | Required | Default |
-| --- | --- | --- | --- |
-| `ignore` | Comma-separated list of package managers to ignore | No | None |
+- **Short-lived** — scoped to the CI session and expires when the job ends
+- **Masked in logs** — registered as a secret so it won't appear in output
+- **OIDC-scoped** — derived from your repository's OIDC identity and limited to your tenant
 
-## Environment Variables
-
-After the action runs, the following environment variables are available in all subsequent steps:
-
-| Variable | Description |
-| --- | --- |
-| `FLY_REGISTRY_SUBDOMAIN` | Resolved tenant registry hostname (e.g., `acmecorp.jfrog.io`). Use for Docker image tags, Helm OCI refs, etc. |
-| `FLY_URL` | Full Fly tenant URL (e.g., `https://acmecorp.jfrog.io`). Used by the fly CLI and sub-actions. |
-| `FLY_ACCESS_TOKEN` | Short-lived OIDC-derived access token. Used by the fly CLI and sub-actions. Masked in logs via `core.setSecret`. |
-
-```yaml
-- name: Push Docker image
-  run: docker push ${{ env.FLY_REGISTRY_SUBDOMAIN }}/docker/my-app:latest
-
-- name: Push Helm chart
-  run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
-
-- name: Use fly CLI directly
-  run: fly upload --name my-pkg --version 1.0.0 ./artifact.zip
-```
-
-### Trust Model
-
-`FLY_ACCESS_TOKEN` is exported to `GITHUB_ENV` so that sub-actions and `run:` steps can use the fly CLI. This means **any subsequent step in the job** (including third-party actions) can read the token via `process.env`. The token is:
-
-- **Short-lived** — scoped to the CI session, expires when the job ends
-- **Masked in logs** — registered via `core.setSecret` so it won't appear in action output
-- **OIDC-scoped** — derived from the repository's OIDC claims, limited to the tenant
-
-If you use third-party actions after `jfrog/fly-action`, ensure you trust them with this access level.
-
-## GitHub Enterprise Server (GHES)
-
-On GitHub Enterprise Server, the default `fly.jfrog.ai` endpoint cannot resolve tenants because GHES installations live in a separate Fly environment.
-
-Set the `CUSTOM_FLY_URL` organization-level variable to your Fly environment URL:
-
-```yaml
-env:
-  CUSTOM_FLY_URL: https://fly.your-instance.jfrog.info
-
-jobs:
-  build:
-    runs-on: self-hosted
-    steps:
-      - uses: jfrog/fly-action@v1
-```
-
-The action enforces HTTPS on all custom URLs to prevent OIDC token exfiltration.
+If you run third-party actions after `jfrog/fly-action`, make sure you trust them with this access.
 
 ## Supported Package Managers
 
-The action supports all package managers that the Fly CLI supports:
-
-- **npm, pnpm, yarn** – Node.js package managers (npm registry)
-- **pip, pipenv, poetry, twine, uv** – Python package managers (PyPI repository)
-- **nuget, dotnet** – .NET package managers (NuGet)
-- **docker, podman** – Container registries (Docker)
-- **helm** – Kubernetes package manager
-- **go** – Go modules
-- **gradle** – Gradle build tool
-- **maven** – Maven build tool
+| Ecosystem | Tools |
+| --- | --- |
+| Node.js | npm, pnpm, yarn |
+| Python | pip, pipenv, poetry, twine, uv |
+| .NET | nuget, dotnet |
+| Containers | docker, podman |
+| Kubernetes | helm |
+| Go | go |
+| Java | gradle, maven |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for information on development setup, testing, and publishing.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and publishing.
 
 ## License
 
-This GitHub Action is licensed under the [Apache-2.0](LICENSE).
+Licensed under [Apache-2.0](LICENSE).
