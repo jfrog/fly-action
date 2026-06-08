@@ -113,12 +113,6 @@ After the action runs, three environment variables are available to every later 
 - run: helm push mychart-1.0.0.tgz oci://${{ env.FLY_REGISTRY_SUBDOMAIN }}/helmoci
 ```
 
-**Use the Fly CLI directly**
-
-```yaml
-- run: fly upload --name my-pkg --version 1.0.0 ./artifact.zip
-```
-
 **Skip specific package managers**
 
 ```yaml
