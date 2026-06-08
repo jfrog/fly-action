@@ -58,7 +58,7 @@ Start working with Fly
 
 Your agent connects your GitHub repo, configures CI authentication, and opens a verified PR — no manual steps.
 
-→ [Full getting-started guide](https://docs.fly.jfrog.com/getting-started/)
+→ [Full getting-started guide](https://docs.fly.jfrog.com/getting-started)
 
 ## Why use it
 
