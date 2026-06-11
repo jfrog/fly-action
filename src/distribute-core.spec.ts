@@ -1,6 +1,7 @@
 // Copyright (c) JFrog Ltd. (2025)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as core from "@actions/core";
 import { distributeArtifact } from "./distribute-core";
 import type { DistributeResponse } from "./types";
 
@@ -35,6 +36,7 @@ describe("distributeArtifact", () => {
   beforeEach(() => {
     mockPost.mockReset();
     mockDispose.mockReset();
+    vi.mocked(core.info).mockReset();
   });
 
   it("calls the distribute endpoint and returns the response", async () => {
@@ -142,6 +144,64 @@ describe("distributeArtifact", () => {
       expect.objectContaining({
         "X-JFROG-FLY-TENANT-HOST": "fly.example.com",
       }),
+    );
+  });
+
+  it("logs the generic download link and never the 404-ing public URL", async () => {
+    mockPost.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify(mockResponse)),
+    });
+
+    await distributeArtifact(
+      "https://fly.example.com",
+      "token123",
+      "my-app",
+      "1.0.0",
+      "generic",
+    );
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(`Download:   ${mockResponse.download_url}`),
+    );
+    expect(core.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Public URL"),
+    );
+  });
+
+  it("logs only the docker pull command, never the public/manifest URLs", async () => {
+    const dockerResponse: DistributeResponse = {
+      package_name: "my-image",
+      package_version: "1.0.0",
+      package_type: "docker",
+      public_url: "https://fly.example.com/v2/docker-public/my-image",
+      download_url:
+        "https://fly.example.com/v2/docker-public/my-image/manifests/1.0.0",
+      download_count: 0,
+    };
+    mockPost.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify(dockerResponse)),
+    });
+
+    await distributeArtifact(
+      "https://fly.example.com",
+      "token123",
+      "my-image",
+      "1.0.0",
+      "docker",
+    );
+
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Pull:       docker pull fly.example.com/docker-public/my-image:1.0.0",
+      ),
+    );
+    expect(core.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Public URL"),
+    );
+    expect(core.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("Download:"),
     );
   });
 
