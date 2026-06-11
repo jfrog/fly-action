@@ -59,11 +59,18 @@ export async function distributeArtifact(
     core.info(
       `✅ Distributed ${parsed.package_name}:${parsed.package_version}`,
     );
-    core.info(`   Public URL: ${parsed.public_url}`);
-    core.info(`   Download:   ${parsed.download_url}`);
+    // Only log links that resolve to something a consumer can use:
+    //   - Docker: the `docker pull …` command. `public_url` is the OCI
+    //     namespace and `download_url` is the manifest API endpoint — neither
+    //     is browser-clickable (both 404 when opened), so we never print them.
+    //   - Generic: the `download_url` (the direct file). `public_url` is the
+    //     version folder, which has no route on the backend and 404s, so it is
+    //     dropped.
     const pullCommand = buildDockerPullCommand(parsed);
     if (pullCommand) {
       core.info(`   Pull:       ${pullCommand}`);
+    } else {
+      core.info(`   Download:   ${parsed.download_url}`);
     }
 
     return parsed;
