@@ -237,6 +237,41 @@ describe("createJobSummary", () => {
     expect(markdownContent).not.toContain("Distributed Artifacts");
   });
 
+  // Issue #69: the env var now carries only the slim summary projection
+  // (no `download_count`, no `files[]`). Verify the post step still renders a
+  // complete table — including the docker pull command — from that shape alone.
+  it("renders the distributed table from the slim env projection (no download_count/files)", async () => {
+    const slim = [
+      {
+        package_name: "my-app",
+        package_version: "1.0.0",
+        package_type: "generic",
+        public_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0",
+        download_url:
+          "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
+      },
+      {
+        package_name: "myorg/my-image",
+        package_version: "2.0.0",
+        package_type: "docker",
+        public_url: "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image",
+        download_url:
+          "https://flyjfrog.jfrog.io/v2/docker-public/myorg/my-image/manifests/2.0.0",
+      },
+    ];
+    process.env[ENV_FLY_DISTRIBUTE_RESULTS] = JSON.stringify(slim);
+
+    await createJobSummary();
+
+    const markdownContent = mockSummary.addRaw.mock.calls[0][0] as string;
+    expect(markdownContent).toContain("### 🌐 Distributed Artifacts");
+    expect(markdownContent).toContain("my-app.tar.gz");
+    expect(markdownContent).toContain(
+      "docker pull flyjfrog.jfrog.io/docker-public/myorg/my-image:2.0.0",
+    );
+  });
+
   it("should render all rows when env var contains multiple newline-separated JSON arrays (multi-step accumulation)", async () => {
     const step1: DistributeResponse[] = [
       {
