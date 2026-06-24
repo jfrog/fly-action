@@ -83,6 +83,26 @@ export interface DistributeResponse {
 }
 
 /**
+ * Slim projection of {@link DistributeResponse} containing only the fields the
+ * job-summary "Distributed Artifacts" table renders. This is what gets
+ * persisted to the FLY_DISTRIBUTE_RESULTS env var across distribute steps.
+ *
+ * The full response carries an unbounded per-file `files[]` breakdown (plus
+ * `download_count`s) that the summary never reads. Persisting the full object
+ * grows the env var with every distribute call and can push it past the Linux
+ * single-env-var limit (MAX_ARG_STRLEN, 128 KB), which makes the kernel reject
+ * `execve` for every later step and post-cleanup with E2BIG. Keeping only the
+ * rendered fields bounds the per-entry size. See issue #69.
+ */
+export interface DistributeSummaryEntry {
+  package_name: string;
+  package_version: string;
+  package_type: string;
+  public_url: string;
+  download_url: string;
+}
+
+/**
  * JSON envelope written to stdout by every fly CLI command.
  * Mirrors Go type: client/internal/output/response.go → Response
  */
@@ -102,6 +122,18 @@ export interface FlyClientResult {
 }
 
 /**
+ * Slim per-file projection persisted in ENV_FLY_TRANSFER_RESULTS — only the
+ * fields the transfers table renders (name + status). `message` is dropped on
+ * purpose: the summary never shows it, and persisting it would grow the env var
+ * with every transferred file across steps, risking the same E2BIG failure as
+ * the distribute path (#69 / {@link DistributeSummaryEntry}).
+ */
+export interface TransferSummaryResult {
+  name: string;
+  status: FlyClientResult["status"];
+}
+
+/**
  * One upload or download invocation's results, accumulated in
  * ENV_FLY_TRANSFER_RESULTS as JSON-lines so the post step can
  * render them in the job summary.
@@ -110,5 +142,5 @@ export interface TransferSummaryEntry {
   type: "upload" | "download";
   name: string;
   version: string;
-  results: FlyClientResult[];
+  results: TransferSummaryResult[];
 }

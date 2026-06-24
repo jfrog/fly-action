@@ -3,7 +3,11 @@
 import * as core from "@actions/core";
 import { HttpCodes, Headers, MediaTypes } from "@actions/http-client";
 import { createHttpClient, truncate } from "./utils";
-import { DistributeRequest, DistributeResponse } from "./types";
+import {
+  DistributeRequest,
+  DistributeResponse,
+  DistributeSummaryEntry,
+} from "./types";
 
 const REQUEST_TIMEOUT_MS = 30000;
 
@@ -90,7 +94,7 @@ export async function distributeArtifact(
  * stay consistent with the step log line (no drift between sources).
  */
 export function buildDockerPullCommand(
-  response: DistributeResponse,
+  response: DistributeSummaryEntry,
 ): string | null {
   if (response.package_type !== "docker") {
     return null;

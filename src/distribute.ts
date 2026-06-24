@@ -11,7 +11,7 @@ import {
   ENV_FLY_DISTRIBUTE_RESULTS,
 } from "./constants";
 import { getErrorMessage } from "./utils";
-import { DistributeResponse } from "./types";
+import { DistributeResponse, DistributeSummaryEntry } from "./types";
 
 export async function runDistribute(): Promise<void> {
   try {
@@ -49,13 +49,24 @@ export async function runDistribute(): Promise<void> {
   }
 }
 
+/** Slim projection for the env var — see {@link DistributeSummaryEntry} / #69. */
+export function toSummaryEntry(r: DistributeResponse): DistributeSummaryEntry {
+  return {
+    package_name: r.package_name,
+    package_version: r.package_version,
+    package_type: r.package_type,
+    public_url: r.public_url,
+    download_url: r.download_url,
+  };
+}
+
 /**
- * Appends distribute results to the FLY_DISTRIBUTE_RESULTS env var as a
- * JSON line. The post step reads all accumulated lines to render the
- * distributed artifacts table in the job summary.
+ * Appends the slim distribute results to FLY_DISTRIBUTE_RESULTS as a JSON line;
+ * the post step reads all accumulated lines for the job-summary table. The full
+ * response is still exposed verbatim via the step `results` output.
  */
 function appendDistributeResults(results: DistributeResponse[]): void {
-  const line = JSON.stringify(results);
+  const line = JSON.stringify(results.map(toSummaryEntry));
   const existing = process.env[ENV_FLY_DISTRIBUTE_RESULTS] || "";
   const updated = existing ? `${existing}\n${line}` : line;
   core.exportVariable(ENV_FLY_DISTRIBUTE_RESULTS, updated);

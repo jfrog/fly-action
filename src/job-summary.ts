@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   CollectedArtifact,
-  DistributeResponse,
+  DistributeSummaryEntry,
   TransferSummaryEntry,
 } from "./types";
 import {
@@ -103,7 +103,9 @@ export function parseTransferResults(raw: string): TransferSummaryEntry[] {
     .map((line) => JSON.parse(line) as TransferSummaryEntry);
 }
 
-export function buildDistributedTable(results: DistributeResponse[]): string {
+export function buildDistributedTable(
+  results: DistributeSummaryEntry[],
+): string {
   if (results.length === 0) return "";
 
   const header = "| Package | Version | Download URL |\n| --- | --- | --- |";
@@ -121,7 +123,7 @@ export function buildDistributedTable(results: DistributeResponse[]): string {
  * OCI manifest JSON, which is useless to skim in a job summary — consumers
  * actually need a paste-ready pull command.
  */
-function renderDistributedDownloadCell(r: DistributeResponse): string {
+function renderDistributedDownloadCell(r: DistributeSummaryEntry): string {
   const pullCommand = buildDockerPullCommand(r);
   if (pullCommand) {
     return `\`${escPipe(pullCommand)}\``;
@@ -213,10 +215,10 @@ export async function createJobSummary(
     try {
       const distributedRaw = process.env[ENV_FLY_DISTRIBUTE_RESULTS] || "";
       if (distributedRaw.trim()) {
-        const allResults: DistributeResponse[] = distributedRaw
+        const allResults: DistributeSummaryEntry[] = distributedRaw
           .split("\n")
           .filter((line) => line.trim().length > 0)
-          .flatMap((line) => JSON.parse(line) as DistributeResponse[]);
+          .flatMap((line) => JSON.parse(line) as DistributeSummaryEntry[]);
         distributedTable = buildDistributedTable(allResults);
       }
     } catch (err) {

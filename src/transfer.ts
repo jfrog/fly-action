@@ -206,6 +206,12 @@ export function resolveVersion(
  * Appends an upload/download result entry to the FLY_TRANSFER_RESULTS env var
  * as a JSON line. The post step reads all accumulated lines to render the
  * job summary. Each call adds one line for one sub-action invocation.
+ *
+ * Only the rendered fields (name + status) are persisted — see
+ * {@link TransferSummaryResult} / #69. `results[]` scales with file count, so
+ * dropping the unused `message` keeps the accumulated env var from drifting
+ * toward the 128 KB E2BIG wall. The full results (with `message`) are still
+ * exposed verbatim via the step `results` output.
  */
 export function appendTransferResults(
   type: "upload" | "download",
@@ -213,7 +219,12 @@ export function appendTransferResults(
   version: string,
   results: FlyClientResult[],
 ): void {
-  const entry: TransferSummaryEntry = { type, name, version, results };
+  const entry: TransferSummaryEntry = {
+    type,
+    name,
+    version,
+    results: results.map((r) => ({ name: r.name, status: r.status })),
+  };
   const existing = process.env[ENV_FLY_TRANSFER_RESULTS] || "";
   const line = JSON.stringify(entry);
   const updated = existing ? `${existing}\n${line}` : line;
