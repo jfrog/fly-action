@@ -83,6 +83,26 @@ export interface DistributeResponse {
 }
 
 /**
+ * Slim projection of {@link DistributeResponse} containing only the fields the
+ * job-summary "Distributed Artifacts" table renders. This is what gets
+ * persisted to the FLY_DISTRIBUTE_RESULTS env var across distribute steps.
+ *
+ * The full response carries an unbounded per-file `files[]` breakdown (plus
+ * `download_count`s) that the summary never reads. Persisting the full object
+ * grows the env var with every distribute call and can push it past the Linux
+ * single-env-var limit (MAX_ARG_STRLEN, 128 KB), which makes the kernel reject
+ * `execve` for every later step and post-cleanup with E2BIG. Keeping only the
+ * rendered fields bounds the per-entry size. See issue #69.
+ */
+export interface DistributeSummaryEntry {
+  package_name: string;
+  package_version: string;
+  package_type: string;
+  public_url: string;
+  download_url: string;
+}
+
+/**
  * JSON envelope written to stdout by every fly CLI command.
  * Mirrors Go type: client/internal/output/response.go → Response
  */

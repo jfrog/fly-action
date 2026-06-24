@@ -11,7 +11,7 @@ import {
   ENV_FLY_DISTRIBUTE_RESULTS,
 } from "./constants";
 import { getErrorMessage } from "./utils";
-import { DistributeResponse } from "./types";
+import { DistributeResponse, DistributeSummaryEntry } from "./types";
 
 export async function runDistribute(): Promise<void> {
   try {
@@ -50,12 +50,32 @@ export async function runDistribute(): Promise<void> {
 }
 
 /**
+ * Projects a distribute response down to only the fields the job-summary table
+ * renders. Dropping the unbounded `files[]` breakdown keeps the persisted env
+ * var small — see {@link DistributeSummaryEntry} and issue #69.
+ */
+function toSummaryEntry(r: DistributeResponse): DistributeSummaryEntry {
+  return {
+    package_name: r.package_name,
+    package_version: r.package_version,
+    package_type: r.package_type,
+    public_url: r.public_url,
+    download_url: r.download_url,
+  };
+}
+
+/**
  * Appends distribute results to the FLY_DISTRIBUTE_RESULTS env var as a
  * JSON line. The post step reads all accumulated lines to render the
  * distributed artifacts table in the job summary.
+ *
+ * Only the summary-relevant fields are persisted (via {@link toSummaryEntry}).
+ * The full response — including the unbounded per-file `files[]` array — is
+ * still exposed verbatim via the step `results` output, which is not subject to
+ * the env-var size limit that broke later steps in issue #69.
  */
 function appendDistributeResults(results: DistributeResponse[]): void {
-  const line = JSON.stringify(results);
+  const line = JSON.stringify(results.map(toSummaryEntry));
   const existing = process.env[ENV_FLY_DISTRIBUTE_RESULTS] || "";
   const updated = existing ? `${existing}\n${line}` : line;
   core.exportVariable(ENV_FLY_DISTRIBUTE_RESULTS, updated);

@@ -32,7 +32,7 @@ import {
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
   ENV_FLY_DISTRIBUTE_RESULTS,
 } from "./constants";
-import type { DistributeResponse } from "./types";
+import type { DistributeResponse, DistributeSummaryEntry } from "./types";
 
 const MOCK_RESPONSE: DistributeResponse = {
   package_name: "my-app",
@@ -43,6 +43,19 @@ const MOCK_RESPONSE: DistributeResponse = {
     "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
   download_count: 0,
 };
+
+// Slim projection persisted to FLY_DISTRIBUTE_RESULTS — only the fields the job
+// summary renders, with the unbounded `files[]`/`download_count` dropped to
+// bound the env-var size (issue #69).
+function summaryOf(r: DistributeResponse): DistributeSummaryEntry {
+  return {
+    package_name: r.package_name,
+    package_version: r.package_version,
+    package_type: r.package_type,
+    public_url: r.public_url,
+    download_url: r.download_url,
+  };
+}
 
 function mockInputs(inputs: Record<string, string>): void {
   vi.mocked(core.getInput).mockImplementation(
@@ -78,13 +91,15 @@ describe("runDistribute", () => {
     await runDistribute();
 
     expect(core.setFailed).not.toHaveBeenCalled();
+    // Step output keeps the full response (not subject to the env-var limit).
     expect(core.setOutput).toHaveBeenCalledWith(
       "results",
       JSON.stringify([MOCK_RESPONSE]),
     );
+    // Env var persists only the slim summary projection.
     expect(core.exportVariable).toHaveBeenCalledWith(
       ENV_FLY_DISTRIBUTE_RESULTS,
-      JSON.stringify([MOCK_RESPONSE]),
+      JSON.stringify([summaryOf(MOCK_RESPONSE)]),
     );
     expect(mockDispose).toHaveBeenCalled();
   });
@@ -168,6 +183,16 @@ describe("runDistribute", () => {
     expect(core.info).toHaveBeenCalledWith(
       "   Pull:       docker pull flyjfrog.jfrog.io/docker-public/myorg/my-image:1.0.0",
     );
+    // Regression for issue #69: the unbounded `files[]` breakdown must NOT be
+    // persisted to the env var, otherwise FLY_DISTRIBUTE_RESULTS grows past the
+    // 128 KB single-env-var limit and breaks every later step.
+    const exported = vi
+      .mocked(core.exportVariable)
+      .mock.calls.find((c) => c[0] === ENV_FLY_DISTRIBUTE_RESULTS);
+    expect(exported).toBeDefined();
+    expect(exported![1]).not.toContain("files");
+    expect(exported![1]).not.toContain("manifest.json");
+    expect(exported![1]).toBe(JSON.stringify([summaryOf(dockerResponse)]));
   });
 
   it("does not log a pull command for non-docker distributions", async () => {
@@ -217,7 +242,7 @@ describe("runDistribute", () => {
     const firstExport = vi.mocked(core.exportVariable).mock
       .calls[0] as unknown as [string, string];
     expect(firstExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
-    expect(firstExport[1]).toBe(JSON.stringify([MOCK_RESPONSE]));
+    expect(firstExport[1]).toBe(JSON.stringify([summaryOf(MOCK_RESPONSE)]));
     process.env[ENV_FLY_DISTRIBUTE_RESULTS] = firstExport[1];
 
     // Second invocation — env var already has the first line; appendDistributeResults
@@ -227,15 +252,15 @@ describe("runDistribute", () => {
     const secondExport = vi.mocked(core.exportVariable).mock
       .calls[1] as unknown as [string, string];
     expect(secondExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
-    const expected = `${JSON.stringify([MOCK_RESPONSE])}\n${JSON.stringify([response2])}`;
+    const expected = `${JSON.stringify([summaryOf(MOCK_RESPONSE)])}\n${JSON.stringify([summaryOf(response2)])}`;
     expect(secondExport[1]).toBe(expected);
 
     // Verify the post-step parser (same logic used by createJobSummary) handles
     // the accumulated newline-separated JSON arrays.
-    const parsed: DistributeResponse[] = secondExport[1]
+    const parsed: DistributeSummaryEntry[] = secondExport[1]
       .split("\n")
       .filter((line) => line.trim().length > 0)
-      .flatMap((line) => JSON.parse(line) as DistributeResponse[]);
+      .flatMap((line) => JSON.parse(line) as DistributeSummaryEntry[]);
     expect(parsed).toHaveLength(2);
     expect(parsed[0].package_name).toBe("my-app");
     expect(parsed[1].package_name).toBe("my-lib");
