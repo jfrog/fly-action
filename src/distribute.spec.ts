@@ -26,7 +26,7 @@ vi.mock("./utils", () => ({
 }));
 
 import * as core from "@actions/core";
-import { runDistribute } from "./distribute";
+import { runDistribute, toSummaryEntry } from "./distribute";
 import {
   ENV_FLY_URL_RUNTIME,
   ENV_FLY_ACCESS_TOKEN_RUNTIME,
@@ -43,19 +43,6 @@ const MOCK_RESPONSE: DistributeResponse = {
     "https://fly.example.com/public/generic/tenant/my-app/1.0.0/my-app.tar.gz",
   download_count: 0,
 };
-
-// Slim projection persisted to FLY_DISTRIBUTE_RESULTS — only the fields the job
-// summary renders, with the unbounded `files[]`/`download_count` dropped to
-// bound the env-var size (issue #69).
-function summaryOf(r: DistributeResponse): DistributeSummaryEntry {
-  return {
-    package_name: r.package_name,
-    package_version: r.package_version,
-    package_type: r.package_type,
-    public_url: r.public_url,
-    download_url: r.download_url,
-  };
-}
 
 function mockInputs(inputs: Record<string, string>): void {
   vi.mocked(core.getInput).mockImplementation(
@@ -99,7 +86,7 @@ describe("runDistribute", () => {
     // Env var persists only the slim summary projection.
     expect(core.exportVariable).toHaveBeenCalledWith(
       ENV_FLY_DISTRIBUTE_RESULTS,
-      JSON.stringify([summaryOf(MOCK_RESPONSE)]),
+      JSON.stringify([toSummaryEntry(MOCK_RESPONSE)]),
     );
     expect(mockDispose).toHaveBeenCalled();
   });
@@ -192,7 +179,7 @@ describe("runDistribute", () => {
     expect(exported).toBeDefined();
     expect(exported![1]).not.toContain("files");
     expect(exported![1]).not.toContain("manifest.json");
-    expect(exported![1]).toBe(JSON.stringify([summaryOf(dockerResponse)]));
+    expect(exported![1]).toBe(JSON.stringify([toSummaryEntry(dockerResponse)]));
   });
 
   it("does not log a pull command for non-docker distributions", async () => {
@@ -242,7 +229,9 @@ describe("runDistribute", () => {
     const firstExport = vi.mocked(core.exportVariable).mock
       .calls[0] as unknown as [string, string];
     expect(firstExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
-    expect(firstExport[1]).toBe(JSON.stringify([summaryOf(MOCK_RESPONSE)]));
+    expect(firstExport[1]).toBe(
+      JSON.stringify([toSummaryEntry(MOCK_RESPONSE)]),
+    );
     process.env[ENV_FLY_DISTRIBUTE_RESULTS] = firstExport[1];
 
     // Second invocation — env var already has the first line; appendDistributeResults
@@ -252,7 +241,7 @@ describe("runDistribute", () => {
     const secondExport = vi.mocked(core.exportVariable).mock
       .calls[1] as unknown as [string, string];
     expect(secondExport[0]).toBe(ENV_FLY_DISTRIBUTE_RESULTS);
-    const expected = `${JSON.stringify([summaryOf(MOCK_RESPONSE)])}\n${JSON.stringify([summaryOf(response2)])}`;
+    const expected = `${JSON.stringify([toSummaryEntry(MOCK_RESPONSE)])}\n${JSON.stringify([toSummaryEntry(response2)])}`;
     expect(secondExport[1]).toBe(expected);
 
     // Verify the post-step parser (same logic used by createJobSummary) handles

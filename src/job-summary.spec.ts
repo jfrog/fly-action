@@ -142,7 +142,7 @@ describe("createJobSummary", () => {
       version: "1.0.0",
       results: [
         { name: "app.zip", status: "success" },
-        { name: "app.tar.gz", status: "error", message: "checksum" },
+        { name: "app.tar.gz", status: "error" },
       ],
     };
     process.env[ENV_FLY_TRANSFER_RESULTS] = JSON.stringify(entry);
@@ -405,7 +405,7 @@ describe("buildTransfersTable", () => {
         version: "1.0",
         results: [
           { name: "ok.zip", status: "success" },
-          { name: "fail.zip", status: "error", message: "oops" },
+          { name: "fail.zip", status: "error" },
           { name: "other.zip", status: "configured" },
         ],
       },

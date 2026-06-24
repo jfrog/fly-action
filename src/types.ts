@@ -122,6 +122,18 @@ export interface FlyClientResult {
 }
 
 /**
+ * Slim per-file projection persisted in ENV_FLY_TRANSFER_RESULTS — only the
+ * fields the transfers table renders (name + status). `message` is dropped on
+ * purpose: the summary never shows it, and persisting it would grow the env var
+ * with every transferred file across steps, risking the same E2BIG failure as
+ * the distribute path (#69 / {@link DistributeSummaryEntry}).
+ */
+export interface TransferSummaryResult {
+  name: string;
+  status: FlyClientResult["status"];
+}
+
+/**
  * One upload or download invocation's results, accumulated in
  * ENV_FLY_TRANSFER_RESULTS as JSON-lines so the post step can
  * render them in the job summary.
@@ -130,5 +142,5 @@ export interface TransferSummaryEntry {
   type: "upload" | "download";
   name: string;
   version: string;
-  results: FlyClientResult[];
+  results: TransferSummaryResult[];
 }

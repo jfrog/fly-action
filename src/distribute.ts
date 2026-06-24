@@ -49,12 +49,8 @@ export async function runDistribute(): Promise<void> {
   }
 }
 
-/**
- * Projects a distribute response down to only the fields the job-summary table
- * renders. Dropping the unbounded `files[]` breakdown keeps the persisted env
- * var small — see {@link DistributeSummaryEntry} and issue #69.
- */
-function toSummaryEntry(r: DistributeResponse): DistributeSummaryEntry {
+/** Slim projection for the env var — see {@link DistributeSummaryEntry} / #69. */
+export function toSummaryEntry(r: DistributeResponse): DistributeSummaryEntry {
   return {
     package_name: r.package_name,
     package_version: r.package_version,
@@ -65,14 +61,9 @@ function toSummaryEntry(r: DistributeResponse): DistributeSummaryEntry {
 }
 
 /**
- * Appends distribute results to the FLY_DISTRIBUTE_RESULTS env var as a
- * JSON line. The post step reads all accumulated lines to render the
- * distributed artifacts table in the job summary.
- *
- * Only the summary-relevant fields are persisted (via {@link toSummaryEntry}).
- * The full response — including the unbounded per-file `files[]` array — is
- * still exposed verbatim via the step `results` output, which is not subject to
- * the env-var size limit that broke later steps in issue #69.
+ * Appends the slim distribute results to FLY_DISTRIBUTE_RESULTS as a JSON line;
+ * the post step reads all accumulated lines for the job-summary table. The full
+ * response is still exposed verbatim via the step `results` output.
  */
 function appendDistributeResults(results: DistributeResponse[]): void {
   const line = JSON.stringify(results.map(toSummaryEntry));
